@@ -1,81 +1,168 @@
 import asyncio
+from collections import namedtuple
+from importlib import import_module
 from multiprocessing import Process
+import logging
+from traceback import format_exception
+import sys
 
 import msgpack
 
 from .utils import *
-from .main import Dispatch
 
 __all__ = [
-    'AbstractWorkManager'
+    'AbstractWorkManager',
+    'Job',
+    'run_job'
 ]
+
+logger = logging.getLogger('aq.worker')
+
+Job = namedtuple('Job', ['queue', 'class_name', 'func_name', 'args', 'kwargs'])
+
+
+def _log_job_def(queue_time, j):
+    if not logger.isEnabledFor(logging.INFO):
+        return
+    arguments = ''
+    if j.args:
+        arguments = ', '.join(map(str, j.args))
+    if j.kwargs:
+        if arguments:
+            arguments += ', '
+        arguments += ', '.join('{}={}'.format(*kv) for kv in j.kwargs.items())
+
+    if len(arguments) > 80:
+        arguments = arguments[:77] + '...'
+    logger.info('%-4s queued =%7.3fs → %s.%s(%s)', j.queue, queue_time, j.class_name, j.func_name, arguments)
+
+
+def _log_job_result(started_at, result, j):
+    if not logger.isEnabledFor(logging.INFO):
+        return
+    job_time = timestamp() - started_at
+    sr = str(result)
+    if len(sr) > 80:
+        sr = sr[:77] + '...'
+    logger.info('%-4s ran in =%7.3fs ← %s.%s ● %s', j.queue, job_time, j.class_name, j.func_name, sr)
+
+
+async def run_job(queue_name, data, get_worker, exc_handler=None):
+    data = msgpack.unpackb(data, encoding='utf8')
+    queued_at, *extra = data
+    j = Job(queue_name, *extra)
+    queued_at /= 1000
+
+    worker = get_worker(j)
+    func = getattr(worker, j.func_name)
+
+    started_at = timestamp()
+    queue_time = started_at - queued_at
+    _log_job_def(queue_time, j)
+    unbound_func = getattr(func, 'unbound_original', None)
+    try:
+        if unbound_func:
+            result = await unbound_func(worker, *j.args, **j.kwargs)
+        else:
+            result = await func(*j.args, **j.kwargs)
+    except Exception as e:
+        if exc_handler:
+            await exc_handler(started_at, e, j)
+        else:
+            raise e
+    else:
+        _log_job_result(started_at, result, j)
 
 
 class AbstractWorkManager(RedisMixin):
-    queues = Dispatch.DEFAULT_QUEUES
-    log_job_defs = True
-    log_job_results = True
+    max_concurrent_tasks = 1000
+    _pending_tasks = None
+    _workers = None
 
-    async def worker_cls_factory(self):
+    async def worker_factory(self):
         raise NotImplementedError
 
+    @cached_property
+    def queues(self):
+        from .main import Dispatch
+        return Dispatch.DEFAULT_QUEUES
+
     async def run(self):
-        aq_logger.info('Initialising worker classes')
-        worker_classes = await self.worker_cls_factory()
-        worker_classes = {w.__class__.__name__: w for w in worker_classes}
-        aq_logger.info('Running worker with %s worker classes listening to %d queues',
-                       len(worker_classes), len(self.queues))
+        # TODO these two statements could go to a "INFO_HIGH" level
+        logger.warning('Initialising worker classes')
+        self._workers = {w.__class__.__name__: w for w in await self.worker_factory()}
 
-        aq_logger.debug('workers: %s, queues: %s', ', '.join(worker_classes.keys()),
-                        ', '.join(q.decode() for q in self.queues))
+        logger.warning('Running worker with %s worker classes listening to %d queues',
+                       len(self._workers), len(self.queues))
+        logger.debug('workers: %s, queues: %s', self._worker_names, self._queue_names)
+
         self.redis_pool = await self.init_redis_pool()
+        self._pending_tasks = set()
+        start = timestamp()
         try:
-            await self.work(worker_classes)
+            await self.work()
         finally:
-            await self.clear()
+            logger.warning('shutting down worker after %0.3fs', timestamp() - start)
+            await self.close()
 
-    async def work(self, worker_classes):
+    @cached_property
+    def _worker_names(self):
+        return ', '.join(self._workers.keys())
+
+    @cached_property
+    def _queue_names(self):
+        return ', '.join(q.decode() for q in self.queues)
+
+    async def work(self):
         async with self.redis_pool.get() as redis:
             while True:
-                msg = await redis.blpop(*self.queues)
+                msg = await redis.blpop(*self.queues, timeout=1)
+                if msg is None:
+                    break
+                _queue, data = msg
+                queue = _queue.decode()
+                await self.schedule_job(queue, data)
 
-                queue, data = msg
-                data = msgpack.unpackb(data, encoding='utf8')
-                class_name, func_name, args, kwargs = data
+    async def schedule_job(self, queue, data):
+        if len(self._pending_tasks) > self.max_concurrent_tasks:
+            _, self._pending_tasks = await asyncio.wait(self._pending_tasks, return_when=asyncio.FIRST_COMPLETED)
+        task = self.loop.create_task(self.run_task(queue, data))
+        task.add_done_callback(self.job_callback)
+        self._pending_tasks.add(task)
 
-                cls = worker_classes[class_name]
-                func = getattr(cls, func_name)
+    async def run_task(self, queue, data):
+        await run_job(queue, data, self.get_worker, self.handle_exc)
 
-                self.log_job_def(queue, class_name, func_name, args, kwargs)
-                unbound_original = getattr(func, 'unbound_original', None)
-                if unbound_original:
-                    r = await unbound_original(cls, *args, **kwargs)
-                else:
-                    r = await func(*args, **kwargs)
-                self.log_job_result(queue, class_name, func_name, r)
+    def get_worker(self, job):
+        return self._workers[job.class_name]
 
-    def log_job_def(self, queue, class_name, func_name, args, kwargs):
-        if not self.log_job_defs:
-            return
-        arguments = ''
-        if args:
-            arguments = ', '.join(map(str, args))
-        if kwargs:
-            if arguments:
-                arguments += ', '
-            arguments += ', '.join('{}={}'.format(*kv) for kv in kwargs.items())
+    async def handle_exc(self, started_at, exc, j):
+        job_time = timestamp() - started_at
+        logger.error('%-4s ran in =%7.3fs ! %s.%s: %s',
+                     j.queue, job_time, j.class_name, j.func_name, exc.__class__.__name__)
+        tb = format_exception(*sys.exc_info())
+        logger.error(''.join(tb).strip('\n'))
 
-        if len(arguments) > 80:
-            arguments = arguments[:77] + '...'
-        aq_logger.info('%-4s ◤ %s.%s(%s)', queue.decode(), class_name, func_name, arguments)
+    def job_callback(self, task):
+        task.result()
 
-    def log_job_result(self, queue, class_name, func_name, result):
-        if not self.log_job_results:
-            return
-        sresult = str(result)
-        if len(sresult) > 80:
-            sresult = sresult[:77] + '...'
-        aq_logger.info('%-4s ◣ %s.%s > %s', queue.decode(), class_name, func_name, sresult)
+
+def import_string(dotted_path):
+    """
+    Import a dotted module path and return the attribute/class designated by the
+    last name in the path. Raise ImportError if the import failed.
+    """
+    try:
+        module_path, class_name = dotted_path.rsplit('.', 1)
+    except ValueError as e:
+        raise ImportError("%s doesn't look like a module path" % dotted_path) from e
+
+    module = import_module(module_path)
+
+    try:
+        return getattr(module, class_name)
+    except AttributeError as e:
+        raise ImportError('Module "%s" does not define a "%s" attribute/class' % (module_path, class_name)) from e
 
 
 def start_worker(manager_path):

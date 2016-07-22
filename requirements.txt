@@ -1,0 +1,3 @@
+aioredis==0.2.7
+click==6.6
+msgpack-python==0.4.7
