@@ -16,7 +16,7 @@ __all__ = [
     'run_job'
 ]
 
-logger = logging.getLogger('aq.worker')
+logger = logging.getLogger('aq.work')
 
 Job = namedtuple('Job', ['queue', 'class_name', 'func_name', 'args', 'kwargs'])
 
@@ -74,10 +74,18 @@ async def run_job(queue_name, data, get_worker, exc_handler=None):
         _log_job_result(started_at, result, j)
 
 
+QUIT = b'quit'
+
+
 class AbstractWorkManager(RedisMixin):
     max_concurrent_tasks = 1000
-    _pending_tasks = None
     _workers = None
+
+    def __init__(self, batch_mode=False, **kwargs):
+        self._batch_mode = batch_mode
+        self._pending_tasks = set()
+        self._task_count = 0
+        super().__init__(**kwargs)
 
     async def worker_factory(self):
         raise NotImplementedError
@@ -89,7 +97,7 @@ class AbstractWorkManager(RedisMixin):
 
     async def run(self):
         # TODO these two statements could go to a "INFO_HIGH" level
-        logger.warning('Initialising worker classes')
+        logger.warning('Initialising work manager, batch mode: %s', self._batch_mode)
         self._workers = {w.__class__.__name__: w for w in await self.worker_factory()}
 
         logger.warning('Running worker with %s worker classes listening to %d queues',
@@ -97,12 +105,11 @@ class AbstractWorkManager(RedisMixin):
         logger.debug('workers: %s, queues: %s', self._worker_names, self._queue_names)
 
         self.redis_pool = await self.init_redis_pool()
-        self._pending_tasks = set()
         start = timestamp()
         try:
             await self.work()
         finally:
-            logger.warning('shutting down worker after %0.3fs', timestamp() - start)
+            logger.warning('shutting down worker after %0.3fs, %d jobs done', timestamp() - start, self._task_count)
             await self.close()
 
     @cached_property
@@ -114,13 +121,24 @@ class AbstractWorkManager(RedisMixin):
         return ', '.join(q.decode() for q in self.queues)
 
     async def work(self):
+        timeout = 0
+        queues = list(self.queues)
         async with self.redis_pool.get() as redis:
+            if self._batch_mode:
+                timeout = 1  # in case another worker gets the QUIT first
+                redis.lpush(QUIT, b'1')
+                queues.append(QUIT)
             while True:
-                msg = await redis.blpop(*self.queues, timeout=1)
+                msg = await redis.blpop(*queues, timeout=timeout)
                 if msg is None:
+                    logger.debug('msg None, stopping work')
                     break
                 _queue, data = msg
+                if self._batch_mode and _queue == QUIT:
+                    logger.debug('msg No Op., stopping work')
+                    break
                 queue = _queue.decode()
+                logger.debug('scheduling job from queue %s', queue)
                 await self.schedule_job(queue, data)
 
     async def schedule_job(self, queue, data):
@@ -144,6 +162,7 @@ class AbstractWorkManager(RedisMixin):
         logger.error(''.join(tb).strip('\n'))
 
     def job_callback(self, task):
+        self._task_count += 1
         task.result()
 
 
@@ -165,14 +184,14 @@ def import_string(dotted_path):
         raise ImportError('Module "%s" does not define a "%s" attribute/class' % (module_path, class_name)) from e
 
 
-def start_worker(manager_path):
+def start_worker(manager_path, batch_mode):
     loop = asyncio.get_event_loop()
     WorkManager = import_string(manager_path)
-    worker_manager = WorkManager(loop=loop)
+    worker_manager = WorkManager(batch_mode, loop=loop)
     loop.run_until_complete(worker_manager.run())
 
 
-def start_worker_process(manager_path):
-    p = Process(target=start_worker, args=(manager_path,))
+def start_worker_process(manager_path, batch_mode=False):
+    p = Process(target=start_worker, args=(manager_path, batch_mode))
     p.start()
     # TODO monitor p, restart it and kill it when required
