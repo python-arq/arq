@@ -8,7 +8,7 @@ import sys
 
 import msgpack
 
-from .utils import *
+from .utils import RedisMixin, timestamp, cached_property
 
 __all__ = [
     'AbstractWorkManager',

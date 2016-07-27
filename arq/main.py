@@ -5,7 +5,7 @@ from functools import wraps
 
 import msgpack
 
-from .utils import *
+from .utils import RedisMixin, timestamp
 from .worker import run_job
 
 
@@ -47,7 +47,6 @@ class Dispatch(RedisMixin):
     HIGH_QUEUE = b'high'
     DEFAULT_QUEUE = b'dft'
     LOW_QUEUE = b'low'
-    __tasks = set()
 
     DEFAULT_QUEUES = (
         HIGH_QUEUE,
@@ -55,36 +54,37 @@ class Dispatch(RedisMixin):
         LOW_QUEUE
     )
 
+    def __init__(self, **kwargs):
+        self.arq_tasks = set()
+        super().__init__(**kwargs)
+
     async def enqueue_job(self, func_name, *args, queue=None, **kwargs):
         queue = queue or self.DEFAULT_QUEUE
-        class_name = self.__class__.__name__
         data = self.encode_args(
-            queued_at=int(timestamp() * 1000),
-            class_name=class_name,
             func_name=func_name,
             args=args,
             kwargs=kwargs,
         )
-        logger.debug('%s.%s ▶ %s (mode: %s)', class_name, func_name, queue.decode(), mode)
+        logger.debug('%s.%s ▶ %s (mode: %s)', self.__class__.__name__, func_name, queue.decode(), mode)
 
         if mode.direct or mode.asyncio_loop:
             coro = run_job(queue, data, lambda j: self)
             if mode.direct:
                 await coro
             else:
-                self.__tasks.add(self.loop.create_task(coro))
+                self.arq_tasks.add(self.loop.create_task(coro))
         else:
             pool = await self.init_redis_pool()
             async with pool.get() as redis:
                 await redis.rpush(queue, data)
 
-    @staticmethod
-    def encode_args(*, queued_at, class_name, func_name, args, kwargs):
-        return msgpack.packb([queued_at, class_name, func_name, args, kwargs], use_bin_type=True)
+    def encode_args(self, *, func_name, args, kwargs):
+        queued_at = int(timestamp() * 1000)
+        return msgpack.packb([queued_at, self.__class__.__name__, func_name, args, kwargs], use_bin_type=True)
 
     async def close(self):
         if mode.asyncio_loop:
-            asyncio.wait(self.__tasks)
+            await asyncio.wait(self.arq_tasks, loop=self.loop)
         await super().close()
 
 

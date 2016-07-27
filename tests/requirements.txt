@@ -1,0 +1,7 @@
+codecov
+coverage
+flake8
+pep8
+pytest
+pytest-cov
+pytest-sugar
