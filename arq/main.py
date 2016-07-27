@@ -44,9 +44,9 @@ mode = Mode()
 
 
 class Dispatch(RedisMixin):
-    HIGH_QUEUE = b'high'
-    DEFAULT_QUEUE = b'dft'
-    LOW_QUEUE = b'low'
+    HIGH_QUEUE = b'arq-high'
+    DEFAULT_QUEUE = b'arq-dft'
+    LOW_QUEUE = b'arq-low'
 
     DEFAULT_QUEUES = (
         HIGH_QUEUE,

@@ -1,24 +1,10 @@
 import asyncio
 import contextlib
-import gc
 import logging
 import os
 
 import pytest
-
-
-def _teardown_test_loop(_loop):
-    is_closed = getattr(_loop, 'is_closed')
-    if is_closed is not None:
-        closed = is_closed()
-    else:
-        closed = _loop._closed
-    if not closed:
-        _loop.call_soon(_loop.stop)
-        _loop.run_forever()
-        _loop.close()
-    gc.collect()
-    asyncio.set_event_loop(None)
+import aioredis
 
 
 @contextlib.contextmanager
@@ -28,9 +14,12 @@ def loop_context(existing_loop=None):
         yield existing_loop
     else:
         _loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(None)
+
         yield _loop
-        _teardown_test_loop(_loop)
+
+        _loop.stop()
+        _loop.run_forever()
+        _loop.close()
 
 
 def pytest_pycollect_makeitem(collector, name, obj):
@@ -86,3 +75,24 @@ def tmpworkdir(tmpdir):
     yield tmpdir
 
     os.chdir(cwd)
+
+
+@pytest.yield_fixture
+def redis_conn(loop):
+    conn = None
+
+    async def _get_conn():
+        nonlocal conn
+        conn = await aioredis.create_redis(('localhost', 6379), loop=loop)
+        await conn.flushall()
+        return conn
+
+    yield _get_conn
+
+    async def _flush():
+        _conn = conn or await _get_conn()
+        await _conn.flushall()
+        _conn.close()
+        await _conn.wait_closed()
+
+    loop.run_until_complete(_flush())

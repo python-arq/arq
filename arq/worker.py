@@ -96,7 +96,7 @@ class AbstractWorkManager(RedisMixin):
         return Dispatch.DEFAULT_QUEUES
 
     async def run(self):
-        # TODO these two statements could go to a "INFO_HIGH" level
+        # TODO these two statements could go to a "INFO_HIGH" log level
         logger.warning('Initialising work manager, batch mode: %s', self._batch_mode)
         self._workers = {w.__class__.__name__: w for w in await self.worker_factory()}
 
@@ -154,7 +154,8 @@ class AbstractWorkManager(RedisMixin):
     def get_worker(self, job):
         return self._workers[job.class_name]
 
-    async def handle_exc(self, started_at, exc, j):
+    @classmethod
+    async def handle_exc(cls, started_at, exc, j):
         job_time = timestamp() - started_at
         logger.error('%-4s ran in =%7.3fs ! %s.%s: %s',
                      j.queue, job_time, j.class_name, j.func_name, exc.__class__.__name__)
@@ -169,7 +170,7 @@ class AbstractWorkManager(RedisMixin):
 def import_string(dotted_path):
     """
     Import a dotted module path and return the attribute/class designated by the
-    last name in the path. Raise ImportError if the import failed.
+    last name in the path. Raise ImportError if the import failed. Stolen from django.
     """
     try:
         module_path, class_name = dotted_path.rsplit('.', 1)
@@ -186,8 +187,7 @@ def import_string(dotted_path):
 
 def start_worker(manager_path, batch_mode):
     loop = asyncio.get_event_loop()
-    WorkManager = import_string(manager_path)
-    worker_manager = WorkManager(batch_mode, loop=loop)
+    worker_manager = import_string(manager_path)(batch_mode, loop=loop)
     loop.run_until_complete(worker_manager.run())
 
 
