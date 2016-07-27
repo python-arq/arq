@@ -15,7 +15,7 @@ __all__ = [
     'mode',
 ]
 
-logger = logging.getLogger('aq.main')
+logger = logging.getLogger('arq.main')
 
 
 class Mode:

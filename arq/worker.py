@@ -16,7 +16,7 @@ __all__ = [
     'run_job'
 ]
 
-logger = logging.getLogger('aq.work')
+logger = logging.getLogger('arq.work')
 
 Job = namedtuple('Job', ['queue', 'class_name', 'func_name', 'args', 'kwargs'])
 
