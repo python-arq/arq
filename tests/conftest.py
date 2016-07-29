@@ -1,10 +1,15 @@
 import asyncio
 import contextlib
+import io
 import logging
 import os
 
 import pytest
 import aioredis
+
+from arq import arq_mode
+
+from .fixtures import Demo
 
 
 @contextlib.contextmanager
@@ -62,6 +67,7 @@ def debug_logger():
     yield
 
     logger.removeHandler(handler)
+    logger.setLevel(logging.NOTSET)
 
 
 @pytest.yield_fixture
@@ -96,3 +102,56 @@ def redis_conn(loop):
         await _conn.wait_closed()
 
     loop.run_until_complete(_flush())
+
+
+class StreamLog:
+    def __init__(self):
+        self.logger = self.stream = self.handler = None
+        self.set_logger()
+
+    def set_logger(self, log_name='', level=logging.DEBUG):
+        if self.logger is not None:
+            self.finish()
+        self.logger = logging.getLogger(log_name)
+        self.stream = io.StringIO()
+        self.handler = logging.StreamHandler(stream=self.stream)
+        self.logger.addHandler(self.handler)
+        self.set_level(level)
+
+    def set_level(self, level):
+        self.logger.setLevel(level)
+
+    @property
+    def log(self):
+        self.stream.seek(0)
+        return self.stream.read()
+
+    def finish(self):
+        self.logger.removeHandler(self.handler)
+
+
+@pytest.yield_fixture
+def logcap():
+    stream_log = StreamLog()
+
+    yield stream_log
+
+    stream_log.finish()
+
+
+@pytest.yield_fixture
+def create_demo(loop):
+    arq_mode.set_redis()
+    demo = None
+
+    async def _create():
+        nonlocal demo
+        demo = Demo(loop=loop)
+        return demo
+
+    yield _create
+
+    async def _finish():
+        if demo:
+            await demo.close()
+    loop.run_until_complete(_finish())

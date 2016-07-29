@@ -10,3 +10,4 @@ htmlcov/
 /build
 /dist
 test.py
+*.egg-info
