@@ -39,6 +39,10 @@ setup(
     license='MIT',
     packages=['arq'],
     zip_safe=True,
+    entry_points="""
+        [console_scripts]
+        arq=arq.cli:cli
+    """,
     install_requires=[
         'aioredis==0.2.7',
         'click==6.6',

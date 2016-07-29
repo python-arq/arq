@@ -38,6 +38,7 @@ async def test_enqueue_redis_job(demo, redis_conn):
 
 
 async def test_dispatch_work(tmpworkdir, loop, logcap):
+    logcap.set_level(logging.DEBUG)
     demo = MockRedisDemo(loop=loop)
     assert None is await demo.add_numbers(1, 2)
     assert None is await demo.high_add_numbers(3, 4, c=5)
@@ -99,7 +100,7 @@ async def test_bad_def():
     assert excinfo.value.args[0] == 'test_bad_def.<locals>.BadActor.just_a_function is not a coroutine function'
 
 
-async def test_repaet_queue():
+async def test_repeat_queue():
     with pytest.raises(AssertionError) as excinfo:
         class BadActor(Actor):
             QUEUES = ('a', 'a')

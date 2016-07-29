@@ -94,7 +94,7 @@ class StreamLog:
         self.logger = self.stream = self.handler = None
         self.set_logger()
 
-    def set_logger(self, log_name='arq', level=logging.DEBUG):
+    def set_logger(self, log_name='arq', level=logging.INFO):
         if self.logger is not None:
             self.finish()
         self.logger = logging.getLogger(log_name)

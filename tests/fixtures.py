@@ -1,4 +1,4 @@
-from arq import concurrent, Actor, AbstractWorkManager
+from arq import concurrent, Actor, AbstractWorker
 from arq.mock_redis import MockRedisMixin
 
 
@@ -29,11 +29,11 @@ class MockRedisDemo(MockRedisMixin, Demo):
     pass
 
 
-class Worker(AbstractWorkManager):
+class Worker(AbstractWorker):
     async def shadow_factory(self):
         return {Demo()}
 
 
-class MockRedisWorker(MockRedisMixin, AbstractWorkManager):
+class MockRedisWorker(MockRedisMixin, AbstractWorker):
     async def shadow_factory(self):
         return {MockRedisDemo()}

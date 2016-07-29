@@ -1,26 +1,40 @@
 import asyncio
-from importlib import import_module
-from multiprocessing import Process
+import traceback
+from importlib import import_module, reload
 import logging
+from multiprocessing import Process
+import os
+import signal
+import sys
+import time
+
 
 from .main import Actor, Job
 from .utils import RedisMixin, timestamp, cached_property
 
-__all__ = ['AbstractWorkManager']
+__all__ = ['AbstractWorker']
 
 logger = logging.getLogger('arq.work')
 
 QUIT = b'quit'
 
 
-class AbstractWorkManager(RedisMixin):
-    max_concurrent_tasks = 1000
+class HandledExit(Exception):
+    pass
+
+
+class AbstractWorker(RedisMixin):
+    max_concurrent_tasks = 100
+    shutdown_delay = 6
 
     def __init__(self, batch_mode=False, **kwargs):
         self._batch_mode = batch_mode
         self._pending_tasks = set()
         self._task_count = 0
         self._shadows = {}
+        self.start = None
+        signal.signal(signal.SIGINT, self.handle_sig)
+        signal.signal(signal.SIGTERM, self.handle_sig)
         super().__init__(**kwargs)
 
     async def shadow_factory(self):
@@ -30,20 +44,34 @@ class AbstractWorkManager(RedisMixin):
     def queues(self):
         return Actor.QUEUES
 
+    def handle_sig(self, signum, frame):
+        logger.warning('%d, got signal: %s, stopping...', os.getpid(), signal.Signals(signum).name)
+        signal.signal(signal.SIGINT, self.handle_sig_force)
+        signal.signal(signal.SIGTERM, self.handle_sig_force)
+        signal.signal(signal.SIGALRM, self.handle_sig_force)
+        signal.alarm(self.shutdown_delay)
+        raise HandledExit()
+
+    def handle_sig_force(self, signum, frame):
+        logger.error('%d, got signal: %s again, forcing exit', os.getpid(), signal.Signals(signum).name)
+        raise SystemError('force exit')
+
+    def run_forever(self):
+        self.loop.run_until_complete(self.run())
+
     async def run(self):
         # TODO these two statements could go to a "INFO_HIGH" log level
-        logger.warning('Initialising work manager, batch mode: %s', self._batch_mode)
+        logger.info('Initialising work manager, batch mode: %s', self._batch_mode)
         self._shadows = {w.__class__.__name__: w for w in await self.shadow_factory()}
 
-        logger.warning('Running worker with %s shadow%s listening to %d queues',
-                       len(self._shadows), '' if len(self._shadows) == 1 else 's', len(self.queues))
+        logger.info('Running worker with %s shadow%s listening to %d queues',
+                    len(self._shadows), '' if len(self._shadows) == 1 else 's', len(self.queues))
         logger.debug('shadows: %s, queues: %s', ', '.join(self._shadows.keys()), ', '.join(self.queues))
 
-        start = timestamp()
+        self.start = timestamp()
         try:
             await self.work()
         finally:
-            logger.warning('shutting down worker after %0.3fs, %d jobs done', timestamp() - start, self._task_count)
             await self.close()
 
     def get_redis_queues(self):
@@ -62,6 +90,7 @@ class AbstractWorkManager(RedisMixin):
                 timeout = 1  # in case another worker gets the QUIT first
                 await redis.rpush(QUIT, b'1')
                 redis_queues.append(QUIT)
+            logger.debug('starting main blpop loop')
             while True:
                 msg = await redis.blpop(*redis_queues, timeout=timeout)
                 if msg is None:
@@ -70,7 +99,6 @@ class AbstractWorkManager(RedisMixin):
                 _queue, data = msg
                 if self._batch_mode and _queue == QUIT:
                     logger.debug('Quit msg, stopping work')
-                    await self.wait_finish()
                     break
                 queue = queue_lookup[_queue]
                 logger.debug('scheduling job from queue %s', queue)
@@ -96,35 +124,76 @@ class AbstractWorkManager(RedisMixin):
         self._task_count += 1
         task.result()
 
-    async def wait_finish(self):
-        await asyncio.wait(self._pending_tasks, loop=self.loop)
+    async def close(self):
+        logger.info('shutting down worker after %0.3fs, %d jobs done', timestamp() - self.start, self._task_count)
+        if self._pending_tasks:
+            logger.info('waiting for %d jobs to finish', len(self._pending_tasks))
+            await asyncio.wait(self._pending_tasks, loop=self.loop)
+        await super().close()
 
 
-def import_string(dotted_path):
+def import_string(file_path, attr_name):
     """
-    Import a dotted module path and return the attribute/class designated by the
-    last name in the path. Raise ImportError if the import failed. Stolen from django.
+    Import attribute/class from from a python module. Raise ImportError if the import failed.
+    Approximately stolen from django.
+    :param file_path: path to python module
+    :param attr_name: attribute to get from module
+    :return: attribute
     """
-    try:
-        module_path, class_name = dotted_path.rsplit('.', 1)
-    except ValueError as e:
-        raise ImportError("%s doesn't look like a module path" % dotted_path) from e
+    module_path = file_path.replace('.py', '').replace('/', '.')
+    p = os.getcwd()
+    sys.path = [p] + sys.path
 
     module = import_module(module_path)
+    reload(module)
 
     try:
-        return getattr(module, class_name)
+        attr = getattr(module, attr_name)
     except AttributeError as e:
-        raise ImportError('Module "%s" does not define a "%s" attribute/class' % (module_path, class_name)) from e
+        raise ImportError('Module "%s" does not define a "%s" attribute/class' % (module_path, attr_name)) from e
+    return attr
 
 
-def start_worker(manager_path, batch_mode):
-    loop = asyncio.get_event_loop()
-    worker_manager = import_string(manager_path)(batch_mode, loop=loop)
-    loop.run_until_complete(worker_manager.run())
+def start_worker(worker_path, worker_class, batch_mode):
+    worker = import_string(worker_path, worker_class)
+    worker_manager = worker(batch_mode)
+    try:
+        worker_manager.run_forever()
+    except HandledExit:
+        worker_manager.loop.run_until_complete(worker_manager.close())
+        pass
 
 
-def start_worker_process(manager_path, batch_mode=False):
-    p = Process(target=start_worker, args=(manager_path, batch_mode))
-    p.start()
-    # TODO monitor p, restart it and kill it when required
+class RunWorkerProcess:
+    def __init__(self, worker_path, worker_class, batch_mode=False):
+        signal.signal(signal.SIGINT, self.handle_sig)
+        signal.signal(signal.SIGTERM, self.handle_sig)
+        self.process = None
+        self.run_worker(worker_path, worker_class, batch_mode)
+
+    def handle_sig(self, signum, frame):
+        signal.signal(signal.SIGINT, self.handle_sig_force)
+        signal.signal(signal.SIGTERM, self.handle_sig_force)
+        logger.warning('got signal: %s, waiting for worker %d to finish...',
+                       signal.Signals(signum).name, self.process.pid)
+        for i in range(100):
+            if not self.process or not self.process.is_alive():
+                return
+            time.sleep(0.1)
+
+    def run_worker(self, worker_path, worker_class, batch_mode):
+        self.process = Process(target=start_worker, args=(worker_path, worker_class, batch_mode), name='WorkProcess')
+        self.process.start()
+        self.process.join()
+        if self.process.exitcode == 0:
+            logger.info('worker process exited ok')
+            return
+        logger.error('worker process exited badly, exit code %s', self.process.exitcode)
+        # TODO could restart worker here, but better to leave it to the real manager
+
+    def handle_sig_force(self, signum, frame):
+        logger.error('got signal: %s again, forcing exit', signal.Signals(signum).name)
+        if self.process and self.process.is_alive():
+            logger.error('sending worker %d SIGTERM', self.process.pid)
+            os.kill(self.process.pid, signal.SIGTERM)
+        raise SystemError('force exit')
