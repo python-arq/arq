@@ -39,7 +39,6 @@ class AbstractWorkManager(RedisMixin):
                        len(self._shadows), '' if len(self._shadows) == 1 else 's', len(self.queues))
         logger.debug('shadows: %s, queues: %s', ', '.join(self._shadows.keys()), ', '.join(self.queues))
 
-        self.redis_pool = await self.init_redis_pool()
         start = timestamp()
         try:
             await self.work()
@@ -57,10 +56,11 @@ class AbstractWorkManager(RedisMixin):
     async def work(self):
         timeout = 0
         redis_queues, queue_lookup = self.get_redis_queues()
-        async with self.redis_pool.get() as redis:
+        pool = await self.get_redis_pool()
+        async with pool.get() as redis:
             if self._batch_mode:
                 timeout = 1  # in case another worker gets the QUIT first
-                redis.lpush(QUIT, b'1')
+                await redis.rpush(QUIT, b'1')
                 redis_queues.append(QUIT)
             while True:
                 msg = await redis.blpop(*redis_queues, timeout=timeout)
@@ -69,7 +69,8 @@ class AbstractWorkManager(RedisMixin):
                     break
                 _queue, data = msg
                 if self._batch_mode and _queue == QUIT:
-                    logger.debug('Quit msg , stopping work')
+                    logger.debug('Quit msg, stopping work')
+                    await self.wait_finish()
                     break
                 queue = queue_lookup[_queue]
                 logger.debug('scheduling job from queue %s', queue)
@@ -77,7 +78,8 @@ class AbstractWorkManager(RedisMixin):
 
     async def schedule_job(self, queue, data):
         if len(self._pending_tasks) > self.max_concurrent_tasks:
-            _, self._pending_tasks = await asyncio.wait(self._pending_tasks, return_when=asyncio.FIRST_COMPLETED)
+            _, self._pending_tasks = await asyncio.wait(self._pending_tasks, loop=self.loop,
+                                                        return_when=asyncio.FIRST_COMPLETED)
         task = self.loop.create_task(self.run_task(queue, data))
         task.add_done_callback(self.job_callback)
         self._pending_tasks.add(task)
@@ -93,6 +95,9 @@ class AbstractWorkManager(RedisMixin):
     def job_callback(self, task):
         self._task_count += 1
         task.result()
+
+    async def wait_finish(self):
+        await asyncio.wait(self._pending_tasks, loop=self.loop)
 
 
 def import_string(dotted_path):

@@ -12,26 +12,24 @@ __all__ = [
 
 
 class RedisMixin:
-    redis_pool = None
-
     def __init__(self, *, loop=None, host='localhost', port=6379, **redis_kwargs):
         self.loop = loop or asyncio.get_event_loop()
         self._host = host
         self._port = port
         self._redis_kwargs = redis_kwargs
+        self._redis_pool = None
 
-    async def init_redis_pool(self):
-        if self.redis_pool is None:
-            self.redis_pool = await aioredis.create_pool((self._host, self._port),
-                                                         loop=self.loop, **self._redis_kwargs)
-        return self.redis_pool
+    async def create_redis_pool(self):
+        return await aioredis.create_pool((self._host, self._port), loop=self.loop, **self._redis_kwargs)
 
-    def set_connection(self, redis_pool):
-        self.redis_pool = redis_pool
+    async def get_redis_pool(self):
+        if self._redis_pool is None:
+            self._redis_pool = await self.create_redis_pool()
+        return self._redis_pool
 
     async def close(self):
-        if self.redis_pool:
-            await self.redis_pool.clear()
+        if self._redis_pool:
+            await self._redis_pool.clear()
 
 
 _EPOCH = datetime(2016, 1, 1)

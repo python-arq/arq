@@ -7,8 +7,6 @@ import os
 import pytest
 import aioredis
 
-from arq import arq_mode
-
 from .fixtures import Demo
 
 
@@ -58,19 +56,6 @@ def loop():
 
 
 @pytest.yield_fixture
-def debug_logger():
-    handler = logging.StreamHandler()
-    logger = logging.getLogger('.')
-    logger.addHandler(handler)
-    logger.setLevel(logging.DEBUG)
-
-    yield
-
-    logger.removeHandler(handler)
-    logger.setLevel(logging.NOTSET)
-
-
-@pytest.yield_fixture
 def tmpworkdir(tmpdir):
     """
     Create a temporary working working directory.
@@ -109,7 +94,7 @@ class StreamLog:
         self.logger = self.stream = self.handler = None
         self.set_logger()
 
-    def set_logger(self, log_name='', level=logging.DEBUG):
+    def set_logger(self, log_name='arq', level=logging.DEBUG):
         if self.logger is not None:
             self.finish()
         self.logger = logging.getLogger(log_name)
@@ -140,8 +125,23 @@ def logcap():
 
 
 @pytest.yield_fixture
+def debug_logger():
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.DEBUG)
+    fmt = logging.Formatter('%(asctime)s %(name)8s %(levelname)8s: %(message)s')
+    handler.setFormatter(fmt)
+    logger = logging.getLogger('')
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+
+    yield
+
+    logger.removeHandler(handler)
+    logger.setLevel(logging.NOTSET)
+
+
+@pytest.yield_fixture
 def create_demo(loop):
-    arq_mode.set_redis()
     demo = None
 
     async def _create():

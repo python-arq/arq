@@ -1,4 +1,3 @@
-import asyncio
 import inspect
 import logging
 from functools import wraps
@@ -10,35 +9,10 @@ import msgpack
 from .utils import RedisMixin, timestamp
 
 
-__all__ = ['Actor', 'concurrent', 'arq_mode', 'Job']
+__all__ = ['Actor', 'concurrent', 'Job']
 
 main_logger = logging.getLogger('arq.main')
 work_logger = logging.getLogger('arq.work')
-
-
-class ArqMode:
-    _redis = 'redis'
-    _direct = 'direct'
-    _asyncio_loop = 'asyncio_loop'
-    _mode = _redis
-
-    direct = property(lambda self: self._mode == self._direct)
-    redis = property(lambda self: self._mode == self._redis)
-    asyncio_loop = property(lambda self: self._mode == self._asyncio_loop)
-
-    def set_redis(self):
-        self._mode = self._redis
-
-    def set_direct(self):
-        self._mode = self._direct
-
-    def set_asyncio_loop(self):
-        self._mode = self._asyncio_loop
-
-    def __str__(self):
-        return self._mode
-
-arq_mode = ArqMode()
 
 
 class Job:
@@ -47,6 +21,11 @@ class Job:
         data = msgpack.unpackb(data, encoding='utf8')
         self.queued_at, self.class_name, self.func_name, self.args, self.kwargs = data
         self.queued_at /= 1000
+
+    @classmethod
+    def encode(cls, *, queued_at=None, class_name, func_name, args, kwargs):
+        queued_at = queued_at or int(timestamp() * 1000)
+        return msgpack.packb([queued_at, class_name, func_name, args, kwargs], use_bin_type=True)
 
 
 class ActorMeta(type):
@@ -72,41 +51,20 @@ class Actor(RedisMixin, metaclass=ActorMeta):
     )
 
     def __init__(self, **kwargs):
-        self.arq_tasks = set()
         self.queue_lookup = {q: self.QUEUE_PREFIX + q.encode() for q in self.QUEUES}
         super().__init__(**kwargs)
 
     async def enqueue_job(self, func_name, *args, queue=None, **kwargs):
         queue = queue or self.DEFAULT_QUEUE
-        data = self.encode_job(
-            func_name=func_name,
-            args=args,
-            kwargs=kwargs,
-        )
-        main_logger.debug('%s.%s ▶ %s (mode: %s)', self.__class__.__name__, func_name, queue, arq_mode)
+        class_name = self.__class__.__name__
+        data = Job.encode(class_name=class_name, func_name=func_name, args=args, kwargs=kwargs)
+        main_logger.debug('%s.%s ▶ %s', class_name, func_name, queue)
 
-        if arq_mode.direct or arq_mode.asyncio_loop:
-            job = Job(queue, data)
-            coro = self.run_job(job)
-            if arq_mode.direct:
-                await coro
-            else:
-                self.arq_tasks.add(self.loop.create_task(coro))
-        else:
-            pool = await self.init_redis_pool()
+        pool = await self.get_redis_pool()
 
-            queue_list = self.queue_lookup[queue]
-            async with pool.get() as redis:
-                await redis.rpush(queue_list, data)
-
-    def encode_job(self, *, func_name, args, kwargs):
-        queued_at = int(timestamp() * 1000)
-        return msgpack.packb([queued_at, self.__class__.__name__, func_name, args, kwargs], use_bin_type=True)
-
-    async def close(self):
-        if arq_mode.asyncio_loop:
-            await asyncio.wait(self.arq_tasks, loop=self.loop)
-        await super().close()
+        queue_list = self.queue_lookup[queue]
+        async with pool.get() as redis:
+            await redis.rpush(queue_list, data)
 
     @classmethod
     def log_job_start(cls, queue_time, j):

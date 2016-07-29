@@ -7,7 +7,6 @@ async def test_run_job(tmpworkdir, redis_conn, create_demo):
     worker = Worker(batch_mode=True, loop=demo.loop)
 
     assert None is await demo.add_numbers(1, 2)
-    assert demo.arq_tasks == set()
     assert not os.path.exists('add_numbers')
     await worker.run()
     assert os.path.exists('add_numbers')
