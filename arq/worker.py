@@ -1,5 +1,4 @@
 import asyncio
-import traceback
 from importlib import import_module, reload
 import logging
 from multiprocessing import Process
@@ -24,7 +23,7 @@ class HandledExit(Exception):
 
 
 class AbstractWorker(RedisMixin):
-    max_concurrent_tasks = 100
+    max_concurrent_tasks = 50
     shutdown_delay = 6
 
     def __init__(self, batch_mode=False, **kwargs):
@@ -33,6 +32,7 @@ class AbstractWorker(RedisMixin):
         self._task_count = 0
         self._shadows = {}
         self.start = None
+        self.running = True
         signal.signal(signal.SIGINT, self.handle_sig)
         signal.signal(signal.SIGTERM, self.handle_sig)
         super().__init__(**kwargs)
@@ -45,6 +45,7 @@ class AbstractWorker(RedisMixin):
         return Actor.QUEUES
 
     def handle_sig(self, signum, frame):
+        self.running = False
         logger.warning('%d, got signal: %s, stopping...', os.getpid(), signal.Signals(signum).name)
         signal.signal(signal.SIGINT, self.handle_sig_force)
         signal.signal(signal.SIGTERM, self.handle_sig_force)
@@ -91,7 +92,7 @@ class AbstractWorker(RedisMixin):
                 await redis.rpush(QUIT, b'1')
                 redis_queues.append(QUIT)
             logger.debug('starting main blpop loop')
-            while True:
+            while self.running:
                 msg = await redis.blpop(*redis_queues, timeout=timeout)
                 if msg is None:
                     logger.debug('msg None, stopping work')
@@ -125,10 +126,10 @@ class AbstractWorker(RedisMixin):
         task.result()
 
     async def close(self):
-        logger.info('shutting down worker after %0.3fs, %d jobs done', timestamp() - self.start, self._task_count)
         if self._pending_tasks:
             logger.info('waiting for %d jobs to finish', len(self._pending_tasks))
             await asyncio.wait(self._pending_tasks, loop=self.loop)
+        logger.info('shutting down worker after %0.3fs, %d jobs done', timestamp() - self.start, self._task_count)
         await super().close()
 
 

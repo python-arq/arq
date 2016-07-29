@@ -56,9 +56,11 @@ async def test_dispatch_work(tmpworkdir, loop, logcap):
                    'Initialising work manager, batch mode: True\n'
                    'Running worker with 1 shadow listening to 3 queues\n'
                    'shadows: MockRedisDemo, queues: high, dft, low\n'
+                   'starting main blpop loop\n'
                    'scheduling job from queue high\n'
                    'scheduling job from queue dft\n'
                    'Quit msg, stopping work\n'
+                   'waiting for 2 jobs to finish\n'
                    'high queued  0.0XXs → MockRedisDemo.high_add_numbers(3, 4, c=5)\n'
                    'high ran in  0.0XXs ← MockRedisDemo.high_add_numbers ● 12\n'
                    'dft  queued  0.0XXs → MockRedisDemo.add_numbers(1, 2)\n'
@@ -67,7 +69,7 @@ async def test_dispatch_work(tmpworkdir, loop, logcap):
 
 
 async def test_handle_exception(loop, logcap):
-    logcap.set_level(logging.WARNING)
+    logcap.set_level(logging.INFO)
     demo = MockRedisDemo(loop=loop)
     assert logcap.log == ''
     assert None is await demo.boom()
@@ -80,6 +82,8 @@ async def test_handle_exception(loop, logcap):
 
     assert log == ('Initialising work manager, batch mode: True\n'
                    'Running worker with 1 shadow listening to 3 queues\n'
+                   'waiting for 1 jobs to finish\n'
+                   'dft  queued  0.0XXs → MockRedisDemo.boom()\n'
                    'dft  ran in =  0.0XXs ! MockRedisDemo.boom: RuntimeError\n'
                    'Traceback (most recent call last):\n'
                    '  File "/path/to/arq/main.py", line <no>, in run_job\n'
@@ -87,8 +91,7 @@ async def test_handle_exception(loop, logcap):
                    '  File "/path/to/tests/fixtures.py", line <no>, in boom\n'
                    '    raise RuntimeError(\'boom\')\n'
                    'RuntimeError: boom\n'
-                   'shutting down worker after 0.0XXs, 1 jobs done\n'
-                   '')
+                   'shutting down worker after 0.0XXs, 1 jobs done\n')
 
 
 async def test_bad_def():
