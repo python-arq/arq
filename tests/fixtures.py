@@ -17,6 +17,10 @@ class Demo(Actor):
         return r
 
     @concurrent
+    async def concat(self, a, b):
+        return a + ' + ' + b
+
+    @concurrent
     async def boom(self):
         raise RuntimeError('boom')
 

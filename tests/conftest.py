@@ -7,7 +7,7 @@ import os
 import pytest
 import aioredis
 
-from .fixtures import Demo
+from .fixtures import Demo, MockRedisDemo, MockRedisWorker
 
 
 @contextlib.contextmanager
@@ -141,17 +141,22 @@ def debug_logger():
 
 
 @pytest.yield_fixture
-def create_demo(loop):
-    demo = None
+def demo(loop):
+    _demo = Demo(loop=loop)
+    yield _demo
+    loop.run_until_complete(_demo.close())
 
-    async def _create():
-        nonlocal demo
-        demo = Demo(loop=loop)
-        return demo
 
-    yield _create
+@pytest.yield_fixture
+def mock_demo(loop):
+    _demo = MockRedisDemo(loop=loop)
+    yield _demo
+    loop.run_until_complete(_demo.close())
 
-    async def _finish():
-        if demo:
-            await demo.close()
-    loop.run_until_complete(_finish())
+
+@pytest.yield_fixture
+def mock_demo_worker(mock_demo):
+    _worker = MockRedisWorker(loop=mock_demo.loop, batch_mode=True)
+    _worker.mock_data = mock_demo.mock_data
+    yield mock_demo, _worker
+    mock_demo.loop.run_until_complete(_worker.close())

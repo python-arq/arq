@@ -23,17 +23,7 @@ async def test_simple_job_dispatch(loop):
     assert data == ['MockRedisDemo', 'add_numbers', [1, 2], {}]
 
 
-async def test_bad_def():
-    with pytest.raises(TypeError) as excinfo:
-        class BadActor(Actor):
-            @concurrent
-            def just_a_function(self):
-                pass
-    assert excinfo.value.args[0] == 'test_bad_def.<locals>.BadActor.just_a_function is not a coroutine function'
-
-
-async def test_enqueue_redis_job(create_demo, redis_conn):
-    demo = await create_demo()
+async def test_enqueue_redis_job(demo, redis_conn):
     conn = await redis_conn()
     assert not await conn.exists(b'arq:q:dft')
     assert None is await demo.add_numbers(1, 2)
@@ -85,15 +75,32 @@ async def test_handle_exception(loop, logcap):
     await worker.run()
     log = re.sub('0.0\d\ds', '0.0XXs', logcap.log)
     log = re.sub(', line \d+,', ', line <no>,', log)
+    log = re.sub('"/.*?/(\w+/\w+)\.py"', r'"/path/to/\1.py"', log)
 
     assert log == ('Initialising work manager, batch mode: True\n'
                    'Running worker with 1 shadow listening to 3 queues\n'
                    'dft  ran in =  0.0XXs ! MockRedisDemo.boom: RuntimeError\n'
                    'Traceback (most recent call last):\n'
-                   '  File "/home/samuel/code/arq/arq/main.py", line <no>, in run_job\n'
+                   '  File "/path/to/arq/main.py", line <no>, in run_job\n'
                    '    result = await unbound_func(self, *j.args, **j.kwargs)\n'
-                   '  File "/home/samuel/code/arq/tests/fixtures.py", line <no>, in boom\n'
+                   '  File "/path/to/tests/fixtures.py", line <no>, in boom\n'
                    '    raise RuntimeError(\'boom\')\n'
                    'RuntimeError: boom\n'
                    'shutting down worker after 0.0XXs, 1 jobs done\n'
                    '')
+
+
+async def test_bad_def():
+    with pytest.raises(TypeError) as excinfo:
+        class BadActor(Actor):
+            @concurrent
+            def just_a_function(self):
+                pass
+    assert excinfo.value.args[0] == 'test_bad_def.<locals>.BadActor.just_a_function is not a coroutine function'
+
+
+async def test_repaet_queue():
+    with pytest.raises(AssertionError) as excinfo:
+        class BadActor(Actor):
+            QUEUES = ('a', 'a')
+    assert excinfo.value.args[0] == "BadActor looks like it has duplicated queue names: ('a', 'a')"

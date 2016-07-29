@@ -34,7 +34,7 @@ class ActorMeta(type):
     def __new__(mcs, cls, bases, classdict):
         queues = classdict.get('QUEUES')
         if queues and len(queues) != len(set(queues)):
-            raise AssertionError('{} looks like it has duplicated queue names: {}'.format(cls.__name__, queues))
+            raise AssertionError('{} looks like it has duplicated queue names: {}'.format(cls, queues))
         return super().__new__(mcs, cls, bases, classdict)
 
 
@@ -76,7 +76,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         if j.kwargs:
             if arguments:
                 arguments += ', '
-            arguments += ', '.join('{}={}'.format(*kv) for kv in j.kwargs.items())
+            arguments += ', '.join('{}={}'.format(*kv) for kv in sorted(j.kwargs.items()))
 
         if len(arguments) > 80:
             arguments = arguments[:77] + '...'

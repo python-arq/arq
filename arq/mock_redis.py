@@ -3,7 +3,8 @@ from arq import RedisMixin, timestamp
 
 
 class MockRedis:
-    def __init__(self, data=None):
+    def __init__(self, *, loop=None, data=None):
+        self.loop = loop or asyncio.get_event_loop()
         self.data = {} if data is None else data
 
     async def rpush(self, list_name, data):
@@ -18,7 +19,7 @@ class MockRedis:
                 return v
             if start and (timestamp() - start) > timeout:
                 return
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.1, loop=self.loop)
 
     async def lpop(self, *list_names):
         for list_name in list_names:
@@ -31,22 +32,24 @@ class MockRedis:
 
 
 class MockRedisPoolContextManager:
-    def __init__(self, data):
+    def __init__(self, loop, data):
+        self.loop = loop
         self.data = data
 
     async def __aenter__(self):
-        return MockRedis(self.data)
+        return MockRedis(loop=self.loop, data=self.data)
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         pass
 
 
 class MockRedisPool:
-    def __init__(self):
+    def __init__(self, loop=None):
+        self.loop = loop or asyncio.get_event_loop()
         self.data = {}
 
     def get(self):
-        return MockRedisPoolContextManager(self.data)
+        return MockRedisPoolContextManager(self.loop, self.data)
 
     async def clear(self):
         self.data = {}
@@ -54,14 +57,14 @@ class MockRedisPool:
 
 class MockRedisMixin(RedisMixin):
     async def create_redis_pool(self):
-        return MockRedisPool()
+        return self._redis_pool or MockRedisPool(self.loop)
 
     @property
     def mock_data(self):
-        self._redis_pool = self._redis_pool or MockRedisPool()
+        self._redis_pool = self._redis_pool or MockRedisPool(self.loop)
         return self._redis_pool.data
 
     @mock_data.setter
     def mock_data(self, data):
-        self._redis_pool = self._redis_pool or MockRedisPool()
+        self._redis_pool = self._redis_pool or MockRedisPool(self.loop)
         self._redis_pool.data = data
