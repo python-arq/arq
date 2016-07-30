@@ -8,6 +8,57 @@ arq
 
 Job queues in python with asyncio, redis and msgpack.
 
+## Install
+
+    pip install arq
+    
+## Usage
+
+Usage is best described with an example, `demo.py`:
+
+```python
+import asyncio
+from aiohttp import ClientSession
+from arq import Actor, AbstractWorker, concurrent
+
+
+class Downloader(Actor):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.session = ClientSession(loop=self.loop)
+
+    @concurrent
+    async def download_content(self, url):
+        async with self.session.get(url) as response:
+            assert response.status == 200
+            content = await response.read()
+            print('{}: {:.80}...'.format(url, content.decode()))
+        return len(content)
+
+    async def close(self):
+        await super().close()
+        self.session.close()
+
+
+class Worker(AbstractWorker):
+    async def shadow_factory(self):
+        return [Downloader(loop=self.loop)]
+
+
+async def download_lots(loop):
+    d = Downloader(loop=loop)
+    await d.download_content('https://facebook.com')
+    await d.download_content('https://microsoft.com')
+    await d.download_content('https://github.com')
+    await d.close()
+
+if __name__ == '__main__':
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(download_lots(loop))
+```
+
+You can then enqueue the jobs with just `python demo.py`, and run
+the worker to do the jobs with `arw demo.py`.
 
 ## TODO
 
