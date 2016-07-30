@@ -1,9 +1,10 @@
 from importlib.machinery import SourceFileLoader
 from setuptools import setup
 
-description = """
-arq
-===
+long_description = """
+rq meets asyncio.
+
+Job queues in python with asyncio, redis and msgpack.
 """
 
 # avoid loading the package before requirements are installed:
@@ -12,8 +13,8 @@ version = SourceFileLoader('version', 'arq/version.py').load_module()
 setup(
     name='arq',
     version=str(version.VERSION),
-    description='arq',
-    long_description=description,
+    description='Job queues in python with asyncio, redis and msgpack.',
+    long_description=long_description,
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Programming Language :: Python',
