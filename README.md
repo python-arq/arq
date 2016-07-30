@@ -47,9 +47,8 @@ class Worker(AbstractWorker):
 
 async def download_lots(loop):
     d = Downloader(loop=loop)
-    await d.download_content('https://facebook.com')
-    await d.download_content('https://microsoft.com')
-    await d.download_content('https://github.com')
+    for url in ('https://facebook.com', 'https://microsoft.com', 'https://github.com'):
+        await d.download_content(url)
     await d.close()
 
 if __name__ == '__main__':
@@ -58,7 +57,9 @@ if __name__ == '__main__':
 ```
 
 You can then enqueue the jobs with just `python demo.py`, and run
-the worker to do the jobs with `arw demo.py`.
+the worker to do the jobs with `arq demo.py`.
+
+`arq --help` for more help on how to run the worker.
 
 ## TODO
 
