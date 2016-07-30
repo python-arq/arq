@@ -11,13 +11,11 @@ import time
 
 from .logs import default_log_config
 from .main import Actor, Job
-from .utils import RedisMixin, timestamp, cached_property
+from .utils import RedisMixin, timestamp, cached_property, gen_random
 
 __all__ = ['AbstractWorker', 'import_string', 'RunWorkerProcess']
 
 logger = logging.getLogger('arq.work')
-
-QUIT = b'quit'
 
 
 class HandledExit(Exception):
@@ -120,21 +118,20 @@ class AbstractWorker(RedisMixin):
     async def work(self):
         redis_queues, queue_lookup = self.get_redis_queues()
         pool = await self.get_redis_pool()
+        quit_queue = None
         async with pool.get() as redis:
             if self._batch_mode:
-                await redis.rpush(QUIT, b'1')
-                redis_queues.append(QUIT)
+                quit_queue = b'QUIT-%s' % gen_random()
+                logger.debug('adding random quit queue for faster batch exit: %s', quit_queue.decode())
+                await redis.rpush(quit_queue, b'1')
+                redis_queues.append(quit_queue)
             logger.debug('starting main blpop loop')
             while self.running:
                 msg = await redis.blpop(*redis_queues, timeout=1)
                 if msg is None:
-                    if self._batch_mode:
-                        logger.debug('msg None, stopping work')
-                        break
-                    else:
-                        continue
+                    continue
                 _queue, data = msg
-                if self._batch_mode and _queue == QUIT:
+                if self._batch_mode and _queue == quit_queue:
                     logger.debug('Quit msg, stopping work')
                     break
                 queue = queue_lookup[_queue]

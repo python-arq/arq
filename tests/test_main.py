@@ -50,11 +50,13 @@ async def test_dispatch_work(tmpworkdir, loop, logcap, redis_conn):
     await worker.run()
     assert tmpworkdir.join('add_numbers').read() == '3'
     log = re.sub('0.0\d\ds', '0.0XXs', logcap.log)
+    log = re.sub("QUIT-.*", "QUIT-<random>", log)
     assert ('MockRedisTestActor.add_numbers ▶ dft\n'
             'MockRedisTestActor.high_add_numbers ▶ high\n'
             'Initialising work manager, batch mode: True\n'
             'Running worker with 1 shadow listening to 3 queues\n'
             'shadows: MockRedisTestActor | queues: high, dft, low\n'
+            'adding random quit queue for faster batch exit: QUIT-<random>\n'
             'starting main blpop loop\n'
             'scheduling job from queue high\n'
             'scheduling job from queue dft\n'

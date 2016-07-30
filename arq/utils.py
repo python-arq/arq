@@ -1,5 +1,7 @@
 import asyncio
+import base64
 from datetime import datetime
+import os
 
 import aioredis
 
@@ -37,6 +39,10 @@ _EPOCH = datetime(2016, 1, 1)
 
 def timestamp():
     return (datetime.now() - _EPOCH).total_seconds()
+
+
+def gen_random(length=20):
+    return base64.urlsafe_b64encode(os.urandom(length))[:length]
 
 
 class cached_property(object):
