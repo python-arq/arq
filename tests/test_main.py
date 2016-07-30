@@ -1,5 +1,4 @@
 import logging
-import os
 import re
 
 import pytest
@@ -48,14 +47,15 @@ async def test_dispatch_work(tmpworkdir, loop, logcap):
                           'MockRedisDemo.high_add_numbers ▶ high\n')
     worker = MockRedisWorker(batch_mode=True, loop=demo.loop)
     worker.mock_data = demo.mock_data
+    assert not tmpworkdir.join('add_numbers').exists()
     await worker.run()
-    assert os.path.exists('add_numbers')
+    assert tmpworkdir.join('add_numbers').read() == '3'
     log = re.sub('0.0\d\ds', '0.0XXs', logcap.log)
     assert log == ('MockRedisDemo.add_numbers ▶ dft\n'
                    'MockRedisDemo.high_add_numbers ▶ high\n'
                    'Initialising work manager, batch mode: True\n'
                    'Running worker with 1 shadow listening to 3 queues\n'
-                   'shadows: MockRedisDemo, queues: high, dft, low\n'
+                   'shadows: MockRedisDemo | queues: high, dft, low\n'
                    'starting main blpop loop\n'
                    'scheduling job from queue high\n'
                    'scheduling job from queue dft\n'
@@ -65,7 +65,7 @@ async def test_dispatch_work(tmpworkdir, loop, logcap):
                    'high ran in  0.0XXs ← MockRedisDemo.high_add_numbers ● 12\n'
                    'dft  queued  0.0XXs → MockRedisDemo.add_numbers(1, 2)\n'
                    'dft  ran in  0.0XXs ← MockRedisDemo.add_numbers ● \n'
-                   'shutting down worker after 0.0XXs, 2 jobs done\n')
+                   'shutting down worker after 0.0XXs, 2 jobs done, 0 failed\n')
 
 
 async def test_handle_exception(loop, logcap):
@@ -82,6 +82,7 @@ async def test_handle_exception(loop, logcap):
 
     assert log == ('Initialising work manager, batch mode: True\n'
                    'Running worker with 1 shadow listening to 3 queues\n'
+                   'shadows: MockRedisDemo | queues: high, dft, low\n'
                    'waiting for 1 jobs to finish\n'
                    'dft  queued  0.0XXs → MockRedisDemo.boom()\n'
                    'dft  ran in =  0.0XXs ! MockRedisDemo.boom: RuntimeError\n'
@@ -91,7 +92,7 @@ async def test_handle_exception(loop, logcap):
                    '  File "/path/to/tests/fixtures.py", line <no>, in boom\n'
                    '    raise RuntimeError(\'boom\')\n'
                    'RuntimeError: boom\n'
-                   'shutting down worker after 0.0XXs, 1 jobs done\n')
+                   'shutting down worker after 0.0XXs, 1 jobs done, 1 failed\n')
 
 
 async def test_bad_def():
@@ -108,3 +109,18 @@ async def test_repeat_queue():
         class BadActor(Actor):
             QUEUES = ('a', 'a')
     assert excinfo.value.args[0] == "BadActor looks like it has duplicated queue names: ('a', 'a')"
+
+
+async def test_custom_name(loop, logcap):
+    demo = MockRedisDemo(name='foobar', loop=loop)
+    assert re.match('^<MockRedisDemo\(foobar\) at 0x[a-f0-9]{12}>$', str(demo))
+    assert None is await demo.concat('123', '456')
+
+    class CustomMockRedisWorker(MockRedisWorker):
+        async def shadow_factory(self):
+            return {MockRedisDemo(name='foobar')}
+    worker = CustomMockRedisWorker(batch_mode=True, loop=demo.loop)
+    worker.mock_data = demo.mock_data
+    await worker.run()
+    assert worker.jobs_failed == 0
+    assert 'foobar.concat(123, 456)' in logcap.log

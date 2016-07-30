@@ -91,20 +91,23 @@ def redis_conn(loop):
 
 class StreamLog:
     def __init__(self):
-        self.logger = self.stream = self.handler = None
+        self.stream = self.handler = None
+        self.loggers = []
         self.set_logger()
 
-    def set_logger(self, log_name='arq', level=logging.INFO):
-        if self.logger is not None:
+    def set_logger(self, log_names=('arq.main', 'arq.work'), level=logging.INFO):
+        if self.loggers:
             self.finish()
-        self.logger = logging.getLogger(log_name)
+        self.loggers = [logging.getLogger(log_name) for log_name in log_names]
         self.stream = io.StringIO()
         self.handler = logging.StreamHandler(stream=self.stream)
-        self.logger.addHandler(self.handler)
+        for logger in self.loggers:
+            logger.addHandler(self.handler)
         self.set_level(level)
 
     def set_level(self, level):
-        self.logger.setLevel(level)
+        for logger in self.loggers:
+            logger.setLevel(level)
 
     @property
     def log(self):
@@ -112,7 +115,8 @@ class StreamLog:
         return self.stream.read()
 
     def finish(self):
-        self.logger.removeHandler(self.handler)
+        for logger in self.loggers:
+            logger.removeHandler(self.handler)
 
 
 @pytest.yield_fixture

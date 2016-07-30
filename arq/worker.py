@@ -4,6 +4,7 @@ import logging
 from multiprocessing import Process
 import os
 import signal
+from signal import Signals
 import sys
 import time
 
@@ -22,14 +23,21 @@ class HandledExit(Exception):
     pass
 
 
+class BadJob(Exception):
+    pass
+
+
 class AbstractWorker(RedisMixin):
     max_concurrent_tasks = 50
     shutdown_delay = 6
+    job_class = Job
 
     def __init__(self, batch_mode=False, **kwargs):
         self._batch_mode = batch_mode
         self._pending_tasks = set()
-        self._task_count = 0
+        self.jobs_complete = 0
+        self.jobs_failed = 0
+        self._task_exception = None
         self._shadows = {}
         self.start = None
         self.running = True
@@ -46,7 +54,7 @@ class AbstractWorker(RedisMixin):
 
     def handle_sig(self, signum, frame):
         self.running = False
-        logger.warning('%d, got signal: %s, stopping...', os.getpid(), signal.Signals(signum).name)
+        logger.warning('%d, got signal: %s, stopping...', os.getpid(), Signals(signum).name)
         signal.signal(signal.SIGINT, self.handle_sig_force)
         signal.signal(signal.SIGTERM, self.handle_sig_force)
         signal.signal(signal.SIGALRM, self.handle_sig_force)
@@ -54,32 +62,42 @@ class AbstractWorker(RedisMixin):
         raise HandledExit()
 
     def handle_sig_force(self, signum, frame):
-        logger.error('%d, got signal: %s again, forcing exit', os.getpid(), signal.Signals(signum).name)
+        logger.error('%d, got signal: %s again, forcing exit', os.getpid(), Signals(signum).name)
         raise SystemError('force exit')
 
     def run_forever(self):
         self.loop.run_until_complete(self.run())
 
     async def run(self):
-        # TODO these two statements could go to a "INFO_HIGH" log level
         logger.info('Initialising work manager, batch mode: %s', self._batch_mode)
-        self._shadows = {w.__class__.__name__: w for w in await self.shadow_factory()}
+
+        self._shadows = {w.name: w for w in await self.shadow_factory()}
 
         logger.info('Running worker with %s shadow%s listening to %d queues',
                     len(self._shadows), '' if len(self._shadows) == 1 else 's', len(self.queues))
-        logger.debug('shadows: %s, queues: %s', ', '.join(self._shadows.keys()), ', '.join(self.queues))
+        logger.info('shadows: %s | queues: %s', self.shadow_names, ', '.join(self.queues))
 
         self.start = timestamp()
         try:
             await self.work()
         finally:
             await self.close()
+            if self._task_exception:
+                raise self._task_exception
+
+    @cached_property
+    def shadow_names(self):
+        return ', '.join(self._shadows.keys())
 
     def get_redis_queues(self):
         q_lookup = {}
         for s in self._shadows.values():
             q_lookup.update(s.queue_lookup)
-        queues = [(q_lookup[q], q) for q in self.queues]
+        try:
+            queues = [(q_lookup[q], q) for q in self.queues]
+        except KeyError as e:
+            raise KeyError('queue not found in queue lookups from shadows, '
+                           'queues: {}, combined shadow queue lookups: {}'.format(self.queues, q_lookup)) from e
         return [r for r, q in queues], dict(queues)
 
     async def work(self):
@@ -114,22 +132,33 @@ class AbstractWorker(RedisMixin):
         self._pending_tasks.add(task)
 
     async def run_task(self, queue, data):
-        j = Job(queue, data)
-        worker = self.get_worker(j)
-        await worker.run_job(j)
-
-    def get_worker(self, job):
-        return self._shadows[job.class_name]
+        job = self.job_class(queue, data)
+        try:
+            worker = self._shadows[job.class_name]
+        except KeyError as e:
+            raise BadJob('unable to find shadow for {!r}'.format(job)) from e
+        return await worker.run_job(job)
 
     def job_callback(self, task):
-        self._task_count += 1
-        task.result()
+        self.jobs_complete += 1
+        task_exception = task.exception()
+        if isinstance(task_exception, BadJob):
+            self.jobs_failed += 1
+            logger.error('Job Error: %s', task_exception)
+        elif task_exception:
+            # some other nastier exception occurred while trying to execute the job,
+            # stop running and raise that exception
+            self.running = False
+            self._task_exception = task_exception
+        elif task.result():
+            self.jobs_failed += 1
 
     async def close(self):
         if self._pending_tasks:
             logger.info('waiting for %d jobs to finish', len(self._pending_tasks))
             await asyncio.wait(self._pending_tasks, loop=self.loop)
-        logger.info('shutting down worker after %0.3fs, %d jobs done', timestamp() - self.start, self._task_count)
+        logger.info('shutting down worker after %0.3fs, %d jobs done, %d failed',
+                    timestamp() - self.start, self.jobs_complete, self.jobs_failed)
         await super().close()
 
 
@@ -172,28 +201,30 @@ class RunWorkerProcess:
         self.process = None
         self.run_worker(worker_path, worker_class, batch_mode)
 
-    def handle_sig(self, signum, frame):
-        signal.signal(signal.SIGINT, self.handle_sig_force)
-        signal.signal(signal.SIGTERM, self.handle_sig_force)
-        logger.warning('got signal: %s, waiting for worker %d to finish...',
-                       signal.Signals(signum).name, self.process.pid)
-        for i in range(100):
-            if not self.process or not self.process.is_alive():
-                return
-            time.sleep(0.1)
-
     def run_worker(self, worker_path, worker_class, batch_mode):
-        self.process = Process(target=start_worker, args=(worker_path, worker_class, batch_mode), name='WorkProcess')
+        name = 'WorkProcess'
+        logger.info('starting work process "%s"', name)
+        self.process = Process(target=start_worker, args=(worker_path, worker_class, batch_mode), name=name)
         self.process.start()
         self.process.join()
         if self.process.exitcode == 0:
             logger.info('worker process exited ok')
             return
-        logger.error('worker process exited badly, exit code %s', self.process.exitcode)
-        # TODO could restart worker here, but better to leave it to the real manager
+        logger.error('worker process %d exited badly with exit code %s', self.process.pid, self.process.exitcode)
+        sys.exit(3)
+        # TODO could restart worker here, but better to leave it up to the real manager
+
+    def handle_sig(self, signum, frame):
+        signal.signal(signal.SIGINT, self.handle_sig_force)
+        signal.signal(signal.SIGTERM, self.handle_sig_force)
+        logger.warning('got signal: %s, waiting for worker %d to finish...', Signals(signum).name, self.process.pid)
+        for i in range(100):
+            if not self.process or not self.process.is_alive():
+                return
+            time.sleep(0.1)
 
     def handle_sig_force(self, signum, frame):
-        logger.error('got signal: %s again, forcing exit', signal.Signals(signum).name)
+        logger.error('got signal: %s again, forcing exit', Signals(signum).name)
         if self.process and self.process.is_alive():
             logger.error('sending worker %d SIGTERM', self.process.pid)
             os.kill(self.process.pid, signal.SIGTERM)

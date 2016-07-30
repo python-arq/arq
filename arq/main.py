@@ -27,6 +27,22 @@ class Job:
         queued_at = queued_at or int(timestamp() * 1000)
         return msgpack.packb([queued_at, class_name, func_name, args, kwargs], use_bin_type=True)
 
+    def __str__(self):
+        arguments = ''
+        if self.args:
+            arguments = ', '.join(map(str, self.args))
+        if self.kwargs:
+            if arguments:
+                arguments += ', '
+            arguments += ', '.join('{}={}'.format(*kv) for kv in sorted(self.kwargs.items()))
+
+        if len(arguments) > 80:
+            arguments = arguments[:77] + '...'
+        return '{s.class_name}.{s.func_name}({args})'.format(s=self, args=arguments)
+
+    def __repr__(self):
+        return '<Job {} on {}>'.format(self, self.queue)
+
 
 class ActorMeta(type):
     __doc__ = 'arq Actor'
@@ -43,6 +59,8 @@ class Actor(RedisMixin, metaclass=ActorMeta):
     DEFAULT_QUEUE = 'dft'
     LOW_QUEUE = 'low'
     QUEUE_PREFIX = b'arq:q:'
+    name = None
+    job_class = Job
 
     QUEUES = (
         HIGH_QUEUE,
@@ -50,15 +68,16 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         LOW_QUEUE,
     )
 
-    def __init__(self, **kwargs):
+    def __init__(self, *, name=None, **kwargs):
         self.queue_lookup = {q: self.QUEUE_PREFIX + q.encode() for q in self.QUEUES}
+        if name or not self.name:
+            self.name = name or self.__class__.__name__
         super().__init__(**kwargs)
 
     async def enqueue_job(self, func_name, *args, queue=None, **kwargs):
         queue = queue or self.DEFAULT_QUEUE
-        class_name = self.__class__.__name__
-        data = Job.encode(class_name=class_name, func_name=func_name, args=args, kwargs=kwargs)
-        main_logger.debug('%s.%s ▶ %s', class_name, func_name, queue)
+        data = self.job_class.encode(class_name=self.name, func_name=func_name, args=args, kwargs=kwargs)
+        main_logger.debug('%s.%s ▶ %s', self.name, func_name, queue)
 
         pool = await self.get_redis_pool()
 
@@ -68,19 +87,8 @@ class Actor(RedisMixin, metaclass=ActorMeta):
 
     @classmethod
     def log_job_start(cls, queue_time, j):
-        if not work_logger.isEnabledFor(logging.INFO):
-            return
-        arguments = ''
-        if j.args:
-            arguments = ', '.join(map(str, j.args))
-        if j.kwargs:
-            if arguments:
-                arguments += ', '
-            arguments += ', '.join('{}={}'.format(*kv) for kv in sorted(j.kwargs.items()))
-
-        if len(arguments) > 80:
-            arguments = arguments[:77] + '...'
-        work_logger.info('%-4s queued%7.3fs → %s.%s(%s)', j.queue, queue_time, j.class_name, j.func_name, arguments)
+        if work_logger.isEnabledFor(logging.INFO):
+            work_logger.info('%-4s queued%7.3fs → %s', j.queue, queue_time, j)
 
     @classmethod
     def log_job_result(cls, started_at, result, j):
@@ -117,8 +125,13 @@ class Actor(RedisMixin, metaclass=ActorMeta):
                 result = await func(*j.args, **j.kwargs)
         except Exception as e:
             await self.handle_exc(started_at, e, j)
+            return 1
         else:
             self.log_job_result(started_at, result, j)
+            return 0
+
+    def __repr__(self):
+        return '<{self.__class__.__name__}({self.name}) at 0x{id:02x}>'.format(self=self, id=id(self))
 
 
 def concurrent(func_or_queue):
