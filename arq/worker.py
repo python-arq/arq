@@ -65,7 +65,7 @@ class AbstractWorker(RedisMixin):
         logger.error('%d, got signal: %s again, forcing exit', os.getpid(), Signals(signum).name)
         raise SystemError('force exit')
 
-    def run_forever(self):
+    def run_until_complete(self):
         self.loop.run_until_complete(self.run())
 
     async def run(self):
@@ -101,20 +101,21 @@ class AbstractWorker(RedisMixin):
         return [r for r, q in queues], dict(queues)
 
     async def work(self):
-        timeout = 0
         redis_queues, queue_lookup = self.get_redis_queues()
         pool = await self.get_redis_pool()
         async with pool.get() as redis:
             if self._batch_mode:
-                timeout = 1  # in case another worker gets the QUIT first
                 await redis.rpush(QUIT, b'1')
                 redis_queues.append(QUIT)
             logger.debug('starting main blpop loop')
             while self.running:
-                msg = await redis.blpop(*redis_queues, timeout=timeout)
+                msg = await redis.blpop(*redis_queues, timeout=1)
                 if msg is None:
-                    logger.debug('msg None, stopping work')
-                    break
+                    if self._batch_mode:
+                        logger.debug('msg None, stopping work')
+                        break
+                    else:
+                        continue
                 _queue, data = msg
                 if self._batch_mode and _queue == QUIT:
                     logger.debug('Quit msg, stopping work')
@@ -124,34 +125,33 @@ class AbstractWorker(RedisMixin):
                 await self.schedule_job(queue, data)
 
     async def schedule_job(self, queue, data):
-        if len(self._pending_tasks) > self.max_concurrent_tasks:
-            _, self._pending_tasks = await asyncio.wait(self._pending_tasks, loop=self.loop,
-                                                        return_when=asyncio.FIRST_COMPLETED)
-        task = self.loop.create_task(self.run_task(queue, data))
-        task.add_done_callback(self.job_callback)
-        self._pending_tasks.add(task)
-
-    async def run_task(self, queue, data):
         job = self.job_class(queue, data)
         try:
             worker = self._shadows[job.class_name]
-        except KeyError as e:
-            raise BadJob('unable to find shadow for {!r}'.format(job)) from e
-        return await worker.run_job(job)
+        except KeyError:
+            self.jobs_failed += 1
+            logger.error('Job Error: unable to find shadow for %r', job)
+            return
+
+        if len(self._pending_tasks) >= self.max_concurrent_tasks:
+            logger.debug('%d pending tasks, waiting for one to finish before creating task for %s',
+                         len(self._pending_tasks), job)
+            _, self._pending_tasks = await asyncio.wait(self._pending_tasks, loop=self.loop,
+                                                        return_when=asyncio.FIRST_COMPLETED)
+
+        task = self.loop.create_task(worker.run_job(job))
+        task.add_done_callback(self.job_callback)
+        self._pending_tasks.add(task)
 
     def job_callback(self, task):
         self.jobs_complete += 1
         task_exception = task.exception()
-        if isinstance(task_exception, BadJob):
-            self.jobs_failed += 1
-            logger.error('Job Error: %s', task_exception)
-        elif task_exception:
-            # some other nastier exception occurred while trying to execute the job,
-            # stop running and raise that exception
+        if task_exception:
             self.running = False
             self._task_exception = task_exception
         elif task.result():
             self.jobs_failed += 1
+        logger.debug('task complete, %d jobs done, %d failed', self.jobs_complete, self.jobs_failed)
 
     async def close(self):
         if self._pending_tasks:
@@ -188,10 +188,9 @@ def start_worker(worker_path, worker_class, batch_mode):
     worker = import_string(worker_path, worker_class)
     worker_manager = worker(batch_mode)
     try:
-        worker_manager.run_forever()
+        worker_manager.run_until_complete()
     except HandledExit:
         worker_manager.loop.run_until_complete(worker_manager.close())
-        pass
 
 
 class RunWorkerProcess:
@@ -210,7 +209,7 @@ class RunWorkerProcess:
         if self.process.exitcode == 0:
             logger.info('worker process exited ok')
             return
-        logger.error('worker process %d exited badly with exit code %s', self.process.pid, self.process.exitcode)
+        logger.error('worker process %s exited badly with exit code %s', self.process.pid, self.process.exitcode)
         sys.exit(3)
         # TODO could restart worker here, but better to leave it up to the real manager
 

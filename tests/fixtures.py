@@ -1,3 +1,6 @@
+import asyncio
+from pathlib import Path
+
 from arq import concurrent, Actor, AbstractWorker
 from arq.mock_redis import MockRedisMixin
 
@@ -24,6 +27,12 @@ class Demo(Actor):
     async def boom(self):
         raise RuntimeError('boom')
 
+    @concurrent
+    async def save_slow(self, v, sleep_for=1):
+        await asyncio.sleep(sleep_for, loop=self.loop)
+        with open('save_slow', 'w') as f:
+            f.write(str(v))
+
 
 class MockRedisDemo(MockRedisMixin, Demo):
     pass
@@ -31,9 +40,27 @@ class MockRedisDemo(MockRedisMixin, Demo):
 
 class Worker(AbstractWorker):
     async def shadow_factory(self):
-        return {Demo()}
+        return {Demo(loop=self.loop)}
+
+
+class WorkerQuit(AbstractWorker):
+    """
+    worker which stops taking new jobs after 2 jobs
+    """
+    max_concurrent_tasks = 1
+    async def shadow_factory(self):
+        return {Demo(loop=self.loop)}
+
+    def job_callback(self, task):
+        super().job_callback(task)
+        if self.jobs_complete >= 2:
+            self.running = False
 
 
 class MockRedisWorker(MockRedisMixin, AbstractWorker):
     async def shadow_factory(self):
         return {MockRedisDemo()}
+
+
+with Path(__file__).resolve().parent.joinpath('example.py').open() as f:
+    EXAMPLE_FILE = f.read()

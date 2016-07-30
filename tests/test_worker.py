@@ -1,6 +1,12 @@
 import re
+import logging
 
-from .fixtures import Worker, MockRedisDemo
+import pytest
+
+from arq.worker import import_string, start_worker
+
+from .fixtures import Worker, MockRedisDemo, EXAMPLE_FILE, WorkerQuit
+from .example import ActorTest
 
 
 async def test_run_job(tmpworkdir, redis_conn, demo):
@@ -9,11 +15,7 @@ async def test_run_job(tmpworkdir, redis_conn, demo):
     await demo.add_numbers(1, 2)
     assert not tmpworkdir.join('add_numbers').exists()
     await worker.run()
-    assert tmpworkdir.join('add_numbers').exists()
-
-    with open('add_numbers') as f:
-        assert f.read() == '3'
-    await demo.close()
+    assert tmpworkdir.join('add_numbers').read() == '3'
 
 
 async def test_long_args(mock_demo_worker, logcap):
@@ -35,4 +37,51 @@ async def test_wrong_worker(mock_demo_worker, logcap):
     assert None is await demo2.concat('a', 'b')
     await worker.run()
     assert worker.jobs_failed == 1
+    print(logcap)
     assert 'Job Error: unable to find shadow for <Job missing.concat(a, b) on dft>' in logcap.log
+
+
+def test_import_string_good(tmpworkdir):
+    tmpworkdir.join('test.py').write(EXAMPLE_FILE)
+    attr = import_string('test.py', 'Worker')
+    assert attr.__name__ == 'Worker'
+    assert attr.signature == 'foobar'
+
+
+def test_import_string_missing_attr(tmpworkdir):
+    tmpworkdir.join('test.py').write(EXAMPLE_FILE)
+    with pytest.raises(ImportError):
+        import_string('test.py', 'wrong')
+
+
+def test_import_string_missing_file(tmpworkdir):
+    with pytest.raises(ImportError):
+        import_string('test.py', 'wrong')
+
+
+async def test_import_start_worker(tmpworkdir, redis_conn, loop):
+    actor = ActorTest(loop=loop)
+    await actor.foo(1, 2)
+    await actor.close()
+
+    assert await redis_conn.exists(b'arq:q:dft')
+    dft_queue = await redis_conn.lrange(b'arq:q:dft', 0, -1)
+    assert len(dft_queue) == 1
+    tmpworkdir.join('test.py').write(EXAMPLE_FILE)
+    start_worker('test.py', 'Worker', True)
+    assert tmpworkdir.join('add_numbers').read() == '3'
+
+
+async def test_run_4_quit(tmpworkdir, redis_conn, demo, logcap):
+    logcap.set_level(logging.DEBUG)
+    worker = WorkerQuit(loop=demo.loop)
+
+    await demo.save_slow(1, 0.1)
+    await demo.save_slow(2, 0.1)
+    await demo.save_slow(3, 0.1)
+    await demo.save_slow(4, 0.1)
+    assert not tmpworkdir.join('save_slow').exists()
+    await worker.run()
+    print(logcap)
+    assert tmpworkdir.join('save_slow').read() == '3'
+    assert '1 pending tasks, waiting for one to finish before creating task for Demo.save_slow(2, 0.1)' in logcap.log

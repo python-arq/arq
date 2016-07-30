@@ -25,7 +25,7 @@ class ClickHandler(logging.Handler):
 
 def setup_logging(verbose=False):
     log_level = logging.DEBUG if verbose else logging.INFO
-    formatter = logging.Formatter('%(asctime)s %(processName)8s %(name)8s: %(message)s', datefmt='%H:%M:%S')
+    formatter = logging.Formatter('%(asctime)s %(processName)11s: %(message)s', datefmt='%H:%M:%S')
     dft_hdl = ClickHandler()
     dft_hdl.setFormatter(formatter)
     logger = logging.getLogger('arq.work')

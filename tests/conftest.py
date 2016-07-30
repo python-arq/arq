@@ -70,23 +70,15 @@ def tmpworkdir(tmpdir):
 
 @pytest.yield_fixture
 def redis_conn(loop):
-    conn = None
-
     async def _get_conn():
-        nonlocal conn
         conn = await aioredis.create_redis(('localhost', 6379), loop=loop)
         await conn.flushall()
         return conn
+    conn = loop.run_until_complete(_get_conn())
+    yield conn
 
-    yield _get_conn
-
-    async def _flush():
-        _conn = conn or await _get_conn()
-        await _conn.flushall()
-        _conn.close()
-        await _conn.wait_closed()
-
-    loop.run_until_complete(_flush())
+    conn.close()
+    loop.run_until_complete(conn.wait_closed())
 
 
 class StreamLog:
@@ -117,6 +109,9 @@ class StreamLog:
     def finish(self):
         for logger in self.loggers:
             logger.removeHandler(self.handler)
+
+    def __str__(self):
+        return 'logcap:\n' + self.log
 
 
 @pytest.yield_fixture

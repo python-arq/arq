@@ -23,12 +23,11 @@ async def test_simple_job_dispatch(loop):
 
 
 async def test_enqueue_redis_job(demo, redis_conn):
-    conn = await redis_conn()
-    assert not await conn.exists(b'arq:q:dft')
+    assert not await redis_conn.exists(b'arq:q:dft')
     assert None is await demo.add_numbers(1, 2)
 
-    assert await conn.exists(b'arq:q:dft')
-    dft_queue = await conn.lrange(b'arq:q:dft', 0, -1)
+    assert await redis_conn.exists(b'arq:q:dft')
+    dft_queue = await redis_conn.lrange(b'arq:q:dft', 0, -1)
     assert len(dft_queue) == 1
     data = msgpack.unpackb(dft_queue[0], encoding='utf8')
     # timestamp
@@ -36,7 +35,7 @@ async def test_enqueue_redis_job(demo, redis_conn):
     assert data == ['Demo', 'add_numbers', [1, 2], {}]
 
 
-async def test_dispatch_work(tmpworkdir, loop, logcap):
+async def test_dispatch_work(tmpworkdir, loop, logcap, redis_conn):
     logcap.set_level(logging.DEBUG)
     demo = MockRedisDemo(loop=loop)
     assert None is await demo.add_numbers(1, 2)
@@ -51,21 +50,23 @@ async def test_dispatch_work(tmpworkdir, loop, logcap):
     await worker.run()
     assert tmpworkdir.join('add_numbers').read() == '3'
     log = re.sub('0.0\d\ds', '0.0XXs', logcap.log)
-    assert log == ('MockRedisDemo.add_numbers ▶ dft\n'
-                   'MockRedisDemo.high_add_numbers ▶ high\n'
-                   'Initialising work manager, batch mode: True\n'
-                   'Running worker with 1 shadow listening to 3 queues\n'
-                   'shadows: MockRedisDemo | queues: high, dft, low\n'
-                   'starting main blpop loop\n'
-                   'scheduling job from queue high\n'
-                   'scheduling job from queue dft\n'
-                   'Quit msg, stopping work\n'
-                   'waiting for 2 jobs to finish\n'
-                   'high queued  0.0XXs → MockRedisDemo.high_add_numbers(3, 4, c=5)\n'
-                   'high ran in  0.0XXs ← MockRedisDemo.high_add_numbers ● 12\n'
-                   'dft  queued  0.0XXs → MockRedisDemo.add_numbers(1, 2)\n'
-                   'dft  ran in  0.0XXs ← MockRedisDemo.add_numbers ● \n'
-                   'shutting down worker after 0.0XXs, 2 jobs done, 0 failed\n')
+    assert ('MockRedisDemo.add_numbers ▶ dft\n'
+            'MockRedisDemo.high_add_numbers ▶ high\n'
+            'Initialising work manager, batch mode: True\n'
+            'Running worker with 1 shadow listening to 3 queues\n'
+            'shadows: MockRedisDemo | queues: high, dft, low\n'
+            'starting main blpop loop\n'
+            'scheduling job from queue high\n'
+            'scheduling job from queue dft\n'
+            'Quit msg, stopping work\n'
+            'waiting for 2 jobs to finish\n'
+            'high queued  0.0XXs → MockRedisDemo.high_add_numbers(3, 4, c=5)\n'
+            'high ran in  0.0XXs ← MockRedisDemo.high_add_numbers ● 12\n'
+            'dft  queued  0.0XXs → MockRedisDemo.add_numbers(1, 2)\n'
+            'dft  ran in  0.0XXs ← MockRedisDemo.add_numbers ● \n'
+            'task complete, 1 jobs done, 0 failed\n'
+            'task complete, 2 jobs done, 0 failed\n'
+            'shutting down worker after 0.0XXs, 2 jobs done, 0 failed\n') == log
 
 
 async def test_handle_exception(loop, logcap):
@@ -79,20 +80,19 @@ async def test_handle_exception(loop, logcap):
     log = re.sub('0.0\d\ds', '0.0XXs', logcap.log)
     log = re.sub(', line \d+,', ', line <no>,', log)
     log = re.sub('"/.*?/(\w+/\w+)\.py"', r'"/path/to/\1.py"', log)
-
-    assert log == ('Initialising work manager, batch mode: True\n'
-                   'Running worker with 1 shadow listening to 3 queues\n'
-                   'shadows: MockRedisDemo | queues: high, dft, low\n'
-                   'waiting for 1 jobs to finish\n'
-                   'dft  queued  0.0XXs → MockRedisDemo.boom()\n'
-                   'dft  ran in =  0.0XXs ! MockRedisDemo.boom: RuntimeError\n'
-                   'Traceback (most recent call last):\n'
-                   '  File "/path/to/arq/main.py", line <no>, in run_job\n'
-                   '    result = await unbound_func(self, *j.args, **j.kwargs)\n'
-                   '  File "/path/to/tests/fixtures.py", line <no>, in boom\n'
-                   '    raise RuntimeError(\'boom\')\n'
-                   'RuntimeError: boom\n'
-                   'shutting down worker after 0.0XXs, 1 jobs done, 1 failed\n')
+    assert ('Initialising work manager, batch mode: True\n'
+            'Running worker with 1 shadow listening to 3 queues\n'
+            'shadows: MockRedisDemo | queues: high, dft, low\n'
+            'waiting for 1 jobs to finish\n'
+            'dft  queued  0.0XXs → MockRedisDemo.boom()\n'
+            'dft  ran in =  0.0XXs ! MockRedisDemo.boom: RuntimeError\n'
+            'Traceback (most recent call last):\n'
+            '  File "/path/to/arq/main.py", line <no>, in run_job\n'
+            '    result = await unbound_func(self, *j.args, **j.kwargs)\n'
+            '  File "/path/to/tests/fixtures.py", line <no>, in boom\n'
+            '    raise RuntimeError(\'boom\')\n'
+            'RuntimeError: boom\n'
+            'shutting down worker after 0.0XXs, 1 jobs done, 1 failed\n') == log
 
 
 async def test_bad_def():
