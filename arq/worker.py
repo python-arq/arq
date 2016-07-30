@@ -275,7 +275,8 @@ class RunWorkerProcess:
     def handle_sig(self, signum, frame):
         signal.signal(signal.SIGINT, self.handle_sig_force)
         signal.signal(signal.SIGTERM, self.handle_sig_force)
-        logger.warning('got signal: %s, waiting for worker pid=%d to finish...', Signals(signum).name, self.process.pid)
+        logger.warning('got signal: %s, waiting for worker pid=%s to finish...', Signals(signum).name,
+                       self.process and self.process.pid)
         for i in range(100):
             if not self.process or not self.process.is_alive():
                 return
