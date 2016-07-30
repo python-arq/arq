@@ -160,6 +160,8 @@ class AbstractWorker(RedisMixin):
             await asyncio.wait(self._pending_tasks, loop=self.loop)
         logger.info('shutting down worker after %0.3fs, %d jobs done, %d failed',
                     timestamp() - self.start, self.jobs_complete, self.jobs_failed)
+
+        await asyncio.wait([s.close() for s in self._shadows.values()], loop=self.loop)
         await super().close()
 
 
