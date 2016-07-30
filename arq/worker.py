@@ -83,6 +83,7 @@ class AbstractWorker(RedisMixin):
         finally:
             await self.close()
             if self._task_exception:
+                logger.error('Found task exception "%s"', self._task_exception)
                 raise self._task_exception
 
     @cached_property
@@ -127,7 +128,7 @@ class AbstractWorker(RedisMixin):
     async def schedule_job(self, queue, data):
         job = self.job_class(queue, data)
         try:
-            worker = self._shadows[job.class_name]
+            shadow = self._shadows[job.class_name]
         except KeyError:
             self.jobs_failed += 1
             logger.error('Job Error: unable to find shadow for %r', job)
@@ -139,7 +140,7 @@ class AbstractWorker(RedisMixin):
             _, self._pending_tasks = await asyncio.wait(self._pending_tasks, loop=self.loop,
                                                         return_when=asyncio.FIRST_COMPLETED)
 
-        task = self.loop.create_task(worker.run_job(job))
+        task = self.loop.create_task(shadow.run_job(job))
         task.add_done_callback(self.job_callback)
         self._pending_tasks.add(task)
 

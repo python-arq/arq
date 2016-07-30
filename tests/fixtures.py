@@ -28,10 +28,15 @@ class Demo(Actor):
         raise RuntimeError('boom')
 
     @concurrent
-    async def save_slow(self, v, sleep_for=1):
+    async def save_slow(self, v, sleep_for=0):
         await asyncio.sleep(sleep_for, loop=self.loop)
         with open('save_slow', 'w') as f:
             f.write(str(v))
+
+
+class FailedActor(Demo):
+    async def run_job(self, j):
+        raise RuntimeError('foobar')
 
 
 class MockRedisDemo(MockRedisMixin, Demo):
@@ -43,18 +48,21 @@ class Worker(AbstractWorker):
         return {Demo(loop=self.loop)}
 
 
-class WorkerQuit(AbstractWorker):
+class WorkerQuit(Worker):
     """
     worker which stops taking new jobs after 2 jobs
     """
     max_concurrent_tasks = 1
-    async def shadow_factory(self):
-        return {Demo(loop=self.loop)}
 
     def job_callback(self, task):
         super().job_callback(task)
         if self.jobs_complete >= 2:
             self.running = False
+
+
+class WorkerFailedActor(AbstractWorker):
+    async def shadow_factory(self):
+        return {Demo(loop=self.loop), FailedActor(loop=self.loop)}
 
 
 class MockRedisWorker(MockRedisMixin, AbstractWorker):

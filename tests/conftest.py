@@ -110,6 +110,9 @@ class StreamLog:
         for logger in self.loggers:
             logger.removeHandler(self.handler)
 
+    def __contains__(self, item):
+        return item in self.log
+
     def __str__(self):
         return 'logcap:\n' + self.log
 
@@ -129,14 +132,17 @@ def debug_logger():
     handler.setLevel(logging.DEBUG)
     fmt = logging.Formatter('%(asctime)s %(name)8s %(levelname)8s: %(message)s')
     handler.setFormatter(fmt)
-    logger = logging.getLogger('')
-    logger.addHandler(handler)
-    logger.setLevel(logging.DEBUG)
+    for logger_name in ('arq.main', 'arq.work'):
+        logger = logging.getLogger(logger_name)
+        logger.addHandler(handler)
+        logger.setLevel(logging.DEBUG)
 
     yield
 
-    logger.removeHandler(handler)
-    logger.setLevel(logging.NOTSET)
+    for logger_name in ('arq.main', 'arq.work'):
+        logger = logging.getLogger(logger_name)
+        logger.removeHandler(handler)
+        logger.setLevel(logging.NOTSET)
 
 
 @pytest.yield_fixture
