@@ -11,8 +11,7 @@ class ActorTest(Actor):
 
 class Worker(AbstractWorker):
     signature = 'foobar'
-    async def shadow_factory(self):
-        return [ActorTest(loop=self.loop)]
+    shadows = [ActorTest]
 
 
 class WorkerSignalQuit(Worker):
@@ -25,3 +24,13 @@ class WorkerSignalQuit(Worker):
         await super().schedule_job(queue, data)
         if self.jobs_complete >= 2:
             self.handle_sig(2, None)
+
+
+class WorkerSignalTwiceQuit(Worker):
+    """
+    worker which simulates receiving sigint twice after 2 jobs
+    """
+    async def schedule_job(self, queue, data):
+        await super().schedule_job(queue, data)
+        if self.jobs_complete >= 2:
+            self.handle_sig_force(2, None)

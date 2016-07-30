@@ -116,6 +116,9 @@ class StreamLog:
     def __str__(self):
         return 'logcap:\n' + self.log
 
+    def __repr__(self):
+        return '< logcap: {!r}>'.format(self.log)
+
 
 @pytest.yield_fixture
 def logcap():

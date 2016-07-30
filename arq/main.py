@@ -66,10 +66,10 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         LOW_QUEUE,
     )
 
-    def __init__(self, *, name=None, **kwargs):
+    def __init__(self, *, is_shadow=False, **kwargs):
         self.queue_lookup = {q: self.QUEUE_PREFIX + q.encode() for q in self.QUEUES}
-        if name or not self.name:
-            self.name = name or self.__class__.__name__
+        self.name = self.name or self.__class__.__name__
+        self.is_shadow = is_shadow
         super().__init__(**kwargs)
 
     async def enqueue_job(self, func_name, *args, queue=None, **kwargs):

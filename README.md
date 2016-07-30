@@ -41,8 +41,7 @@ class Downloader(Actor):
 
 
 class Worker(AbstractWorker):
-    async def shadow_factory(self):
-        return [Downloader(loop=self.loop)]
+    shadows = [Downloader]
 
 
 async def download_lots(loop):

@@ -39,8 +39,7 @@ class MockRedisTestActor(MockRedisMixin, TestActor):
 
 
 class Worker(AbstractWorker):
-    async def shadow_factory(self):
-        return {TestActor(loop=self.loop)}
+    shadows = [TestActor]
 
 
 class WorkerQuit(Worker):
@@ -61,8 +60,11 @@ class WorkerFail(Worker):
 
 
 class MockRedisWorker(MockRedisMixin, AbstractWorker):
-    async def shadow_factory(self):
-        return {MockRedisTestActor()}
+    shadows = [MockRedisTestActor]
+
+
+class FoobarActor(MockRedisTestActor):
+    name = 'foobar'
 
 
 with Path(__file__).resolve().parent.joinpath('example.py').open() as f:

@@ -6,7 +6,7 @@ import msgpack
 
 from arq import Actor, concurrent
 
-from .fixtures import MockRedisTestActor, MockRedisWorker
+from .fixtures import MockRedisTestActor, MockRedisWorker, FoobarActor
 
 
 async def test_simple_job_dispatch(loop):
@@ -112,13 +112,12 @@ async def test_repeat_queue():
 
 
 async def test_custom_name(loop, logcap):
-    actor = MockRedisTestActor(name='foobar', loop=loop)
-    assert re.match('^<MockRedisTestActor\(foobar\) at 0x[a-f0-9]{12}>$', str(actor))
-    assert None is await actor.concat('123', '456')
-
     class CustomMockRedisWorker(MockRedisWorker):
-        async def shadow_factory(self):
-            return {MockRedisTestActor(name='foobar')}
+        shadows = [FoobarActor]
+
+    actor = FoobarActor(name='foobar', loop=loop)
+    assert re.match('^<FoobarActor\(foobar\) at 0x[a-f0-9]{12}>$', str(actor))
+    assert None is await actor.concat('123', '456')
     worker = CustomMockRedisWorker(batch_mode=True, loop=actor.loop)
     worker.mock_data = actor.mock_data
     await worker.run()

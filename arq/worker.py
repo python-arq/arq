@@ -24,6 +24,10 @@ class HandledExit(Exception):
     pass
 
 
+class ImmediateExit(Exception):
+    pass
+
+
 class BadJob(Exception):
     pass
 
@@ -46,8 +50,14 @@ class AbstractWorker(RedisMixin):
         signal.signal(signal.SIGTERM, self.handle_sig)
         super().__init__(**kwargs)
 
-    async def shadow_factory(self):
+    @property
+    def shadows(self):
         raise NotImplementedError
+
+    async def shadow_factory(self):
+        rp = await self.get_redis_pool()
+        shadows = [s(is_shadow=True, loop=self.loop, existing_pool=rp) for s in self.shadows]
+        return {w.name: w for w in shadows}
 
     @classmethod
     def logging_config(cls, verbose):
@@ -68,7 +78,7 @@ class AbstractWorker(RedisMixin):
 
     def handle_sig_force(self, signum, frame):
         logger.error('pid=%d, got signal: %s again, forcing exit', os.getpid(), Signals(signum).name)
-        raise SystemError('force exit')
+        raise ImmediateExit('force exit')
 
     def run_until_complete(self):
         self.loop.run_until_complete(self.run())
@@ -76,7 +86,8 @@ class AbstractWorker(RedisMixin):
     async def run(self):
         logger.info('Initialising work manager, batch mode: %s', self._batch_mode)
 
-        self._shadows = {w.name: w for w in await self.shadow_factory()}
+        self._shadows = await self.shadow_factory()
+        assert isinstance(self._shadows, dict), 'shadow_factory should return a dict not %s' % type(self._shadows)
 
         logger.info('Running worker with %s shadow%s listening to %d queues',
                     len(self._shadows), '' if len(self._shadows) == 1 else 's', len(self.queues))
@@ -248,6 +259,9 @@ def start_worker(worker_path, worker_class, batch_mode):
         worker.run_until_complete()
     except HandledExit:
         pass
+    except Exception as e:
+        logger.exception('Worker exiting after an unhandled error: %s', e.__class__.__name__)
+        raise
     finally:
         worker.loop.run_until_complete(worker.close())
 
@@ -287,4 +301,4 @@ class RunWorkerProcess:
         if self.process and self.process.is_alive():
             logger.error('sending worker %d SIGTERM', self.process.pid)
             os.kill(self.process.pid, signal.SIGTERM)
-        raise SystemError('force exit')
+        raise ImmediateExit('force exit')

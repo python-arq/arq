@@ -3,9 +3,9 @@ import logging
 
 import pytest
 
-from arq.worker import import_string, start_worker
+from arq.worker import import_string, start_worker, ImmediateExit
 
-from .fixtures import Worker, MockRedisTestActor, EXAMPLE_FILE, WorkerQuit, WorkerFail
+from .fixtures import Worker, EXAMPLE_FILE, WorkerQuit, WorkerFail, FoobarActor
 from .example import ActorTest
 
 
@@ -33,12 +33,12 @@ async def test_long_args(mock_actor_worker, logcap):
 
 async def test_wrong_worker(mock_actor_worker, logcap):
     actor, worker = mock_actor_worker
-    actor2 = MockRedisTestActor(name='missing')
+    actor2 = FoobarActor()
     actor2.mock_data = worker.mock_data
     assert None is await actor2.concat('a', 'b')
     await worker.run()
     assert worker.jobs_failed == 1
-    assert 'Job Error: unable to find shadow for <Job missing.concat(a, b) on dft>' in logcap
+    assert 'Job Error: unable to find shadow for <Job foobar.concat(a, b) on dft>' in logcap
 
 
 def test_import_string_good(tmpworkdir):
@@ -109,10 +109,28 @@ async def test_run_sigint(tmpworkdir, redis_conn, loop, logcap):
     await actor.close()
 
     tmpworkdir.join('test.py').write(EXAMPLE_FILE)
+    assert not tmpworkdir.join('foo').exists()
     start_worker('test.py', 'WorkerSignalQuit', False)
     assert tmpworkdir.join('foo').exists()
     assert tmpworkdir.join('foo').read() == '1'
     assert 'got signal: SIGINT, stopping...' in logcap
+
+
+async def test_run_sigint_twice(tmpworkdir, redis_conn, loop, logcap):
+    logcap.set_level(logging.DEBUG)
+    actor = ActorTest(loop=loop)
+
+    await actor.foo(1)
+    await actor.foo(1)
+    await actor.foo(1)
+    await actor.close()
+
+    tmpworkdir.join('test.py').write(EXAMPLE_FILE)
+    with pytest.raises(ImmediateExit):
+        start_worker('test.py', 'WorkerSignalTwiceQuit', False)
+    assert tmpworkdir.join('foo').exists()
+    assert tmpworkdir.join('foo').read() == '1'
+    assert 'Worker exiting after an unhandled error: ImmediateExit' in logcap
 
 
 async def test_non_existent_function(redis_conn, actor, logcap):
