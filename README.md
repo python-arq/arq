@@ -65,4 +65,3 @@ the worker to do the jobs with `arq demo.py`.
 
 * jobs results
 * job uniqueness
-* exception handling inc. sentry

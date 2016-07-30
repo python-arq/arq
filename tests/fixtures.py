@@ -5,7 +5,7 @@ from arq import concurrent, Actor, AbstractWorker
 from arq.mock_redis import MockRedisMixin
 
 
-class Demo(Actor):
+class TestActor(Actor):
     @concurrent
     async def add_numbers(self, a, b):
         with open('add_numbers', 'w') as f:
@@ -34,18 +34,13 @@ class Demo(Actor):
             f.write(str(v))
 
 
-class FailedActor(Demo):
-    async def run_job(self, j):
-        raise RuntimeError('foobar')
-
-
-class MockRedisDemo(MockRedisMixin, Demo):
+class MockRedisTestActor(MockRedisMixin, TestActor):
     pass
 
 
 class Worker(AbstractWorker):
     async def shadow_factory(self):
-        return {Demo(loop=self.loop)}
+        return {TestActor(loop=self.loop)}
 
 
 class WorkerQuit(Worker):
@@ -60,14 +55,14 @@ class WorkerQuit(Worker):
             self.running = False
 
 
-class WorkerFailedActor(AbstractWorker):
-    async def shadow_factory(self):
-        return {Demo(loop=self.loop), FailedActor(loop=self.loop)}
+class WorkerFail(Worker):
+    async def run_job(self, j):
+        raise RuntimeError('foobar')
 
 
 class MockRedisWorker(MockRedisMixin, AbstractWorker):
     async def shadow_factory(self):
-        return {MockRedisDemo()}
+        return {MockRedisTestActor()}
 
 
 with Path(__file__).resolve().parent.joinpath('example.py').open() as f:

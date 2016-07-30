@@ -1,8 +1,6 @@
 import inspect
 import logging
 from functools import wraps
-from traceback import format_exception
-import sys
 
 import msgpack
 
@@ -84,51 +82,6 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         queue_list = self.queue_lookup[queue]
         async with pool.get() as redis:
             await redis.rpush(queue_list, data)
-
-    @classmethod
-    def log_job_start(cls, queue_time, j):
-        if work_logger.isEnabledFor(logging.INFO):
-            work_logger.info('%-4s queued%7.3fs → %s', j.queue, queue_time, j)
-
-    @classmethod
-    def log_job_result(cls, started_at, result, j):
-        if not work_logger.isEnabledFor(logging.INFO):
-            return
-        job_time = timestamp() - started_at
-        if result is None:
-            sr = ''
-        else:
-            sr = str(result)
-            if len(sr) > 80:
-                sr = sr[:77] + '...'
-        work_logger.info('%-4s ran in%7.3fs ← %s.%s ● %s', j.queue, job_time, j.class_name, j.func_name, sr)
-
-    @classmethod
-    async def handle_exc(cls, started_at, exc, j):
-        job_time = timestamp() - started_at
-        work_logger.error('%-4s ran in =%7.3fs ! %s.%s: %s',
-                          j.queue, job_time, j.class_name, j.func_name, exc.__class__.__name__)
-        tb = format_exception(*sys.exc_info())
-        work_logger.error(''.join(tb).strip('\n'))
-
-    async def run_job(self, j):
-        func = getattr(self, j.func_name)
-
-        started_at = timestamp()
-        queue_time = started_at - j.queued_at
-        self.log_job_start(queue_time, j)
-        unbound_func = getattr(func, 'unbound_original', None)
-        try:
-            if unbound_func:
-                result = await unbound_func(self, *j.args, **j.kwargs)
-            else:
-                result = await func(*j.args, **j.kwargs)
-        except Exception as e:
-            await self.handle_exc(started_at, e, j)
-            return 1
-        else:
-            self.log_job_result(started_at, result, j)
-            return 0
 
     def __repr__(self):
         return '<{self.__class__.__name__}({self.name}) at 0x{id:02x}>'.format(self=self, id=id(self))

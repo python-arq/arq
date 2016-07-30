@@ -9,10 +9,11 @@ import sys
 import time
 
 
+from .logs import default_log_config
 from .main import Actor, Job
 from .utils import RedisMixin, timestamp, cached_property
 
-__all__ = ['AbstractWorker']
+__all__ = ['AbstractWorker', 'import_string', 'RunWorkerProcess']
 
 logger = logging.getLogger('arq.work')
 
@@ -48,13 +49,17 @@ class AbstractWorker(RedisMixin):
     async def shadow_factory(self):
         raise NotImplementedError
 
+    @classmethod
+    def logging_config(cls, verbose):
+        return default_log_config(verbose)
+
     @cached_property
     def queues(self):
         return Actor.QUEUES
 
     def handle_sig(self, signum, frame):
         self.running = False
-        logger.warning('%d, got signal: %s, stopping...', os.getpid(), Signals(signum).name)
+        logger.warning('pid=%d, got signal: %s, stopping...', os.getpid(), Signals(signum).name)
         signal.signal(signal.SIGINT, self.handle_sig_force)
         signal.signal(signal.SIGTERM, self.handle_sig_force)
         signal.signal(signal.SIGALRM, self.handle_sig_force)
@@ -62,7 +67,7 @@ class AbstractWorker(RedisMixin):
         raise HandledExit()
 
     def handle_sig_force(self, signum, frame):
-        logger.error('%d, got signal: %s again, forcing exit', os.getpid(), Signals(signum).name)
+        logger.error('pid=%d, got signal: %s again, forcing exit', os.getpid(), Signals(signum).name)
         raise SystemError('force exit')
 
     def run_until_complete(self):
@@ -127,12 +132,6 @@ class AbstractWorker(RedisMixin):
 
     async def schedule_job(self, queue, data):
         job = self.job_class(queue, data)
-        try:
-            shadow = self._shadows[job.class_name]
-        except KeyError:
-            self.jobs_failed += 1
-            logger.error('Job Error: unable to find shadow for %r', job)
-            return
 
         if len(self._pending_tasks) >= self.max_concurrent_tasks:
             logger.debug('%d pending tasks, waiting for one to finish before creating task for %s',
@@ -140,9 +139,64 @@ class AbstractWorker(RedisMixin):
             _, self._pending_tasks = await asyncio.wait(self._pending_tasks, loop=self.loop,
                                                         return_when=asyncio.FIRST_COMPLETED)
 
-        task = self.loop.create_task(shadow.run_job(job))
+        task = self.loop.create_task(self.run_job(job))
         task.add_done_callback(self.job_callback)
         self._pending_tasks.add(task)
+
+    @classmethod
+    def log_job_start(cls, queue_time, j):
+        if logger.isEnabledFor(logging.INFO):
+            logger.info('%-4s queued%7.3fs → %s', j.queue, queue_time, j)
+
+    @classmethod
+    def log_job_result(cls, started_at, result, j):
+        if not logger.isEnabledFor(logging.INFO):
+            return
+        job_time = timestamp() - started_at
+        if result is None:
+            sr = ''
+        else:
+            sr = str(result)
+            if len(sr) > 80:
+                sr = sr[:77] + '...'
+        logger.info('%-4s ran in%7.3fs ← %s.%s ● %s', j.queue, job_time, j.class_name, j.func_name, sr)
+
+    @classmethod
+    async def handle_exc(cls, started_at, exc, j):
+        job_time = timestamp() - started_at
+        exc_type = exc.__class__.__name__
+        logger.exception('%-4s ran in =%7.3fs ! %s: %s', j.queue, job_time, j, exc_type)
+
+    async def run_job(self, j):
+        try:
+            shadow = self._shadows[j.class_name]
+        except KeyError:
+            self.jobs_failed += 1
+            logger.error('Job Error: unable to find shadow for %r', j)
+            # exit with zero so we don't increment jobs_failed twice
+            return 0
+        try:
+            func = getattr(shadow, j.func_name)
+        except AttributeError:
+            self.jobs_failed += 1
+            logger.error('Job Error: shadow class "%s" has not function "%s"', shadow.name, j.func_name)
+            return 0
+
+        started_at = timestamp()
+        queue_time = started_at - j.queued_at
+        self.log_job_start(queue_time, j)
+        unbound_func = getattr(func, 'unbound_original', None)
+        try:
+            if unbound_func:
+                result = await unbound_func(shadow, *j.args, **j.kwargs)
+            else:
+                result = await func(*j.args, **j.kwargs)
+        except Exception as e:
+            await self.handle_exc(started_at, e, j)
+            return 1
+        else:
+            self.log_job_result(started_at, result, j)
+            return 0
 
     def job_callback(self, task):
         self.jobs_complete += 1
@@ -188,12 +242,14 @@ def import_string(file_path, attr_name):
 
 
 def start_worker(worker_path, worker_class, batch_mode):
-    worker = import_string(worker_path, worker_class)
-    worker_manager = worker(batch_mode)
+    worker_cls = import_string(worker_path, worker_class)
+    worker = worker_cls(batch_mode)
     try:
-        worker_manager.run_until_complete()
+        worker.run_until_complete()
     except HandledExit:
-        worker_manager.loop.run_until_complete(worker_manager.close())
+        pass
+    finally:
+        worker.loop.run_until_complete(worker.close())
 
 
 class RunWorkerProcess:
@@ -219,7 +275,7 @@ class RunWorkerProcess:
     def handle_sig(self, signum, frame):
         signal.signal(signal.SIGINT, self.handle_sig_force)
         signal.signal(signal.SIGTERM, self.handle_sig_force)
-        logger.warning('got signal: %s, waiting for worker %d to finish...', Signals(signum).name, self.process.pid)
+        logger.warning('got signal: %s, waiting for worker pid=%d to finish...', Signals(signum).name, self.process.pid)
         for i in range(100):
             if not self.process or not self.process.is_alive():
                 return
