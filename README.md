@@ -66,5 +66,6 @@ the worker to do the jobs with `arq demo.py`.
 
 ## TODO
 
+* job timeouts
 * jobs results
 * job uniqueness

@@ -1,8 +1,8 @@
 import asyncio
 from pathlib import Path
 
-from arq import concurrent, Actor, AbstractWorker
-from arq.test_tools import MockRedisMixin
+from arq import concurrent, Actor, BaseWorker
+from arq.testing import MockRedisMixin
 
 
 class TestActor(Actor):
@@ -41,7 +41,7 @@ class MockRedisTestActor(MockRedisMixin, TestActor):
     pass
 
 
-class Worker(AbstractWorker):
+class Worker(BaseWorker):
     shadows = [TestActor]
 
 
@@ -62,7 +62,7 @@ class WorkerFail(Worker):
         raise RuntimeError('foobar')
 
 
-class MockRedisWorker(MockRedisMixin, AbstractWorker):
+class MockRedisWorker(MockRedisMixin, BaseWorker):
     shadows = [MockRedisTestActor]
 
 

@@ -1,4 +1,4 @@
-from arq import concurrent, AbstractWorker, Actor
+from arq import concurrent, BaseWorker, Actor
 
 
 class ActorTest(Actor):
@@ -9,7 +9,7 @@ class ActorTest(Actor):
             f.write('{}'.format(r))
 
 
-class Worker(AbstractWorker):
+class Worker(BaseWorker):
     signature = 'foobar'
     shadows = [ActorTest]
 

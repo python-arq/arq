@@ -12,7 +12,7 @@ from .example import ActorTest
 
 
 async def test_run_job(tmpworkdir, redis_conn, actor):
-    worker = Worker(batch_mode=True, loop=actor.loop)
+    worker = Worker(batch=True, loop=actor.loop)
 
     await actor.add_numbers(1, 2)
     assert not tmpworkdir.join('add_numbers').exists()
@@ -168,7 +168,7 @@ async def test_run_sigint_twice(tmpworkdir, redis_conn, loop, logcap):
 
 async def test_non_existent_function(redis_conn, actor, logcap):
     await actor.enqueue_job('doesnt_exist')
-    worker = Worker(batch_mode=True, loop=actor.loop)
+    worker = Worker(batch=True, loop=actor.loop)
     await worker.run()
     assert worker.jobs_failed == 1
     assert 'Job Error: shadow class "TestActor" has not function "doesnt_exist"' in logcap
@@ -177,7 +177,7 @@ async def test_non_existent_function(redis_conn, actor, logcap):
 def test_no_jobs():
     loop = asyncio.get_event_loop()
     mock_actor = MockRedisTestActor()
-    mock_worker = MockRedisWorker(batch_mode=True)
+    mock_worker = MockRedisWorker(batch=True)
     mock_worker.mock_data = mock_actor.mock_data
 
     loop.run_until_complete(mock_actor.boom())
@@ -191,6 +191,6 @@ def test_no_jobs():
 
 async def test_shutdown_without_work(loop):
     mock_actor = MockRedisTestActor(loop=loop)
-    mock_worker = MockRedisWorker(loop=loop, batch_mode=True)
+    mock_worker = MockRedisWorker(loop=loop, batch=True)
     mock_worker.mock_data = mock_actor.mock_data
     await mock_worker.close()

@@ -58,4 +58,7 @@ setup(
         'click>=6.6',
         'msgpack-python>=0.4.7',
     ],
+    extras_require={
+        'testing': ['pytest>=2.9.2'],
+    },
 )

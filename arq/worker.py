@@ -13,7 +13,7 @@ from .logs import default_log_config
 from .main import Actor, Job
 from .utils import RedisMixin, timestamp, cached_property, gen_random
 
-__all__ = ['AbstractWorker', 'import_string', 'RunWorkerProcess']
+__all__ = ['BaseWorker', 'import_string', 'RunWorkerProcess']
 
 logger = logging.getLogger('arq.work')
 
@@ -30,13 +30,19 @@ class BadJob(Exception):
     pass
 
 
-class AbstractWorker(RedisMixin):
+class BaseWorker(RedisMixin):
     max_concurrent_tasks = 50
     shutdown_delay = 6
     job_class = Job
+    shadows = None
 
-    def __init__(self, batch_mode=False, **kwargs):
-        self._batch_mode = batch_mode
+    def __init__(self, *, batch=False, shadows=None, queues=None, **kwargs):
+        self._batch_mode = batch
+        if self.shadows is None:
+            if shadows is None:
+                raise TypeError('shadows not defined on worker')
+            self.shadows = shadows
+        self._queues = queues
         self._pending_tasks = set()
         self.jobs_complete = 0
         self.jobs_failed = 0
@@ -44,13 +50,10 @@ class AbstractWorker(RedisMixin):
         self._shadows = {}
         self.start = None
         self.running = True
+        self._closed = False
         signal.signal(signal.SIGINT, self.handle_sig)
         signal.signal(signal.SIGTERM, self.handle_sig)
         super().__init__(**kwargs)
-
-    @property
-    def shadows(self):
-        raise NotImplementedError
 
     async def shadow_factory(self):
         rp = await self.get_redis_pool()
@@ -63,7 +66,7 @@ class AbstractWorker(RedisMixin):
 
     @cached_property
     def queues(self):
-        return Actor.QUEUES
+        return self._queues or Actor.QUEUES
 
     @cached_property
     def shadow_names(self):
@@ -118,7 +121,7 @@ class AbstractWorker(RedisMixin):
                     continue
                 _queue, data = msg
                 if self._batch_mode and _queue == quit_queue:
-                    logger.debug('Quit msg, stopping work')
+                    logger.debug('got job from the quit queue, stopping')
                     break
                 queue = queue_lookup[_queue]
                 logger.debug('scheduling job from queue %s', queue)
@@ -203,6 +206,8 @@ class AbstractWorker(RedisMixin):
         logger.exception('%-4s ran in =%7.3fs ! %s: %s', j.queue, job_time, j, exc_type)
 
     async def close(self):
+        if self._closed:
+            return
         if self._pending_tasks:
             logger.info('waiting for %d jobs to finish', len(self._pending_tasks))
             await asyncio.wait(self._pending_tasks, loop=self.loop)
@@ -213,6 +218,7 @@ class AbstractWorker(RedisMixin):
         if self._shadows:
             await asyncio.wait([s.close() for s in self._shadows.values()], loop=self.loop)
         await super().close()
+        self._closed = True
 
     def handle_sig(self, signum, frame):
         self.running = False
@@ -250,9 +256,9 @@ def import_string(file_path, attr_name):
     return attr
 
 
-def start_worker(worker_path, worker_class, batch_mode):
+def start_worker(worker_path, worker_class, batch):
     worker_cls = import_string(worker_path, worker_class)
-    worker = worker_cls(batch_mode)
+    worker = worker_cls(batch=batch)
     try:
         worker.run_until_complete()
     except HandledExit:
@@ -265,16 +271,16 @@ def start_worker(worker_path, worker_class, batch_mode):
 
 
 class RunWorkerProcess:
-    def __init__(self, worker_path, worker_class, batch_mode=False):
+    def __init__(self, worker_path, worker_class, batch=False):
         signal.signal(signal.SIGINT, self.handle_sig)
         signal.signal(signal.SIGTERM, self.handle_sig)
         self.process = None
-        self.run_worker(worker_path, worker_class, batch_mode)
+        self.run_worker(worker_path, worker_class, batch)
 
-    def run_worker(self, worker_path, worker_class, batch_mode):
+    def run_worker(self, worker_path, worker_class, batch):
         name = 'WorkProcess'
         logger.info('starting work process "%s"', name)
-        self.process = Process(target=start_worker, args=(worker_path, worker_class, batch_mode), name=name)
+        self.process = Process(target=start_worker, args=(worker_path, worker_class, batch), name=name)
         self.process.start()
         self.process.join()
         if self.process.exitcode == 0:

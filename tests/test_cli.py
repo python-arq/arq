@@ -11,7 +11,7 @@ import arq.worker
 from .fixtures import EXAMPLE_FILE
 
 
-def test_simple_batch_mode(tmpworkdir, monkeypatch):
+def test_simple_batch(tmpworkdir, monkeypatch):
     # we have to prevent RunWorkerProcess actually starting another process
     # TODO remove after https://bitbucket.org/ned/coveragepy/issues/512
     monkeypatch.setattr(arq.worker.Process, 'start', MagicMock())
