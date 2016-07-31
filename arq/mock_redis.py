@@ -64,6 +64,12 @@ class MockRedisPool:
     def get(self):
         return MockRedisPoolContextManager(self.loop, self.data)
 
+    def close(self):
+        pass
+
+    async def wait_closed(self):
+        pass
+
     async def clear(self):
         self.data = {}
 

@@ -5,7 +5,6 @@ import os
 
 import aioredis
 
-
 __all__ = [
     'RedisMixin',
     'timestamp',
@@ -29,8 +28,14 @@ class RedisMixin:
             self._redis_pool = await self.create_redis_pool()
         return self._redis_pool
 
+    async def get_redis_conn(self):
+        pool = await self.get_redis_pool()
+        return pool.get()
+
     async def close(self):
         if self._redis_pool:
+            self._redis_pool.close()
+            await self._redis_pool.wait_closed()
             await self._redis_pool.clear()
 
 

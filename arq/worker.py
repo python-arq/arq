@@ -104,9 +104,8 @@ class AbstractWorker(RedisMixin):
 
     async def work(self):
         redis_queues, queue_lookup = self.get_redis_queues()
-        pool = await self.get_redis_pool()
         quit_queue = None
-        async with pool.get() as redis:
+        async with await self.get_redis_conn() as redis:
             if self._batch_mode:
                 quit_queue = b'QUIT-%s' % gen_random()
                 logger.debug('adding random quit queue for faster batch exit: %s', quit_queue.decode())

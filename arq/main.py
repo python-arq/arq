@@ -14,6 +14,8 @@ work_logger = logging.getLogger('arq.work')
 
 
 class Job:
+    __slots__ = ('queue', 'queued_at', 'class_name', 'func_name', 'args', 'kwargs')
+
     def __init__(self, queue, data):
         self.queue = queue
         data = msgpack.unpackb(data, encoding='utf8')
@@ -77,7 +79,8 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         data = self.job_class.encode(class_name=self.name, func_name=func_name, args=args, kwargs=kwargs)
         main_logger.debug('%s.%s ▶ %s', self.name, func_name, queue)
 
-        pool = await self.get_redis_pool()
+        # use the pool directly rather than get_redis_conn to avoid one extra await
+        pool = self._redis_pool or await self.get_redis_pool()
 
         queue_list = self.queue_lookup[queue]
         async with pool.get() as redis:
