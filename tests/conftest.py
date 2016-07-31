@@ -81,19 +81,24 @@ def redis_conn(loop):
     loop.run_until_complete(conn.wait_closed())
 
 
+LOGS = ('arq.main', 'arq.work')
+
+
 class StreamLog:
     def __init__(self):
-        self.stream = self.handler = None
+        self.handler = None
+        self.stream = io.StringIO()
+        self.handler = logging.StreamHandler(stream=self.stream)
         self.loggers = []
-        self.set_logger()
+        self.set_loggers()
 
-    def set_logger(self, log_names=('arq.main', 'arq.work'), level=logging.INFO):
+    def set_loggers(self, log_names=LOGS, level=logging.INFO, fmt='%(name)s: %(message)s'):
         if self.loggers:
             self.finish()
         self.loggers = [logging.getLogger(log_name) for log_name in log_names]
-        self.stream = io.StringIO()
-        self.handler = logging.StreamHandler(stream=self.stream)
+        self.handler.setFormatter(logging.Formatter(fmt))
         for logger in self.loggers:
+            logger.disabled = False
             logger.addHandler(self.handler)
         self.set_level(level)
 
@@ -135,14 +140,14 @@ def debug_logger():
     handler.setLevel(logging.DEBUG)
     fmt = logging.Formatter('%(asctime)s %(name)8s %(levelname)8s: %(message)s')
     handler.setFormatter(fmt)
-    for logger_name in ('arq.main', 'arq.work'):
+    for logger_name in LOGS:
         logger = logging.getLogger(logger_name)
         logger.addHandler(handler)
         logger.setLevel(logging.DEBUG)
 
     yield
 
-    for logger_name in ('arq.main', 'arq.work'):
+    for logger_name in LOGS:
         logger = logging.getLogger(logger_name)
         logger.removeHandler(handler)
         logger.setLevel(logging.NOTSET)

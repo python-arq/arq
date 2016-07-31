@@ -5,7 +5,7 @@ import pytest
 
 from arq.worker import import_string, start_worker, ImmediateExit
 
-from .fixtures import Worker, EXAMPLE_FILE, WorkerQuit, WorkerFail, FoobarActor
+from .fixtures import Worker, EXAMPLE_FILE, WorkerQuit, WorkerFail, FoobarActor, MockRedisWorkerQuit, MockRedisTestActor
 from .example import ActorTest
 
 
@@ -31,6 +31,14 @@ async def test_long_args(mock_actor_worker, logcap):
             '0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19 + 0,1,2,3,4,5,6,7,8,9,10,11...\n') in log
 
 
+async def test_logging_disabled(mock_actor_worker, logcap):
+    logcap.set_level(logging.WARNING)
+    actor, worker = mock_actor_worker
+    await actor.concat(a='1', b='2')
+    await worker.run()
+    log = re.sub('0.0\d\ds', '0.0XXs', logcap.log)
+    assert 'shutting down worker after 0.0XXs, 1 jobs done, 0 failed' in log
+
 async def test_wrong_worker(mock_actor_worker, logcap):
     actor, worker = mock_actor_worker
     actor2 = FoobarActor()
@@ -39,6 +47,29 @@ async def test_wrong_worker(mock_actor_worker, logcap):
     await worker.run()
     assert worker.jobs_failed == 1
     assert 'Job Error: unable to find shadow for <Job foobar.concat(a, b) on dft>' in logcap
+
+async def test_queue_not_found(loop):
+    class WrongWorker(MockRedisWorkerQuit):
+        queues = ['foobar']
+
+    worker = WrongWorker(loop=loop)
+    with pytest.raises(KeyError) as excinfo:
+        await worker.run()
+    assert "queue not found in queue lookups from shadows, queues: ['foobar']" in excinfo.value.args[0]
+
+
+async def test_mock_timeout(loop, logcap):
+    logcap.set_loggers(('arq.main', 'arq.work', 'arq.mock'), logging.DEBUG)
+    worker = MockRedisWorkerQuit(loop=loop)
+    actor = MockRedisTestActor(loop=loop)
+    worker.mock_data = actor.mock_data
+
+    assert None is await actor.concat('a', 'b')
+
+    await worker.run()
+    assert worker.jobs_complete == 1
+    assert worker.jobs_failed == 0
+    assert 'arq.mock: blpop timed out' in logcap
 
 
 def test_import_string_good(tmpworkdir):

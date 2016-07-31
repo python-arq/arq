@@ -33,6 +33,9 @@ class TestActor(Actor):
         with open('save_slow', 'w') as f:
             f.write(str(v))
 
+    async def direct_method(self, a, b):
+        return a + b
+
 
 class MockRedisTestActor(MockRedisMixin, TestActor):
     pass
@@ -61,6 +64,12 @@ class WorkerFail(Worker):
 
 class MockRedisWorker(MockRedisMixin, AbstractWorker):
     shadows = [MockRedisTestActor]
+
+
+class MockRedisWorkerQuit(MockRedisWorker):
+    def job_callback(self, task):
+        super().job_callback(task)
+        self.running = False
 
 
 class FoobarActor(MockRedisTestActor):

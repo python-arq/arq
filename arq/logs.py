@@ -3,7 +3,7 @@ import re
 
 import click
 
-__all__ = ['ClickHandler', 'default_log_config']
+__all__ = ['ColourHandler', 'default_log_config']
 
 LOG_COLOURS = {
     logging.DEBUG: 'white',
@@ -12,7 +12,7 @@ LOG_COLOURS = {
 }
 
 
-class ClickHandler(logging.Handler):
+class ColourHandler(logging.StreamHandler):
     def emit(self, record):
         log_entry = self.format(record)
         colour = LOG_COLOURS.get(record.levelno, 'red')
@@ -33,7 +33,7 @@ def default_log_config(verbose):
         'handlers': {
             'click': {
                 'level': log_level,
-                'class': 'arq.logs.ClickHandler',
+                'class': 'arq.logs.ColourHandler',
                 'formatter': 'standard'
             },
         },

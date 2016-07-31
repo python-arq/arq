@@ -65,18 +65,20 @@ class AbstractWorker(RedisMixin):
     def queues(self):
         return Actor.QUEUES
 
-    def handle_sig(self, signum, frame):
-        self.running = False
-        logger.warning('pid=%d, got signal: %s, stopping...', os.getpid(), Signals(signum).name)
-        signal.signal(signal.SIGINT, self.handle_sig_force)
-        signal.signal(signal.SIGTERM, self.handle_sig_force)
-        signal.signal(signal.SIGALRM, self.handle_sig_force)
-        signal.alarm(self.shutdown_delay)
-        raise HandledExit()
+    @cached_property
+    def shadow_names(self):
+        return ', '.join(self._shadows.keys())
 
-    def handle_sig_force(self, signum, frame):
-        logger.error('pid=%d, got signal: %s again, forcing exit', os.getpid(), Signals(signum).name)
-        raise ImmediateExit('force exit')
+    def get_redis_queues(self):
+        q_lookup = {}
+        for s in self._shadows.values():
+            q_lookup.update(s.queue_lookup)
+        try:
+            queues = [(q_lookup[q], q) for q in self.queues]
+        except KeyError as e:
+            raise KeyError('queue not found in queue lookups from shadows, '
+                           'queues: {}, combined shadow queue lookups: {}'.format(self.queues, q_lookup)) from e
+        return [r for r, q in queues], dict(queues)
 
     def run_until_complete(self):
         self.loop.run_until_complete(self.run())
@@ -99,21 +101,6 @@ class AbstractWorker(RedisMixin):
             if self._task_exception:
                 logger.error('Found task exception "%s"', self._task_exception)
                 raise self._task_exception
-
-    @cached_property
-    def shadow_names(self):
-        return ', '.join(self._shadows.keys())
-
-    def get_redis_queues(self):
-        q_lookup = {}
-        for s in self._shadows.values():
-            q_lookup.update(s.queue_lookup)
-        try:
-            queues = [(q_lookup[q], q) for q in self.queues]
-        except KeyError as e:
-            raise KeyError('queue not found in queue lookups from shadows, '
-                           'queues: {}, combined shadow queue lookups: {}'.format(self.queues, q_lookup)) from e
-        return [r for r, q in queues], dict(queues)
 
     async def work(self):
         redis_queues, queue_lookup = self.get_redis_queues()
@@ -150,30 +137,6 @@ class AbstractWorker(RedisMixin):
         task = self.loop.create_task(self.run_job(job))
         task.add_done_callback(self.job_callback)
         self._pending_tasks.add(task)
-
-    @classmethod
-    def log_job_start(cls, queue_time, j):
-        if logger.isEnabledFor(logging.INFO):
-            logger.info('%-4s queued%7.3fs → %s', j.queue, queue_time, j)
-
-    @classmethod
-    def log_job_result(cls, started_at, result, j):
-        if not logger.isEnabledFor(logging.INFO):
-            return
-        job_time = timestamp() - started_at
-        if result is None:
-            sr = ''
-        else:
-            sr = str(result)
-            if len(sr) > 80:
-                sr = sr[:77] + '...'
-        logger.info('%-4s ran in%7.3fs ← %s.%s ● %s', j.queue, job_time, j.class_name, j.func_name, sr)
-
-    @classmethod
-    async def handle_exc(cls, started_at, exc, j):
-        job_time = timestamp() - started_at
-        exc_type = exc.__class__.__name__
-        logger.exception('%-4s ran in =%7.3fs ! %s: %s', j.queue, job_time, j, exc_type)
 
     async def run_job(self, j):
         try:
@@ -216,15 +179,52 @@ class AbstractWorker(RedisMixin):
             self.jobs_failed += 1
         logger.debug('task complete, %d jobs done, %d failed', self.jobs_complete, self.jobs_failed)
 
+    @classmethod
+    def log_job_start(cls, queue_time, j):
+        if logger.isEnabledFor(logging.INFO):
+            logger.info('%-4s queued%7.3fs → %s', j.queue, queue_time, j)
+
+    @classmethod
+    def log_job_result(cls, started_at, result, j):
+        if not logger.isEnabledFor(logging.INFO):
+            return
+        job_time = timestamp() - started_at
+        if result is None:
+            sr = ''
+        else:
+            sr = str(result)
+            if len(sr) > 80:
+                sr = sr[:77] + '...'
+        logger.info('%-4s ran in%7.3fs ← %s.%s ● %s', j.queue, job_time, j.class_name, j.func_name, sr)
+
+    @classmethod
+    async def handle_exc(cls, started_at, exc, j):
+        job_time = timestamp() - started_at
+        exc_type = exc.__class__.__name__
+        logger.exception('%-4s ran in =%7.3fs ! %s: %s', j.queue, job_time, j, exc_type)
+
     async def close(self):
         if self._pending_tasks:
             logger.info('waiting for %d jobs to finish', len(self._pending_tasks))
             await asyncio.wait(self._pending_tasks, loop=self.loop)
-        logger.info('shutting down worker after %0.3fs, %d jobs done, %d failed',
-                    timestamp() - self.start, self.jobs_complete, self.jobs_failed)
+        logger.warning('shutting down worker after %0.3fs, %d jobs done, %d failed',
+                       timestamp() - self.start, self.jobs_complete, self.jobs_failed)
 
         await asyncio.wait([s.close() for s in self._shadows.values()], loop=self.loop)
         await super().close()
+
+    def handle_sig(self, signum, frame):
+        self.running = False
+        logger.warning('pid=%d, got signal: %s, stopping...', os.getpid(), Signals(signum).name)
+        signal.signal(signal.SIGINT, self.handle_sig_force)
+        signal.signal(signal.SIGTERM, self.handle_sig_force)
+        signal.signal(signal.SIGALRM, self.handle_sig_force)
+        signal.alarm(self.shutdown_delay)
+        raise HandledExit()
+
+    def handle_sig_force(self, signum, frame):
+        logger.error('pid=%d, got signal: %s again, forcing exit', os.getpid(), Signals(signum).name)
+        raise ImmediateExit('force exit')
 
 
 def import_string(file_path, attr_name):
@@ -279,7 +279,7 @@ class RunWorkerProcess:
         if self.process.exitcode == 0:
             logger.info('worker process exited ok')
             return
-        logger.error('worker process %s exited badly with exit code %s', self.process.pid, self.process.exitcode)
+        logger.critical('worker process %s exited badly with exit code %s', self.process.pid, self.process.exitcode)
         sys.exit(3)
         # TODO could restart worker here, but better to leave it up to the real manager
 

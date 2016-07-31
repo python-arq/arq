@@ -1,25 +1,35 @@
 import asyncio
+import logging
+
 from arq import RedisMixin, timestamp
+
+logger = logging.getLogger('arq.mock')
 
 
 class MockRedis:
     def __init__(self, *, loop=None, data=None):
         self.loop = loop or asyncio.get_event_loop()
         self.data = {} if data is None else data
+        logger.info('initialising MockRedis, data id: %s', None if data is None else id(data))
 
     async def rpush(self, list_name, data):
+        logger.info('rpushing %s to %s', data, list_name)
         self.data[list_name] = self.data.get(list_name, []) + [data]
 
     async def blpop(self, *list_names, timeout=0):
         assert isinstance(timeout, int)
         start = timestamp() if timeout > 0 else None
+        logger.info('blpop from %s, timeout=%d', list_names, timeout)
         while True:
             v = await self.lpop(*list_names)
             if v:
                 return v
-            if start and (timestamp() - start) > timeout:
+            t = timestamp() - start
+            if start and t > timeout:
+                logger.info('blpop timed out %0.3fs', t)
                 return
-            await asyncio.sleep(0.1, loop=self.loop)
+            logger.info('blpop waiting for data %0.3fs', t)
+            await asyncio.sleep(0.5, loop=self.loop)
 
     async def lpop(self, *list_names):
         for list_name in list_names:
@@ -28,7 +38,10 @@ class MockRedis:
                 continue
             assert isinstance(data_list, list)
             if data_list:
-                return list_name, data_list.pop(0)
+                d = data_list.pop(0)
+                logger.info('lpop %s from %s', d, list_name)
+                return list_name, d
+        logger.info('lpop nothing found in lists %s', list_names)
 
 
 class MockRedisPoolContextManager:
