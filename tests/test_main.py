@@ -1,10 +1,10 @@
 import logging
 import re
 
-import pytest
 import msgpack
+import pytest
 
-from arq import Actor, concurrent, BaseWorker, ConnectionSettings
+from arq import Actor, concurrent, BaseWorker
 from arq.testing import MockRedisWorker as MockRedisBaseWorker
 
 from .fixtures import MockRedisTestActor, MockRedisWorker, FoobarActor, TestActor
@@ -57,7 +57,7 @@ async def test_dispatch_work(tmpworkdir, loop, logcap, redis_conn):
             'Initialising work manager, batch mode: True\n'
             'Running worker with 1 shadow listening to 3 queues\n'
             'shadows: MockRedisTestActor | queues: high, dft, low\n'
-            'adding random quit queue for faster batch exit: QUIT-<random>\n'
+            'populating quit queue to prompt exit: QUIT-<random>\n'
             'starting main blpop loop\n'
             'scheduling job from queue high\n'
             'scheduling job from queue dft\n'
@@ -208,8 +208,3 @@ def test_worker_no_shadow():
     with pytest.raises(TypeError) as excinfo:
         MockRedisBaseWorker()
     assert excinfo.value.args[0] == 'shadows not defined on worker'
-
-
-def test_invalid():
-    with pytest.raises(TypeError):
-        ConnectionSettings(FOOBAR=123)

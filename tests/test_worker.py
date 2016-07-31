@@ -11,7 +11,7 @@ from .fixtures import (Worker, EXAMPLE_FILE, WorkerQuit, WorkerFail, FoobarActor
 from .example import ActorTest
 
 
-async def test_run_job(tmpworkdir, redis_conn, actor):
+async def test_run_job_batch(tmpworkdir, redis_conn, actor):
     worker = Worker(batch=True, loop=actor.loop)
 
     await actor.add_numbers(1, 2)

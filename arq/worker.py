@@ -111,7 +111,7 @@ class BaseWorker(RedisMixin):
         async with await self.get_redis_conn() as redis:
             if self._batch_mode:
                 quit_queue = b'QUIT-%s' % gen_random()
-                logger.debug('adding random quit queue for faster batch exit: %s', quit_queue.decode())
+                logger.debug('populating quit queue to prompt exit: %s', quit_queue.decode())
                 await redis.rpush(quit_queue, b'1')
                 redis_queues.append(quit_queue)
             logger.debug('starting main blpop loop')
