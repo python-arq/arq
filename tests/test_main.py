@@ -5,8 +5,9 @@ import pytest
 import msgpack
 
 from arq import Actor, concurrent
+from arq.test_tools import run_worker
 
-from .fixtures import MockRedisTestActor, MockRedisWorker, FoobarActor
+from .fixtures import MockRedisTestActor, MockRedisWorker, FoobarActor, TestActor
 
 
 async def test_simple_job_dispatch(loop):
@@ -164,3 +165,35 @@ async def test_direct_binding(mock_actor_worker, logcap):
     assert worker.jobs_complete == 1
     assert 'MockRedisTestActor.concat' in logcap
     assert 'MockRedisTestActor.concat_direct' not in logcap
+
+
+async def test_worker_runner(tmpworkdir, loop, redis_conn):
+    actor = TestActor(loop=loop)
+    await actor.add_numbers(1, 2)
+    assert not tmpworkdir.join('add_numbers').exists()
+    await run_worker(loop, TestActor)
+    await actor.close()
+    assert tmpworkdir.join('add_numbers').exists()
+    assert tmpworkdir.join('add_numbers').read() == '3'
+
+
+async def test_worker_runner_mocked(tmpworkdir, loop):
+    actor = MockRedisTestActor(loop=loop)
+    await actor.add_numbers(1, 2)
+    assert not tmpworkdir.join('add_numbers').exists()
+    await run_worker(loop, MockRedisTestActor, mock_redis_data=actor.mock_data)
+    await actor.close()
+    assert tmpworkdir.join('add_numbers').exists()
+    assert tmpworkdir.join('add_numbers').read() == '3'
+
+
+async def test_worker_runner_custom_queue(tmpworkdir, loop):
+    class CustomActor(MockRedisTestActor):
+        QUEUES = ['foobar']
+    actor = CustomActor(loop=loop)
+    await actor.enqueue_job('add_numbers', 1, 1, queue='foobar')
+    assert not tmpworkdir.join('add_numbers').exists()
+    await run_worker(loop, CustomActor, queues=['foobar'], mock_redis_data=actor.mock_data)
+    await actor.close()
+    assert tmpworkdir.join('add_numbers').exists()
+    assert tmpworkdir.join('add_numbers').read() == '2'

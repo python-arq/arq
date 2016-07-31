@@ -40,8 +40,7 @@ def pytest_pyfunc_call(pyfuncitem):
     if asyncio.iscoroutinefunction(pyfuncitem.function):
         existing_loop = pyfuncitem.funcargs.get('loop', None)
         with loop_context(existing_loop) as _loop:
-            testargs = {arg: pyfuncitem.funcargs[arg]
-                        for arg in pyfuncitem._fixtureinfo.argnames}
+            testargs = {arg: pyfuncitem.funcargs[arg] for arg in pyfuncitem._fixtureinfo.argnames}
 
             task = _loop.create_task(pyfuncitem.obj(**testargs))
             _loop.run_until_complete(task)

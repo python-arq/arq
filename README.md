@@ -2,13 +2,17 @@ arq
 ===
 
 [![Build Status](https://travis-ci.org/samuelcolvin/arq.svg?branch=master)](https://travis-ci.org/samuelcolvin/arq)
-[![codecov](https://codecov.io/gh/samuelcolvin/arq/branch/master/graph/badge.svg)](https://codecov.io/gh/samuelcolvin/arq)
+[![Coverage](https://codecov.io/gh/samuelcolvin/arq/branch/master/graph/badge.svg)](https://codecov.io/gh/samuelcolvin/arq)
+[![pypi](https://img.shields.io/pypi/v/arq.svg)](https://pypi.python.org/pypi/arq)
+[![license](https://img.shields.io/pypi/l/arq.svg)](https://github.com/samuelcolvin/arq)
 
 [rq](https://github.com/nvie/rq) meets asyncio.
 
 Job queues in python with asyncio, redis and msgpack.
 
 ## Install
+
+**Python >=3.5 is required.**
 
     pip install arq
     

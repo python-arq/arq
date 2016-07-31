@@ -14,7 +14,7 @@ __all__ = [
 
 class RedisMixin:
     def __init__(self, *, loop=None, host='localhost', port=6379, existing_pool=None, **redis_kwargs):
-        self.loop = loop or asyncio.get_event_loop()
+        self.loop = loop or getattr(self, 'loop', None) or asyncio.get_event_loop()
         self._host = host
         self._port = port
         self._redis_kwargs = redis_kwargs

@@ -1,9 +1,11 @@
 import asyncio
 import logging
 
-from arq import RedisMixin, timestamp
+from arq import RedisMixin, timestamp, AbstractWorker
 
 logger = logging.getLogger('arq.mock')
+
+__all__ = ['MockRedis', 'run_worker']
 
 
 class MockRedis:
@@ -87,3 +89,26 @@ class MockRedisMixin(RedisMixin):
     def mock_data(self, data):
         self._redis_pool = self._redis_pool or MockRedisPool(self.loop)
         self._redis_pool.data = data
+
+
+async def run_worker(loop, *shadows, queues=None, mock_redis_data=None):
+    parents = (MockRedisMixin, AbstractWorker) if mock_redis_data else (AbstractWorker,)
+
+    # to avoid collision with class variables
+    _shadows, _queues = shadows, queues
+
+    class Worker(*parents):
+        shadows = list(_shadows)
+
+        @property
+        def queues(self):
+            if _queues:
+                return _queues
+            else:
+                return super().queues
+
+    worker = Worker(loop=loop, batch_mode=True)
+    worker.mock_data = mock_redis_data
+
+    await worker.run()
+    await worker.close()

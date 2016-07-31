@@ -2,7 +2,7 @@ import asyncio
 from pathlib import Path
 
 from arq import concurrent, Actor, AbstractWorker
-from arq.mock_redis import MockRedisMixin
+from arq.test_tools import MockRedisMixin
 
 
 class TestActor(Actor):
