@@ -1,21 +1,23 @@
 language: python
-
 cache: pip
-
 services:
-  - redis-server
-
+- redis-server
 python:
-  - "3.5"
-
+- '3.5'
 install:
-  - pip install -e .
-  - pip install -r tests/requirements.txt
-
+- pip install -e .
+- pip install -r tests/requirements.txt
 script:
-  - flake8 arq/ tests/
-  - py.test --cov=arq
-
+- flake8 arq/ tests/
+- py.test --cov=arq
 after_success:
-  - coverage combine
-  - codecov
+- coverage combine
+- codecov
+deploy:
+  provider: pypi
+  user: samuelcolvin
+  password:
+    secure: fM1AEWtweEM0JMJET4ONgbk0E3FlPo0A4lymNRj+iKBAG1qhYtR+jJNtYCAnTbL0RZJjxofIP1vnDOW/xukAzh8stDjc199Gr2uqVox3xH6LplK75Ouc8QpEhYKg4r3y58m+9cp0H10OBNsUV3pTJe52KQFfT+C1e+rA1zKk0t1QbUiBaXyRweqNLfS1K+Bfb9dXtbKE66KV8TXKS4HXrsjBU3I4OlgDOSC2JCOivPUCBwVsN8OW4MDLt8gEuK+i5JkN0hBEBR3LGSi8n8CU+32fXDpl0RVmYbIR3CbgDVx79HKZIWSYbFJ+JRDpKIio0H0bvgpy1hI92olS4K0ExI3Y2S/gToGMA+jdZdjQgobCoDor3kGaG2ZzT/iG2IzB4pnNjrwQhEzVGQMrXBxiWT8Yw1I+lanV88U57x2A8/RmTzMPMu5bK0QCFBPZ9cOUA7lmFpG2lJvYnK/kdjIE4/RX1LGfKgPs7i2dM+yj7jSUuVUQY+Y0Ja5I11GsAzMpKtH1HnN9dQ0n0rfE+Le4ATdVA9lj2te4v/csrC/wiC5n4mg1YIGxDU0obEvtiNepK4suCsy/PDLiHx5xzIS0z7WWhHK+6XCBDC5enw+2hKs3ETJW3KbDU0Mz3q8vV64VObxZPLQxfKgT5o30OyMElsnLIZhK4R2Vsr5CzRzP2pY=
+  distributions: sdist bdist_wheel
+  on:
+    tags: true
