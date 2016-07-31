@@ -4,7 +4,7 @@ import re
 import pytest
 import msgpack
 
-from arq import Actor, concurrent, BaseWorker
+from arq import Actor, concurrent, BaseWorker, ConnectionSettings
 from arq.testing import MockRedisWorker as MockRedisBaseWorker
 
 from .fixtures import MockRedisTestActor, MockRedisWorker, FoobarActor, TestActor
@@ -133,13 +133,10 @@ async def test_duplicate_direct_name():
 
 
 async def test_custom_name(loop, logcap):
-    class CustomMockRedisWorker(MockRedisWorker):
-        shadows = [FoobarActor]
-
-    actor = FoobarActor(name='foobar', loop=loop)
+    actor = FoobarActor(loop=loop)
     assert re.match('^<FoobarActor\(foobar\) at 0x[a-f0-9]{12}>$', str(actor))
     assert None is await actor.concat('123', '456')
-    worker = CustomMockRedisWorker(batch=True, loop=actor.loop)
+    worker = MockRedisWorker(batch=True, loop=actor.loop, shadows=[FoobarActor])
     worker.mock_data = actor.mock_data
     await worker.run()
     assert worker.jobs_failed == 0
@@ -211,3 +208,8 @@ def test_worker_no_shadow():
     with pytest.raises(TypeError) as excinfo:
         MockRedisBaseWorker()
     assert excinfo.value.args[0] == 'shadows not defined on worker'
+
+
+def test_invalid():
+    with pytest.raises(TypeError):
+        ConnectionSettings(FOOBAR=123)

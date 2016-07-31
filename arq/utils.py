@@ -6,22 +6,35 @@ import os
 import aioredis
 
 __all__ = [
+    'ConnectionSettings',
     'RedisMixin',
     'timestamp',
     'cached_property'
 ]
 
 
+class ConnectionSettings:
+    R_HOST = 'localhost'
+    R_PORT = 6379
+    R_DATABASE = 0
+    R_PASSWORD = None
+
+    def __init__(self, **custom_settings):
+        for name, value in custom_settings.items():
+            if not hasattr(self, name):
+                raise TypeError('{} is not a valid setting name'.format(name))
+            setattr(self, name, value)
+
+
 class RedisMixin:
-    def __init__(self, *, loop=None, host='localhost', port=6379, existing_pool=None, **redis_kwargs):
-        self.loop = loop or getattr(self, 'loop', None) or asyncio.get_event_loop()
-        self._host = host
-        self._port = port
-        self._redis_kwargs = redis_kwargs
+    def __init__(self, *, loop=None, settings: ConnectionSettings=None, existing_pool=None):
+        self.loop = loop or asyncio.get_event_loop()
+        self._settings = settings or ConnectionSettings()
         self._redis_pool = existing_pool
 
     async def create_redis_pool(self):
-        return await aioredis.create_pool((self._host, self._port), loop=self.loop, **self._redis_kwargs)
+        return await aioredis.create_pool((self._settings.R_HOST, self._settings.R_PORT), loop=self.loop,
+                                          db=self._settings.R_DATABASE, password=self._settings.R_PASSWORD)
 
     async def get_redis_pool(self):
         if self._redis_pool is None:

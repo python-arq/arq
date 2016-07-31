@@ -38,9 +38,9 @@ class BaseWorker(RedisMixin):
 
     def __init__(self, *, batch=False, shadows=None, queues=None, **kwargs):
         self._batch_mode = batch
-        if self.shadows is None:
-            if shadows is None:
-                raise TypeError('shadows not defined on worker')
+        if self.shadows is None and shadows is None:
+            raise TypeError('shadows not defined on worker')
+        if shadows:
             self.shadows = shadows
         self._queues = queues
         self._pending_tasks = set()
