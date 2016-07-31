@@ -72,7 +72,18 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         self.queue_lookup = {q: self.QUEUE_PREFIX + q.encode() for q in self.QUEUES}
         self.name = self.name or self.__class__.__name__
         self.is_shadow = is_shadow
+        self._bind_direct_methods()
         super().__init__(**kwargs)
+
+    def _bind_direct_methods(self):
+        for attr_name in dir(self.__class__):
+            unbound_direct = getattr(getattr(self.__class__, attr_name), 'unbound_direct', None)
+            if unbound_direct:
+                name = attr_name + '_direct'
+                if hasattr(self, name):
+                    msg = '{} already has a method "{}", this breaks arq direct method binding of "{}"'
+                    raise RuntimeError(msg.format(self.name, name, attr_name))
+                setattr(self, name, unbound_direct.__get__(self, self.__class__))
 
     async def enqueue_job(self, func_name, *args, queue=None, **kwargs):
         queue = queue or self.DEFAULT_QUEUE
@@ -104,7 +115,8 @@ def concurrent(func_or_queue):
         async def _enqueuer(obj, *args, queue_name=None, **kwargs):
             await obj.enqueue_job(func_name, *args, queue=queue_name or dec_queue, **kwargs)
 
-        _enqueuer.unbound_original = func
+        # NOTE: direct is (and has to be) unbound: http://stackoverflow.com/a/7891681/949890
+        _enqueuer.unbound_direct = func
         return _enqueuer
 
     if isinstance(func_or_queue, str):

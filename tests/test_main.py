@@ -90,7 +90,7 @@ async def test_handle_exception(loop, logcap):
             'dft  ran in =  0.0XXs ! MockRedisTestActor.boom(): RuntimeError\n'
             'Traceback (most recent call last):\n'
             '  File "/path/to/arq/worker.py", line <no>, in run_job\n'
-            '    result = await unbound_func(shadow, *j.args, **j.kwargs)\n'
+            '    result = await func(*j.args, **j.kwargs)\n'
             '  File "/path/to/tests/fixtures.py", line <no>, in boom\n'
             '    raise RuntimeError(\'boom\')\n'
             'RuntimeError: boom\n'
@@ -113,6 +113,21 @@ async def test_repeat_queue():
     assert excinfo.value.args[0] == "BadActor looks like it has duplicated queue names: ('a', 'a')"
 
 
+async def test_duplicate_direct_name():
+    class BadActor(Actor):
+        @concurrent
+        async def foo(self):
+            pass
+
+        def foo_direct(self):
+            pass
+    with pytest.raises(RuntimeError) as excinfo:
+        BadActor()
+    print(excinfo.value)
+    assert excinfo.value.args[0] == ('BadActor already has a method "foo_direct", '
+                                     'this breaks arq direct method binding of "foo"')
+
+
 async def test_custom_name(loop, logcap):
     class CustomMockRedisWorker(MockRedisWorker):
         shadows = [FoobarActor]
@@ -132,6 +147,20 @@ async def test_call_direct(mock_actor_worker, logcap):
     actor, worker = mock_actor_worker
     await actor.enqueue_job('direct_method', 1, 2)
     await worker.run()
+    assert worker.jobs_failed == 0
+    assert worker.jobs_complete == 1
     log = re.sub('0.0\d\ds', '0.0XXs', logcap.log)
     assert ('arq.work: dft  queued  0.0XXs → MockRedisTestActor.direct_method(1, 2)\n'
             'arq.work: dft  ran in  0.0XXs ← MockRedisTestActor.direct_method ● 3') in log
+
+
+async def test_direct_binding(mock_actor_worker, logcap):
+    logcap.set_level(logging.INFO)
+    actor, worker = mock_actor_worker
+    assert None is await actor.concat('a', 'b')
+    assert 'a + b' == await actor.concat_direct('a', 'b')
+    await worker.run()
+    assert worker.jobs_failed == 0
+    assert worker.jobs_complete == 1
+    assert 'MockRedisTestActor.concat' in logcap
+    assert 'MockRedisTestActor.concat_direct' not in logcap

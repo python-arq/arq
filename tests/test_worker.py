@@ -1,3 +1,4 @@
+import asyncio
 import re
 import logging
 
@@ -5,7 +6,8 @@ import pytest
 
 from arq.worker import import_string, start_worker, ImmediateExit
 
-from .fixtures import Worker, EXAMPLE_FILE, WorkerQuit, WorkerFail, FoobarActor, MockRedisWorkerQuit, MockRedisTestActor
+from .fixtures import (Worker, EXAMPLE_FILE, WorkerQuit, WorkerFail, FoobarActor,
+                       MockRedisWorkerQuit, MockRedisTestActor, MockRedisWorker)
 from .example import ActorTest
 
 
@@ -170,3 +172,25 @@ async def test_non_existent_function(redis_conn, actor, logcap):
     await worker.run()
     assert worker.jobs_failed == 1
     assert 'Job Error: shadow class "TestActor" has not function "doesnt_exist"' in logcap
+
+
+def test_no_jobs():
+    loop = asyncio.get_event_loop()
+    mock_actor = MockRedisTestActor()
+    mock_worker = MockRedisWorker(batch_mode=True)
+    mock_worker.mock_data = mock_actor.mock_data
+
+    loop.run_until_complete(mock_actor.boom())
+    loop.run_until_complete(mock_actor.concat('a', 'b'))
+    mock_worker.run_until_complete()
+
+    loop.run_until_complete(mock_worker.close())
+    assert mock_worker.jobs_complete == 2
+    assert mock_worker.jobs_failed == 1
+
+
+async def test_shutdown_without_work(loop):
+    mock_actor = MockRedisTestActor(loop=loop)
+    mock_worker = MockRedisWorker(loop=loop, batch_mode=True)
+    mock_worker.mock_data = mock_actor.mock_data
+    await mock_worker.close()

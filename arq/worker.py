@@ -146,21 +146,21 @@ class AbstractWorker(RedisMixin):
             # exit with zero so we don't increment jobs_failed twice
             return 0
         try:
-            func = getattr(shadow, j.func_name)
+            func = getattr(shadow, j.func_name + '_direct')
         except AttributeError:
-            self.jobs_failed += 1
-            logger.error('Job Error: shadow class "%s" has not function "%s"', shadow.name, j.func_name)
-            return 0
+            # try the method name directly for causes where enqueue_job is called manually
+            try:
+                func = getattr(shadow, j.func_name)
+            except AttributeError:
+                self.jobs_failed += 1
+                logger.error('Job Error: shadow class "%s" has not function "%s"', shadow.name, j.func_name)
+                return 0
 
         started_at = timestamp()
         queue_time = started_at - j.queued_at
         self.log_job_start(queue_time, j)
-        unbound_func = getattr(func, 'unbound_original', None)
         try:
-            if unbound_func:
-                result = await unbound_func(shadow, *j.args, **j.kwargs)
-            else:
-                result = await func(*j.args, **j.kwargs)
+            result = await func(*j.args, **j.kwargs)
         except Exception as e:
             await self.handle_exc(started_at, e, j)
             return 1
@@ -206,10 +206,12 @@ class AbstractWorker(RedisMixin):
         if self._pending_tasks:
             logger.info('waiting for %d jobs to finish', len(self._pending_tasks))
             await asyncio.wait(self._pending_tasks, loop=self.loop)
+        t = (timestamp() - self.start) if self.start else 0
         logger.warning('shutting down worker after %0.3fs, %d jobs done, %d failed',
-                       timestamp() - self.start, self.jobs_complete, self.jobs_failed)
+                       t, self.jobs_complete, self.jobs_failed)
 
-        await asyncio.wait([s.close() for s in self._shadows.values()], loop=self.loop)
+        if self._shadows:
+            await asyncio.wait([s.close() for s in self._shadows.values()], loop=self.loop)
         await super().close()
 
     def handle_sig(self, signum, frame):
