@@ -27,10 +27,10 @@ async def test_long_args(mock_actor_worker, logcap):
     await actor.concat(a=v, b=v)
     await worker.run()
     log = re.sub('0.0\d\ds', '0.0XXs', logcap.log)
-    assert ('dft  queued  0.0XXs → MockRedisTestActor.concat'
-            '(a=0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19, b=0,1,2,3,4,5,6,7,8,9,10...)\n') in log
-    assert ('dft  ran in  0.0XXs ← MockRedisTestActor.concat ● '
-            '0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19 + 0,1,2,3,4,5,6,7,8,9,10,11...\n') in log
+    assert ("dft  queued  0.0XXs → MockRedisTestActor.concat"
+            "(a='0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19', b='0,1,2,3,4,5,6,7,8,9,1…)\n") in log
+    assert ("dft  ran in  0.0XXs ← MockRedisTestActor.concat ● "
+            "'0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19 + 0,1,2,3,4,5,6,7,8,9,10,11,…\n") in log
 
 
 async def test_logging_disabled(mock_actor_worker, logcap):

@@ -4,13 +4,12 @@ from functools import wraps
 
 import msgpack
 
-from .utils import RedisMixin, timestamp
+from .utils import RedisMixin, timestamp, ellipsis
 
 
 __all__ = ['Actor', 'concurrent', 'Job']
 
 main_logger = logging.getLogger('arq.main')
-work_logger = logging.getLogger('arq.work')
 
 
 class Job:
@@ -34,11 +33,9 @@ class Job:
         if self.kwargs:
             if arguments:
                 arguments += ', '
-            arguments += ', '.join('{}={}'.format(*kv) for kv in sorted(self.kwargs.items()))
+            arguments += ', '.join('{}={!r}'.format(*kv) for kv in sorted(self.kwargs.items()))
 
-        if len(arguments) > 80:
-            arguments = arguments[:77] + '...'
-        return '{s.class_name}.{s.func_name}({args})'.format(s=self, args=arguments)
+        return '{s.class_name}.{s.func_name}({args})'.format(s=self, args=ellipsis(arguments))
 
     def __repr__(self):
         return '<Job {} on {}>'.format(self, self.queue)

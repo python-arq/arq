@@ -11,7 +11,7 @@ import time
 
 from .logs import default_log_config
 from .main import Actor, Job
-from .utils import RedisMixin, timestamp, cached_property, gen_random
+from .utils import RedisMixin, timestamp, cached_property, gen_random, ellipsis
 
 __all__ = ['BaseWorker', 'import_string', 'RunWorkerProcess']
 
@@ -201,12 +201,7 @@ class BaseWorker(RedisMixin):
         if not logger.isEnabledFor(logging.INFO):
             return
         job_time = timestamp() - started_at
-        if result is None:
-            sr = ''
-        else:
-            sr = str(result)
-            if len(sr) > 80:
-                sr = sr[:77] + '...'
+        sr = '' if result is None else ellipsis(repr(result))
         logger.info('%-4s ran in%7.3fs ← %s.%s ● %s', j.queue, job_time, j.class_name, j.func_name, sr)
 
     @classmethod
