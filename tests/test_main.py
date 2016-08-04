@@ -151,8 +151,8 @@ async def test_call_direct(mock_actor_worker, logcap):
     assert worker.jobs_failed == 0
     assert worker.jobs_complete == 1
     log = re.sub('0.0\d\ds', '0.0XXs', logcap.log)
-    assert ('arq.work: dft  queued  0.0XXs → MockRedisTestActor.direct_method(1, 2)\n'
-            'arq.work: dft  ran in  0.0XXs ← MockRedisTestActor.direct_method ● 3') in log
+    assert ('arq.jobs: dft  queued  0.0XXs → MockRedisTestActor.direct_method(1, 2)\n'
+            'arq.jobs: dft  ran in  0.0XXs ← MockRedisTestActor.direct_method ● 3') in log
 
 
 async def test_direct_binding(mock_actor_worker, logcap):

@@ -15,7 +15,8 @@ from .utils import RedisMixin, timestamp, cached_property, gen_random, ellipsis
 
 __all__ = ['BaseWorker', 'import_string', 'RunWorkerProcess']
 
-logger = logging.getLogger('arq.work')
+work_logger = logging.getLogger('arq.work')
+jobs_logger = logging.getLogger('arq.jobs')
 
 
 class HandledExit(Exception):
@@ -90,14 +91,14 @@ class BaseWorker(RedisMixin):
         self.loop.run_until_complete(self.run())
 
     async def run(self):
-        logger.info('Initialising work manager, batch mode: %s', self._batch_mode)
+        work_logger.info('Initialising work manager, batch mode: %s', self._batch_mode)
 
         self._shadows = await self.shadow_factory()
         assert isinstance(self._shadows, dict), 'shadow_factory should return a dict not %s' % type(self._shadows)
 
-        logger.info('Running worker with %s shadow%s listening to %d queues',
-                    len(self._shadows), '' if len(self._shadows) == 1 else 's', len(self.queues))
-        logger.info('shadows: %s | queues: %s', self.shadow_names, ', '.join(self.queues))
+        work_logger.info('Running worker with %s shadow%s listening to %d queues',
+                         len(self._shadows), '' if len(self._shadows) == 1 else 's', len(self.queues))
+        work_logger.info('shadows: %s | queues: %s', self.shadow_names, ', '.join(self.queues))
 
         self.start = timestamp()
         try:
@@ -105,7 +106,7 @@ class BaseWorker(RedisMixin):
         finally:
             await self.close()
             if self._task_exception:
-                logger.error('Found task exception "%s"', self._task_exception)
+                work_logger.error('Found task exception "%s"', self._task_exception)
                 raise self._task_exception
 
     async def work(self):
@@ -114,28 +115,28 @@ class BaseWorker(RedisMixin):
         async with await self.get_redis_conn() as redis:
             if self._batch_mode:
                 quit_queue = b'QUIT-%s' % gen_random()
-                logger.debug('populating quit queue to prompt exit: %s', quit_queue.decode())
+                work_logger.debug('populating quit queue to prompt exit: %s', quit_queue.decode())
                 await redis.rpush(quit_queue, b'1')
                 redis_queues.append(quit_queue)
-            logger.debug('starting main blpop loop')
+            work_logger.debug('starting main blpop loop')
             while self.running:
                 msg = await redis.blpop(*redis_queues, timeout=1)
                 if msg is None:
                     continue
                 _queue, data = msg
                 if self._batch_mode and _queue == quit_queue:
-                    logger.debug('got job from the quit queue, stopping')
+                    work_logger.debug('got job from the quit queue, stopping')
                     break
                 queue = queue_lookup[_queue]
-                logger.debug('scheduling job from queue %s', queue)
+                work_logger.debug('scheduling job from queue %s', queue)
                 await self.schedule_job(queue, data)
 
     async def schedule_job(self, queue, data):
         job = self.job_class(queue, data)
 
         if len(self._pending_tasks) >= self.max_concurrent_tasks:
-            logger.debug('%d pending tasks, waiting for one to finish before creating task for %s',
-                         len(self._pending_tasks), job)
+            work_logger.debug('%d pending tasks, waiting for one to finish before creating task for %s',
+                              len(self._pending_tasks), job)
             _, self._pending_tasks = await asyncio.wait(self._pending_tasks, loop=self.loop,
                                                         return_when=asyncio.FIRST_COMPLETED)
 
@@ -148,14 +149,14 @@ class BaseWorker(RedisMixin):
         if not task.cancel():
             return
         self.jobs_timed_out += 1
-        logger.error('job timed out %r', job)
+        jobs_logger.error('job timed out %r', job)
 
     async def run_job(self, j):
         try:
             shadow = self._shadows[j.class_name]
         except KeyError:
             self.jobs_failed += 1
-            logger.error('Job Error: unable to find shadow for %r', j)
+            jobs_logger.error('Job Error: unable to find shadow for %r', j)
             # exit with zero so we don't increment jobs_failed twice
             return 0
         try:
@@ -166,7 +167,7 @@ class BaseWorker(RedisMixin):
                 func = getattr(shadow, j.func_name)
             except AttributeError:
                 self.jobs_failed += 1
-                logger.error('Job Error: shadow class "%s" has not function "%s"', shadow.name, j.func_name)
+                jobs_logger.error('Job Error: shadow class "%s" has not function "%s"', shadow.name, j.func_name)
                 return 0
 
         started_at = timestamp()
@@ -189,36 +190,36 @@ class BaseWorker(RedisMixin):
             self._task_exception = task_exception
         elif task.result():
             self.jobs_failed += 1
-        logger.debug('task complete, %d jobs done, %d failed', self.jobs_complete, self.jobs_failed)
+        jobs_logger.debug('task complete, %d jobs done, %d failed', self.jobs_complete, self.jobs_failed)
 
     @classmethod
     def log_job_start(cls, queue_time, j):
-        if logger.isEnabledFor(logging.INFO):
-            logger.info('%-4s queued%7.3fs → %s', j.queue, queue_time, j)
+        if jobs_logger.isEnabledFor(logging.INFO):
+            jobs_logger.info('%-4s queued%7.3fs → %s', j.queue, queue_time, j)
 
     @classmethod
     def log_job_result(cls, started_at, result, j):
-        if not logger.isEnabledFor(logging.INFO):
+        if not jobs_logger.isEnabledFor(logging.INFO):
             return
         job_time = timestamp() - started_at
         sr = '' if result is None else ellipsis(repr(result))
-        logger.info('%-4s ran in%7.3fs ← %s.%s ● %s', j.queue, job_time, j.class_name, j.func_name, sr)
+        jobs_logger.info('%-4s ran in%7.3fs ← %s.%s ● %s', j.queue, job_time, j.class_name, j.func_name, sr)
 
     @classmethod
     async def handle_exc(cls, started_at, exc, j):
         job_time = timestamp() - started_at
         exc_type = exc.__class__.__name__
-        logger.exception('%-4s ran in%7.3fs ! %s: %s', j.queue, job_time, j, exc_type)
+        jobs_logger.exception('%-4s ran in%7.3fs ! %s: %s', j.queue, job_time, j, exc_type)
 
     async def close(self):
         if self._closed:
             return
         if self._pending_tasks:
-            logger.info('waiting for %d jobs to finish', len(self._pending_tasks))
+            work_logger.info('waiting for %d jobs to finish', len(self._pending_tasks))
             await asyncio.wait(self._pending_tasks, loop=self.loop)
         t = (timestamp() - self.start) if self.start else 0
-        logger.warning('shutting down worker after %0.3fs ◆ %d jobs done ◆ %d failed ◆ %d timed out',
-                       t, self.jobs_complete, self.jobs_failed, self.jobs_timed_out)
+        work_logger.info('shutting down worker after %0.3fs ◆ %d jobs done ◆ %d failed ◆ %d timed out',
+                         t, self.jobs_complete, self.jobs_failed, self.jobs_timed_out)
 
         if self._shadows:
             await asyncio.wait([s.close() for s in self._shadows.values()], loop=self.loop)
@@ -227,7 +228,7 @@ class BaseWorker(RedisMixin):
 
     def handle_sig(self, signum, frame):
         self.running = False
-        logger.warning('pid=%d, got signal: %s, stopping...', os.getpid(), Signals(signum).name)
+        work_logger.warning('pid=%d, got signal: %s, stopping...', os.getpid(), Signals(signum).name)
         signal.signal(signal.SIGINT, self.handle_sig_force)
         signal.signal(signal.SIGTERM, self.handle_sig_force)
         signal.signal(signal.SIGALRM, self.handle_sig_force)
@@ -235,7 +236,7 @@ class BaseWorker(RedisMixin):
         raise HandledExit()
 
     def handle_sig_force(self, signum, frame):
-        logger.error('pid=%d, got signal: %s again, forcing exit', os.getpid(), Signals(signum).name)
+        work_logger.error('pid=%d, got signal: %s again, forcing exit', os.getpid(), Signals(signum).name)
         raise ImmediateExit('force exit')
 
 
@@ -269,7 +270,7 @@ def start_worker(worker_path, worker_class, batch):
     except HandledExit:
         pass
     except Exception as e:
-        logger.exception('Worker exiting after an unhandled error: %s', e.__class__.__name__)
+        work_logger.exception('Worker exiting after an unhandled error: %s', e.__class__.__name__)
         raise
     finally:
         worker.loop.run_until_complete(worker.close())
@@ -284,30 +285,31 @@ class RunWorkerProcess:
 
     def run_worker(self, worker_path, worker_class, batch):
         name = 'WorkProcess'
-        logger.info('starting work process "%s"', name)
+        work_logger.info('starting work process "%s"', name)
         self.process = Process(target=start_worker, args=(worker_path, worker_class, batch), name=name)
         self.process.start()
         self.process.join()
         if self.process.exitcode == 0:
-            logger.info('worker process exited ok')
+            work_logger.info('worker process exited ok')
             return
-        logger.critical('worker process %s exited badly with exit code %s', self.process.pid, self.process.exitcode)
+        work_logger.critical('worker process %s exited badly with exit code %s',
+                             self.process.pid, self.process.exitcode)
         sys.exit(3)
-        # TODO could restart worker here, but better to leave it up to the real manager
+        # could restart worker here, but better to leave it up to the real manager
 
     def handle_sig(self, signum, frame):
         signal.signal(signal.SIGINT, self.handle_sig_force)
         signal.signal(signal.SIGTERM, self.handle_sig_force)
-        logger.warning('got signal: %s, waiting for worker pid=%s to finish...', Signals(signum).name,
-                       self.process and self.process.pid)
+        work_logger.warning('got signal: %s, waiting for worker pid=%s to finish...', Signals(signum).name,
+                            self.process and self.process.pid)
         for i in range(100):
             if not self.process or not self.process.is_alive():
                 return
             time.sleep(0.1)
 
     def handle_sig_force(self, signum, frame):
-        logger.error('got signal: %s again, forcing exit', Signals(signum).name)
+        work_logger.error('got signal: %s again, forcing exit', Signals(signum).name)
         if self.process and self.process.is_alive():
-            logger.error('sending worker %d SIGTERM', self.process.pid)
+            work_logger.error('sending worker %d SIGTERM', self.process.pid)
             os.kill(self.process.pid, signal.SIGTERM)
         raise ImmediateExit('force exit')

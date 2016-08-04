@@ -169,7 +169,7 @@ def redis_conn(loop):
     loop.run_until_complete(conn.wait_closed())
 
 
-LOGS = ('arq.main', 'arq.work')
+LOGS = ('arq.main', 'arq.work', 'arq.jobs')
 
 
 class StreamLog:
@@ -192,6 +192,11 @@ class StreamLog:
 
     def set_level(self, level):
         for logger in self.loggers:
+            logger.setLevel(level)
+
+    def set_different_level(self, **levels):
+        for log_name, level in levels.items():
+            logger = logging.getLogger(log_name)
             logger.setLevel(level)
 
     @property

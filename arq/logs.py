@@ -31,7 +31,7 @@ def default_log_config(verbose):
         'version': 1,
         'disable_existing_loggers': True,
         'handlers': {
-            'click': {
+            'colour': {
                 'level': log_level,
                 'class': 'arq.logs.ColourHandler',
                 'formatter': 'standard'
@@ -45,11 +45,15 @@ def default_log_config(verbose):
         },
         'loggers': {
             'arq.main': {
-                'handlers': ['click'],
+                'handlers': ['colour'],
                 'level': log_level,
             },
             'arq.work': {
-                'handlers': ['click'],
+                'handlers': ['colour'],
+                'level': log_level,
+            },
+            'arq.jobs': {
+                'handlers': ['colour'],
                 'level': log_level,
             },
         },

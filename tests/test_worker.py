@@ -33,13 +33,17 @@ async def test_long_args(mock_actor_worker, logcap):
             "'0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19 + 0,1,2,3,4,5,6,7,8,9,10,11,…\n") in log
 
 
-async def test_logging_disabled(mock_actor_worker, logcap):
-    logcap.set_level(logging.WARNING)
+async def test_seperate_log_levels(mock_actor_worker, logcap):
+    logcap.set_different_level(**{'arq.work': logging.INFO, 'arq.jobs': logging.WARNING})
     actor, worker = mock_actor_worker
     await actor.concat(a='1', b='2')
     await worker.run()
     log = re.sub('0.0\d\ds', '0.0XXs', logcap.log)
-    assert 'arq.work: shutting down worker after 0.0XXs ◆ 1 jobs done ◆ 0 failed ◆ 0 timed out\n' == log
+    assert ('arq.work: Initialising work manager, batch mode: True\n'
+            'arq.work: Running worker with 1 shadow listening to 3 queues\n'
+            'arq.work: shadows: MockRedisTestActor | queues: high, dft, low\n'
+            'arq.work: waiting for 1 jobs to finish\n'
+            'arq.work: shutting down worker after 0.0XXs ◆ 1 jobs done ◆ 0 failed ◆ 0 timed out\n') == log
 
 async def test_wrong_worker(mock_actor_worker, logcap):
     actor, worker = mock_actor_worker
@@ -207,11 +211,11 @@ async def test_job_timeout(loop, logcap):
     log = re.sub('(\d.\d\d)\d', r'\1X', logcap.log)
     log = re.sub(', line \d+,', ', line <no>,', log)
     log = re.sub('"/.*?/(\w+/\w+)\.py"', r'"/path/to/\1.py"', log)
-    assert ('arq.work: dft  queued  0.00Xs → MockRedisTestActor.sleeper(0.2)\n'
-            'arq.work: dft  queued  0.00Xs → MockRedisTestActor.sleeper(0.05)\n'
-            'arq.work: dft  ran in  0.05Xs ← MockRedisTestActor.sleeper ● 0.05\n'
-            'arq.work: job timed out <Job MockRedisTestActor.sleeper(0.2) on dft>\n'
-            'arq.work: dft  ran in  0.10Xs ! MockRedisTestActor.sleeper(0.2): CancelledError\n') in log
+    assert ('arq.jobs: dft  queued  0.00Xs → MockRedisTestActor.sleeper(0.2)\n'
+            'arq.jobs: dft  queued  0.00Xs → MockRedisTestActor.sleeper(0.05)\n'
+            'arq.jobs: dft  ran in  0.05Xs ← MockRedisTestActor.sleeper ● 0.05\n'
+            'arq.jobs: job timed out <Job MockRedisTestActor.sleeper(0.2) on dft>\n'
+            'arq.jobs: dft  ran in  0.10Xs ! MockRedisTestActor.sleeper(0.2): CancelledError\n') in log
     assert ('raise CancelledError\n'
             'concurrent.futures._base.CancelledError\n'
             'arq.work: shutting down worker after 0.10Xs ◆ 2 jobs done ◆ 1 failed ◆ 1 timed out\n') in log
