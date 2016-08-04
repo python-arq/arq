@@ -69,7 +69,7 @@ async def test_dispatch_work(tmpworkdir, loop, logcap, redis_conn):
             'dft  ran in  0.0XXs ← MockRedisTestActor.add_numbers ● \n'
             'task complete, 1 jobs done, 0 failed\n'
             'task complete, 2 jobs done, 0 failed\n'
-            'shutting down worker after 0.0XXs, 2 jobs done, 0 failed\n') == log
+            'shutting down worker after 0.0XXs ◆ 2 jobs done ◆ 0 failed ◆ 0 timed out\n') == log
     # quick check of logcap's str and repr
     assert str(logcap).startswith('logcap:\nMockRedisTestActor')
     assert repr(logcap).startswith("< logcap: 'MockRedisTestActor")
@@ -91,14 +91,14 @@ async def test_handle_exception(loop, logcap):
             'shadows: MockRedisTestActor | queues: high, dft, low\n'
             'waiting for 1 jobs to finish\n'
             'dft  queued  0.0XXs → MockRedisTestActor.boom()\n'
-            'dft  ran in =  0.0XXs ! MockRedisTestActor.boom(): RuntimeError\n'
+            'dft  ran in  0.0XXs ! MockRedisTestActor.boom(): RuntimeError\n'
             'Traceback (most recent call last):\n'
             '  File "/path/to/arq/worker.py", line <no>, in run_job\n'
             '    result = await func(*j.args, **j.kwargs)\n'
             '  File "/path/to/tests/fixtures.py", line <no>, in boom\n'
             '    raise RuntimeError(\'boom\')\n'
             'RuntimeError: boom\n'
-            'shutting down worker after 0.0XXs, 1 jobs done, 1 failed\n') == log
+            'shutting down worker after 0.0XXs ◆ 1 jobs done ◆ 1 failed ◆ 0 timed out\n') == log
 
 
 async def test_bad_def():

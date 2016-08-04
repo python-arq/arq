@@ -33,19 +33,22 @@ class BadJob(Exception):
 class BaseWorker(RedisMixin):
     max_concurrent_tasks = 50
     shutdown_delay = 6
+    timeout_seconds = 60
     job_class = Job
     shadows = None
 
-    def __init__(self, *, batch=False, shadows=None, queues=None, **kwargs):
+    def __init__(self, *, batch=False, shadows=None, queues=None, timeout_seconds=None, **kwargs):
         self._batch_mode = batch
         if self.shadows is None and shadows is None:
             raise TypeError('shadows not defined on worker')
         if shadows:
             self.shadows = shadows
+        self.timeout_seconds = timeout_seconds or self.timeout_seconds
         self._queues = queues
         self._pending_tasks = set()
         self.jobs_complete = 0
         self.jobs_failed = 0
+        self.jobs_timed_out = 0
         self._task_exception = None
         self._shadows = {}
         self.start = None
@@ -138,7 +141,14 @@ class BaseWorker(RedisMixin):
 
         task = self.loop.create_task(self.run_job(job))
         task.add_done_callback(self.job_callback)
+        self.loop.call_later(self.timeout_seconds, self.cancel_job, task, job)
         self._pending_tasks.add(task)
+
+    def cancel_job(self, task, job):
+        if not task.cancel():
+            return
+        self.jobs_timed_out += 1
+        logger.error('job timed out %r', job)
 
     async def run_job(self, j):
         try:
@@ -203,7 +213,7 @@ class BaseWorker(RedisMixin):
     async def handle_exc(cls, started_at, exc, j):
         job_time = timestamp() - started_at
         exc_type = exc.__class__.__name__
-        logger.exception('%-4s ran in =%7.3fs ! %s: %s', j.queue, job_time, j, exc_type)
+        logger.exception('%-4s ran in%7.3fs ! %s: %s', j.queue, job_time, j, exc_type)
 
     async def close(self):
         if self._closed:
@@ -212,8 +222,8 @@ class BaseWorker(RedisMixin):
             logger.info('waiting for %d jobs to finish', len(self._pending_tasks))
             await asyncio.wait(self._pending_tasks, loop=self.loop)
         t = (timestamp() - self.start) if self.start else 0
-        logger.warning('shutting down worker after %0.3fs, %d jobs done, %d failed',
-                       t, self.jobs_complete, self.jobs_failed)
+        logger.warning('shutting down worker after %0.3fs ◆ %d jobs done ◆ %d failed ◆ %d timed out',
+                       t, self.jobs_complete, self.jobs_failed, self.jobs_timed_out)
 
         if self._shadows:
             await asyncio.wait([s.close() for s in self._shadows.values()], loop=self.loop)

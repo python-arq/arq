@@ -39,7 +39,7 @@ async def test_logging_disabled(mock_actor_worker, logcap):
     await actor.concat(a='1', b='2')
     await worker.run()
     log = re.sub('0.0\d\ds', '0.0XXs', logcap.log)
-    assert 'shutting down worker after 0.0XXs, 1 jobs done, 0 failed' in log
+    assert 'arq.work: shutting down worker after 0.0XXs ◆ 1 jobs done ◆ 0 failed ◆ 0 timed out\n' == log
 
 async def test_wrong_worker(mock_actor_worker, logcap):
     actor, worker = mock_actor_worker
@@ -194,3 +194,24 @@ async def test_shutdown_without_work(loop):
     mock_worker = MockRedisWorker(loop=loop, batch=True)
     mock_worker.mock_data = mock_actor.mock_data
     await mock_worker.close()
+
+
+async def test_job_timeout(loop, logcap):
+    logcap.set_loggers()
+    actor = MockRedisTestActor(loop=loop)
+    assert None is await actor.sleeper(0.2)
+    assert None is await actor.sleeper(0.05)
+    worker = MockRedisWorker(batch=True, loop=loop, timeout_seconds=0.1)
+    worker.mock_data = actor.mock_data
+    await worker.run()
+    log = re.sub('(\d.\d\d)\d', r'\1X', logcap.log)
+    log = re.sub(', line \d+,', ', line <no>,', log)
+    log = re.sub('"/.*?/(\w+/\w+)\.py"', r'"/path/to/\1.py"', log)
+    assert ('arq.work: dft  queued  0.00Xs → MockRedisTestActor.sleeper(0.2)\n'
+            'arq.work: dft  queued  0.00Xs → MockRedisTestActor.sleeper(0.05)\n'
+            'arq.work: dft  ran in  0.05Xs ← MockRedisTestActor.sleeper ● 0.05\n'
+            'arq.work: job timed out <Job MockRedisTestActor.sleeper(0.2) on dft>\n'
+            'arq.work: dft  ran in  0.10Xs ! MockRedisTestActor.sleeper(0.2): CancelledError\n') in log
+    assert ('raise CancelledError\n'
+            'concurrent.futures._base.CancelledError\n'
+            'arq.work: shutting down worker after 0.10Xs ◆ 2 jobs done ◆ 1 failed ◆ 1 timed out\n') in log

@@ -28,6 +28,11 @@ class TestActor(Actor):
         raise RuntimeError('boom')
 
     @concurrent
+    async def sleeper(self, t):
+        await asyncio.sleep(t, loop=self.loop)
+        return t
+
+    @concurrent
     async def save_slow(self, v, sleep_for=0):
         await asyncio.sleep(sleep_for, loop=self.loop)
         with open('save_slow', 'w') as f:
