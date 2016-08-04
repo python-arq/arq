@@ -8,7 +8,6 @@ from signal import Signals
 import sys
 import time
 
-
 from .logs import default_log_config
 from .main import Actor, Job
 from .utils import RedisMixin, timestamp, cached_property, gen_random, ellipsis
@@ -267,9 +266,11 @@ def import_string(file_path, attr_name):
 def start_worker(worker_path, worker_class, batch):
     worker_cls = import_string(worker_path, worker_class)
     worker = worker_cls(batch=batch)
+    work_logger.info('Starting %s on worker process pid=%d', worker_cls.__name__, os.getpid())
     try:
         worker.run_until_complete()
     except HandledExit:
+        work_logger.debug('worker exited with well handled exception')
         pass
     except Exception as e:
         work_logger.exception('Worker exiting after an unhandled error: %s', e.__class__.__name__)

@@ -219,3 +219,35 @@ async def test_job_timeout(loop, logcap):
     assert ('raise CancelledError\n'
             'concurrent.futures._base.CancelledError\n'
             'arq.work: shutting down worker after 0.10Xs ◆ 2 jobs done ◆ 1 failed ◆ 1 timed out\n') in log
+
+
+# # FIXME not working until https://bitbucket.org/ned/coveragepy/issues/512
+# import time
+# import os
+# import signal
+# from multiprocessing import Process
+# from .example import ActorTest
+#
+#
+# def kill_parent():
+#     time.sleep(0.5)
+#     os.kill(os.getppid(), signal.SIGTERM)
+#
+#
+# def test_repeat_worker_close(tmpworkdir, redis_conn, logcap):
+#     tmpworkdir.join('test.py').write(EXAMPLE_FILE)
+#     loop = asyncio.get_event_loop()
+#
+#     async def enqueue_jobs(_loop):
+#         actor = ActorTest(loop=_loop)
+#         for i in range(1, 6):
+#             await actor.foo(0, i)
+#         await actor.close()
+#
+#     loop.run_until_complete(enqueue_jobs(loop))
+#
+#     Process(target=kill_parent).start()
+#     start_worker('test.py', 'Worker', False)
+#     assert tmpworkdir.join('foo').exists()
+#     assert tmpworkdir.join('foo').read() == '5'  # because WorkerSignalQuit quit
+#     assert logcap.log.count('shutting down worker after') == 1
