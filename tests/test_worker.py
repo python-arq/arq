@@ -42,7 +42,7 @@ async def test_seperate_log_levels(mock_actor_worker, logcap):
     assert ('arq.work: Initialising work manager, batch mode: True\n'
             'arq.work: Running worker with 1 shadow listening to 3 queues\n'
             'arq.work: shadows: MockRedisTestActor | queues: high, dft, low\n'
-            'arq.work: waiting for 1 jobs to finish\n'
+            'arq.work: shutting down worker, waiting for 1 jobs to finish\n'
             'arq.work: shutting down worker after 0.0XXs ◆ 1 jobs done ◆ 0 failed ◆ 0 timed out\n') == log
 
 async def test_wrong_worker(mock_actor_worker, logcap):

@@ -54,6 +54,7 @@ class BaseWorker(RedisMixin):
         self._shadows = {}
         self.start = None
         self.running = True
+        self._closing_lock = asyncio.Lock()
         self._closed = False
         signal.signal(signal.SIGINT, self.handle_sig)
         signal.signal(signal.SIGTERM, self.handle_sig)
@@ -134,9 +135,9 @@ class BaseWorker(RedisMixin):
     async def schedule_job(self, queue, data):
         job = self.job_class(queue, data)
 
-        if len(self._pending_tasks) >= self.max_concurrent_tasks:
-            work_logger.debug('%d pending tasks, waiting for one to finish before creating task for %s',
-                              len(self._pending_tasks), job)
+        pt_cnt = len(self._pending_tasks)
+        if pt_cnt >= self.max_concurrent_tasks:
+            work_logger.debug('%d pending tasks, waiting for one to finish before creating task for %s', pt_cnt, job)
             _, self._pending_tasks = await asyncio.wait(self._pending_tasks, loop=self.loop,
                                                         return_when=asyncio.FIRST_COMPLETED)
 
@@ -212,19 +213,20 @@ class BaseWorker(RedisMixin):
         jobs_logger.exception('%-4s ran in%7.3fs ! %s: %s', j.queue, job_time, j, exc_type)
 
     async def close(self):
-        if self._closed:
-            return
-        if self._pending_tasks:
-            work_logger.info('waiting for %d jobs to finish', len(self._pending_tasks))
-            await asyncio.wait(self._pending_tasks, loop=self.loop)
-        t = (timestamp() - self.start) if self.start else 0
-        work_logger.info('shutting down worker after %0.3fs ◆ %d jobs done ◆ %d failed ◆ %d timed out',
-                         t, self.jobs_complete, self.jobs_failed, self.jobs_timed_out)
+        with await self._closing_lock:
+            if self._closed:
+                return
+            if self._pending_tasks:
+                work_logger.info('shutting down worker, waiting for %d jobs to finish', len(self._pending_tasks))
+                await asyncio.wait(self._pending_tasks, loop=self.loop)
+            t = (timestamp() - self.start) if self.start else 0
+            work_logger.info('shutting down worker after %0.3fs ◆ %d jobs done ◆ %d failed ◆ %d timed out',
+                             t, self.jobs_complete, self.jobs_failed, self.jobs_timed_out)
 
-        if self._shadows:
-            await asyncio.wait([s.close() for s in self._shadows.values()], loop=self.loop)
-        await super().close()
-        self._closed = True
+            if self._shadows:
+                await asyncio.wait([s.close() for s in self._shadows.values()], loop=self.loop)
+            await super().close()
+            self._closed = True
 
     def handle_sig(self, signum, frame):
         self.running = False
