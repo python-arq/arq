@@ -53,11 +53,11 @@ class BaseWorker(RedisMixin):
         self._shadows = {}
         self.start = None
         self.running = True
-        self._closing_lock = asyncio.Lock()
         self._closed = False
         signal.signal(signal.SIGINT, self.handle_sig)
         signal.signal(signal.SIGTERM, self.handle_sig)
         super().__init__(**kwargs)
+        self._closing_lock = asyncio.Lock(loop=self.loop)
 
     async def shadow_factory(self):
         rp = await self.get_redis_pool()
@@ -263,9 +263,9 @@ def import_string(file_path, attr_name):
     return attr
 
 
-def start_worker(worker_path, worker_class, batch):
+def start_worker(worker_path, worker_class, batch, loop=None):
     worker_cls = import_string(worker_path, worker_class)
-    worker = worker_cls(batch=batch)
+    worker = worker_cls(batch=batch, loop=loop)
     work_logger.info('Starting %s on worker process pid=%d', worker_cls.__name__, os.getpid())
     try:
         worker.run_until_complete()

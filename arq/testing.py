@@ -106,12 +106,14 @@ def loop_context(existing_loop=None):
         yield existing_loop
     else:
         _loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(None)
 
         yield _loop
 
         _loop.stop()
         _loop.run_forever()
         _loop.close()
+        asyncio.set_event_loop(None)
 
 
 def pytest_pycollect_makeitem(collector, name, obj):
@@ -163,6 +165,7 @@ def redis_conn(loop):
         await conn.flushall()
         return conn
     conn = loop.run_until_complete(_get_conn())
+    conn.loop = loop
     yield conn
 
     conn.close()

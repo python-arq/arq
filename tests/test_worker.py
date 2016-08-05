@@ -1,4 +1,3 @@
-import asyncio
 import re
 import logging
 
@@ -45,9 +44,9 @@ async def test_seperate_log_levels(mock_actor_worker, logcap):
             'arq.work: shutting down worker, waiting for 1 jobs to finish\n'
             'arq.work: shutting down worker after 0.0XXs ◆ 1 jobs done ◆ 0 failed ◆ 0 timed out\n') == log
 
-async def test_wrong_worker(mock_actor_worker, logcap):
+async def test_wrong_worker(mock_actor_worker, loop, logcap):
     actor, worker = mock_actor_worker
-    actor2 = FoobarActor()
+    actor2 = FoobarActor(loop=loop)
     actor2.mock_data = worker.mock_data
     assert None is await actor2.concat('a', 'b')
     await worker.run()
@@ -96,17 +95,17 @@ def test_import_string_missing_file(tmpworkdir):
         import_string('test.py', 'wrong')
 
 
-async def test_import_start_worker(tmpworkdir, redis_conn, loop):
+def test_import_start_worker(tmpworkdir, redis_conn, loop):
     actor = ActorTest(loop=loop)
-    await actor.foo(1, 2)
+    loop.run_until_complete(actor.foo(1, 2))
 
-    assert await redis_conn.exists(b'arq:q:dft')
-    dft_queue = await redis_conn.lrange(b'arq:q:dft', 0, -1)
+    assert loop.run_until_complete(redis_conn.exists(b'arq:q:dft'))
+    dft_queue = loop.run_until_complete(redis_conn.lrange(b'arq:q:dft', 0, -1))
     assert len(dft_queue) == 1
     tmpworkdir.join('test.py').write(EXAMPLE_FILE)
-    start_worker('test.py', 'Worker', True)
+    start_worker('test.py', 'Worker', True, loop=loop)
     assert tmpworkdir.join('foo').read() == '3'
-    await actor.close()
+    loop.run_until_complete(actor.close())
 
 
 async def test_run_quit(tmpworkdir, redis_conn, actor, logcap):
@@ -136,35 +135,35 @@ async def test_task_exc(redis_conn, actor, logcap):
     assert 'Found task exception "foobar"' in logcap
 
 
-async def test_run_sigint(tmpworkdir, redis_conn, loop, logcap):
+def test_run_sigint(tmpworkdir, redis_conn, loop, logcap):
     logcap.set_level(logging.DEBUG)
     actor = ActorTest(loop=loop)
 
-    await actor.foo(1)
-    await actor.foo(1)
-    await actor.foo(1)
-    await actor.close()
+    loop.run_until_complete(actor.foo(1))
+    loop.run_until_complete(actor.foo(1))
+    loop.run_until_complete(actor.foo(1))
+    loop.run_until_complete(actor.close())
 
     tmpworkdir.join('test.py').write(EXAMPLE_FILE)
     assert not tmpworkdir.join('foo').exists()
-    start_worker('test.py', 'WorkerSignalQuit', False)
+    start_worker('test.py', 'WorkerSignalQuit', False, loop=loop)
     assert tmpworkdir.join('foo').exists()
     assert tmpworkdir.join('foo').read() == '1'
     assert 'got signal: SIGINT, stopping...' in logcap
 
 
-async def test_run_sigint_twice(tmpworkdir, redis_conn, loop, logcap):
+def test_run_sigint_twice(tmpworkdir, redis_conn, loop, logcap):
     logcap.set_level(logging.DEBUG)
     actor = ActorTest(loop=loop)
 
-    await actor.foo(1)
-    await actor.foo(1)
-    await actor.foo(1)
-    await actor.close()
+    loop.run_until_complete(actor.foo(1))
+    loop.run_until_complete(actor.foo(1))
+    loop.run_until_complete(actor.foo(1))
+    loop.run_until_complete(actor.close())
 
     tmpworkdir.join('test.py').write(EXAMPLE_FILE)
     with pytest.raises(ImmediateExit):
-        start_worker('test.py', 'WorkerSignalTwiceQuit', False)
+        start_worker('test.py', 'WorkerSignalTwiceQuit', False, loop=loop)
     assert tmpworkdir.join('foo').exists()
     assert tmpworkdir.join('foo').read() == '1'
     assert 'Worker exiting after an unhandled error: ImmediateExit' in logcap
@@ -178,10 +177,9 @@ async def test_non_existent_function(redis_conn, actor, logcap):
     assert 'Job Error: shadow class "TestActor" has not function "doesnt_exist"' in logcap
 
 
-def test_no_jobs():
-    loop = asyncio.get_event_loop()
-    mock_actor = MockRedisTestActor()
-    mock_worker = MockRedisWorker(batch=True)
+def test_no_jobs(loop):
+    mock_actor = MockRedisTestActor(loop=loop)
+    mock_worker = MockRedisWorker(batch=True, loop=loop)
     mock_worker.mock_data = mock_actor.mock_data
 
     loop.run_until_complete(mock_actor.boom())
