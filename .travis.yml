@@ -9,6 +9,7 @@ install:
 - pip install -r tests/requirements.txt
 script:
 - flake8 arq/ tests/
+- ./tests/isort_test.sh
 - py.test --cov=arq
 after_success:
 - coverage combine

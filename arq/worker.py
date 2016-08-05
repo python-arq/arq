@@ -1,16 +1,16 @@
 import asyncio
-from importlib import import_module, reload
 import logging
-from multiprocessing import Process
 import os
 import signal
-from signal import Signals
 import sys
 import time
+from importlib import import_module, reload
+from multiprocessing import Process
+from signal import Signals
 
 from .logs import default_log_config
 from .main import Actor, Job
-from .utils import RedisMixin, timestamp, cached_property, gen_random, ellipsis
+from .utils import RedisMixin, cached_property, ellipsis, gen_random, timestamp
 
 __all__ = ['BaseWorker', 'import_string', 'RunWorkerProcess']
 

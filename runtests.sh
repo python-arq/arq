@@ -6,8 +6,11 @@ if [ $pytest == 0 ] ; then
     coverage combine
     coverage html
 fi
+./tests/isort_test.sh
 echo "pytest exit code: ${pytest}"
+isort=$?
+echo "isort exit code:  ${isort}"
 flake8 arq/ tests/
 flake=$?
 echo "flake8 exit code: ${flake}"
-exit $((${flake} + ${pytest}))
+exit $((${pytest} + ${flake} + ${isort}))

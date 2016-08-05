@@ -4,8 +4,7 @@ from functools import wraps
 
 import msgpack
 
-from .utils import RedisMixin, timestamp, ellipsis
-
+from .utils import RedisMixin, ellipsis, timestamp
 
 __all__ = ['Actor', 'concurrent', 'Job']
 

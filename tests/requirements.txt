@@ -1,6 +1,7 @@
 codecov
 coverage
 flake8
+isort
 pep8
 pytest
 pytest-cov

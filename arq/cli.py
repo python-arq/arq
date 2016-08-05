@@ -1,9 +1,9 @@
 import logging.config
+
 import click
 
 from .version import VERSION
 from .worker import RunWorkerProcess, import_string
-
 
 batch_help = 'Batch mode: exit once no jobs are found in any queue.'
 verbose_help = 'Enable verbose output.'

@@ -7,7 +7,7 @@ import os
 import pytest
 from aioredis import create_redis
 
-from arq import RedisMixin, timestamp, BaseWorker
+from arq import BaseWorker, RedisMixin, timestamp
 
 logger = logging.getLogger('arq.mock')
 
