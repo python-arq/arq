@@ -28,8 +28,8 @@ class ConnectionSettings:
 
 class RedisMixin:
     def __init__(self, *, loop=None, settings: ConnectionSettings=None, existing_pool=None):
-        self.loop = loop or asyncio.get_event_loop()
-        self._settings = settings or ConnectionSettings()
+        self.loop = loop or getattr(self, 'loop', None) or asyncio.get_event_loop()
+        self._settings = settings or getattr(self, '_settings', None) or ConnectionSettings()
         self._redis_pool = existing_pool
 
     async def create_redis_pool(self):
