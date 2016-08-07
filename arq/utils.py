@@ -61,6 +61,8 @@ class RedisMixin:
                  loop: asyncio.AbstractEventLoop=None,
                  settings: ConnectionSettings=None,
                  existing_pool: RedisPool=None):
+        # the "or getattr(...) or" seems odd but it allows the mixin to work with subclasses with initialise
+        # loop or settings before calling super().__init__ and don't pass those parameters.
         self.loop = loop or getattr(self, 'loop', None) or asyncio.get_event_loop()
         self._settings = settings or getattr(self, '_settings', None) or ConnectionSettings()
         self._redis_pool = existing_pool
