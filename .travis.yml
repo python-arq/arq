@@ -6,7 +6,7 @@ python:
 - '3.5'
 install:
 - pip install -e .
-- pip install -r tests/requirements.txt
+- pip install -U -r tests/requirements.txt
 script:
 - flake8 arq/ tests/
 - ./tests/isort_test.sh

@@ -1,7 +1,7 @@
 import asyncio
 from pathlib import Path
 
-from arq import concurrent, Actor, BaseWorker
+from arq import concurrent, Actor, BaseWorker, ConnectionSettings
 from arq.testing import MockRedisMixin
 
 
@@ -79,6 +79,15 @@ class MockRedisWorkerQuit(MockRedisWorker):
 
 class FoobarActor(MockRedisTestActor):
     name = 'foobar'
+
+
+class NonSettingParent:
+    __dict__ = {1: 2}
+
+
+class CustomSettings(NonSettingParent, ConnectionSettings):
+    X_THING = 2
+    A_THING = 1
 
 
 with Path(__file__).resolve().parent.joinpath('example.py').open() as f:

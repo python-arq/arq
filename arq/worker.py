@@ -61,7 +61,7 @@ class BaseWorker(RedisMixin):
 
     async def shadow_factory(self):
         rp = await self.get_redis_pool()
-        shadows = [s(is_shadow=True, loop=self.loop, existing_pool=rp) for s in self.shadows]
+        shadows = [s(settings=self._settings, is_shadow=True, loop=self.loop, existing_pool=rp) for s in self.shadows]
         return {w.name: w for w in shadows}
 
     @classmethod

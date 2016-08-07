@@ -1,9 +1,11 @@
 import asyncio
 import base64
 import os
+from collections import OrderedDict
 from datetime import datetime
 
 import aioredis
+from aioredis.pool import RedisPool
 
 __all__ = [
     'ConnectionSettings',
@@ -13,7 +15,28 @@ __all__ = [
 ]
 
 
-class ConnectionSettings:
+class SettingsMeta(type):
+    __doc__ = 'Settings'
+    __dict__ = None
+
+    @classmethod
+    def __prepare__(mcs, *args, **kwargs):
+        return OrderedDict()
+
+    def __new__(mcs, cls, bases, classdict):
+        d = []
+        for base in reversed(bases):
+            if issubclass(base, ConnectionSettings):
+                d.extend(base.__dict__.items())
+
+        for k, v in classdict.items():
+            if k[0] != '_' and k.upper() == k:
+                d.append((k, v))
+        classdict['__dict__'] = OrderedDict(d)
+        return super().__new__(mcs, cls, bases, classdict)
+
+
+class ConnectionSettings(metaclass=SettingsMeta):
     R_HOST = 'localhost'
     R_PORT = 6379
     R_DATABASE = 0
@@ -25,9 +48,19 @@ class ConnectionSettings:
                 raise TypeError('{} is not a valid setting name'.format(name))
             setattr(self, name, value)
 
+    @property
+    def dict(self):
+        return self.__dict__
+
+    def __iter__(self):
+        yield from self.__dict__.items()
+
 
 class RedisMixin:
-    def __init__(self, *, loop=None, settings: ConnectionSettings=None, existing_pool=None):
+    def __init__(self, *,
+                 loop: asyncio.AbstractEventLoop=None,
+                 settings: ConnectionSettings=None,
+                 existing_pool: RedisPool=None):
         self.loop = loop or getattr(self, 'loop', None) or asyncio.get_event_loop()
         self._settings = settings or getattr(self, '_settings', None) or ConnectionSettings()
         self._redis_pool = existing_pool
