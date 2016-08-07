@@ -1,4 +1,7 @@
 import asyncio
+import os
+import time
+import signal
 from pathlib import Path
 
 from arq import concurrent, Actor, BaseWorker, ConnectionSettings
@@ -88,6 +91,11 @@ class NonSettingParent:
 class CustomSettings(NonSettingParent, ConnectionSettings):
     X_THING = 2
     A_THING = 1
+
+
+def kill_parent():
+    time.sleep(0.5)
+    os.kill(os.getppid(), signal.SIGTERM)
 
 
 with Path(__file__).resolve().parent.joinpath('example.py').open() as f:

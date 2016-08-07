@@ -1,11 +1,13 @@
-import re
+import asyncio
 import logging
+import re
+from multiprocessing import Process
 
 import pytest
 
 from arq.worker import import_string, start_worker, ImmediateExit
 
-from .fixtures import (Worker, EXAMPLE_FILE, WorkerQuit, WorkerFail, FoobarActor,
+from .fixtures import (Worker, EXAMPLE_FILE, WorkerQuit, WorkerFail, FoobarActor, kill_parent,
                        MockRedisWorkerQuit, MockRedisTestActor, MockRedisWorker)
 from .example import ActorTest
 
@@ -219,33 +221,20 @@ async def test_job_timeout(loop, logcap):
             'arq.work: shutting down worker after 0.10Xs ◆ 2 jobs done ◆ 1 failed ◆ 1 timed out\n') in log
 
 
-# # FIXME not working until https://bitbucket.org/ned/coveragepy/issues/512
-# import time
-# import os
-# import signal
-# from multiprocessing import Process
-# from .example import ActorTest
-#
-#
-# def kill_parent():
-#     time.sleep(0.5)
-#     os.kill(os.getppid(), signal.SIGTERM)
-#
-#
-# def test_repeat_worker_close(tmpworkdir, redis_conn, logcap):
-#     tmpworkdir.join('test.py').write(EXAMPLE_FILE)
-#     loop = asyncio.get_event_loop()
-#
-#     async def enqueue_jobs(_loop):
-#         actor = ActorTest(loop=_loop)
-#         for i in range(1, 6):
-#             await actor.foo(0, i)
-#         await actor.close()
-#
-#     loop.run_until_complete(enqueue_jobs(loop))
-#
-#     Process(target=kill_parent).start()
-#     start_worker('test.py', 'Worker', False)
-#     assert tmpworkdir.join('foo').exists()
-#     assert tmpworkdir.join('foo').read() == '5'  # because WorkerSignalQuit quit
-#     assert logcap.log.count('shutting down worker after') == 1
+def test_repeat_worker_close(tmpworkdir, redis_conn, logcap):
+    tmpworkdir.join('test.py').write(EXAMPLE_FILE)
+    loop = asyncio.new_event_loop()
+
+    async def enqueue_jobs(_loop):
+        actor = ActorTest(loop=_loop)
+        for i in range(1, 6):
+            await actor.foo(0, i)
+        await actor.close()
+
+    loop.run_until_complete(enqueue_jobs(loop))
+
+    Process(target=kill_parent).start()
+    start_worker('test.py', 'Worker', False, loop=loop)
+    assert tmpworkdir.join('foo').exists()
+    assert tmpworkdir.join('foo').read() == '5'  # because WorkerSignalQuit quit
+    assert logcap.log.count('shutting down worker after') == 1
