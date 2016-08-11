@@ -1,5 +1,6 @@
 # flake8: noqa
-from .utils import *
+from .jobs import *
 from .main import *
-from .worker import *
+from .utils import *
 from .version import VERSION
+from .worker import *

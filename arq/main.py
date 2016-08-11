@@ -2,42 +2,12 @@ import inspect
 import logging
 from functools import wraps
 
-import msgpack
+from .jobs import ArqSerialiseError, Job
+from .utils import RedisMixin
 
-from .utils import RedisMixin, ellipsis, timestamp
-
-__all__ = ['Actor', 'concurrent', 'Job']
+__all__ = ['Actor', 'concurrent']
 
 main_logger = logging.getLogger('arq.main')
-
-
-class Job:
-    __slots__ = ('queue', 'queued_at', 'class_name', 'func_name', 'args', 'kwargs')
-
-    def __init__(self, queue, data):
-        self.queue = queue
-        data = msgpack.unpackb(data, encoding='utf8')
-        self.queued_at, self.class_name, self.func_name, self.args, self.kwargs = data
-        self.queued_at /= 1000
-
-    @classmethod
-    def encode(cls, *, queued_at=None, class_name, func_name, args, kwargs):
-        queued_at = queued_at or int(timestamp() * 1000)
-        return msgpack.packb([queued_at, class_name, func_name, args, kwargs], use_bin_type=True)
-
-    def __str__(self):
-        arguments = ''
-        if self.args:
-            arguments = ', '.join(map(str, self.args))
-        if self.kwargs:
-            if arguments:
-                arguments += ', '
-            arguments += ', '.join('{}={!r}'.format(*kv) for kv in sorted(self.kwargs.items()))
-
-        return '{s.class_name}.{s.func_name}({args})'.format(s=self, args=ellipsis(arguments))
-
-    def __repr__(self):
-        return '<Job {} on {}>'.format(self, self.queue)
 
 
 class ActorMeta(type):
@@ -83,7 +53,10 @@ class Actor(RedisMixin, metaclass=ActorMeta):
 
     async def enqueue_job(self, func_name, *args, queue=None, **kwargs):
         queue = queue or self.DEFAULT_QUEUE
-        data = self.job_class.encode(class_name=self.name, func_name=func_name, args=args, kwargs=kwargs)
+        try:
+            data = self.job_class.encode(class_name=self.name, func_name=func_name, args=args, kwargs=kwargs)
+        except TypeError as e:
+            raise ArqSerialiseError(str(e)) from e
         main_logger.debug('%s.%s ▶ %s', self.name, func_name, queue)
 
         # use the pool directly rather than get_redis_conn to avoid one extra await

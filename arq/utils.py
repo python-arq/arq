@@ -87,7 +87,7 @@ class RedisMixin:
             await self._redis_pool.clear()
 
 
-_EPOCH = datetime(2016, 1, 1)
+_EPOCH = datetime(1970, 1, 1)
 
 
 def timestamp():

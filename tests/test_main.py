@@ -19,7 +19,7 @@ async def test_simple_job_dispatch(loop, debug):
     assert len(v) == 1
     data = msgpack.unpackb(v[0], encoding='utf8')
     # timestamp
-    assert 1e10 < data.pop(0) < 2e10
+    assert 1e12 < data.pop(0) < 3e12
     assert data == ['MockRedisTestActor', 'add_numbers', [1, 2], {}]
 
 
@@ -32,7 +32,7 @@ async def test_enqueue_redis_job(actor, redis_conn):
     assert len(dft_queue) == 1
     data = msgpack.unpackb(dft_queue[0], encoding='utf8')
     # timestamp
-    assert 1e10 < data.pop(0) < 2e10
+    assert 1e12 < data.pop(0) < 3e12
     assert data == ['TestActor', 'add_numbers', [1, 2], {}]
 
 
