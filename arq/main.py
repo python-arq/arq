@@ -2,7 +2,7 @@ import inspect
 import logging
 from functools import wraps
 
-from .jobs import ArqSerialiseError, Job
+from .jobs import Job, JobSerialisationError
 from .utils import RedisMixin
 
 __all__ = ['Actor', 'concurrent']
@@ -56,7 +56,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         try:
             data = self.job_class.encode(class_name=self.name, func_name=func_name, args=args, kwargs=kwargs)
         except TypeError as e:
-            raise ArqSerialiseError(str(e)) from e
+            raise JobSerialisationError(str(e)) from e
         main_logger.debug('%s.%s ▶ %s', self.name, func_name, queue)
 
         # use the pool directly rather than get_redis_conn to avoid one extra await

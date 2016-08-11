@@ -2,7 +2,7 @@ import asyncio
 import base64
 import os
 from collections import OrderedDict
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import aioredis
 from aioredis.pool import RedisPool
@@ -87,11 +87,19 @@ class RedisMixin:
             await self._redis_pool.clear()
 
 
-_EPOCH = datetime(1970, 1, 1)
+def create_tz(seconds=0):
+    if seconds == 0:
+        return timezone.utc
+    else:
+        return timezone(timedelta(seconds=seconds))
+
+
+EPOCH = datetime(1970, 1, 1)
+EPOCH_TZ = EPOCH.replace(tzinfo=create_tz())
 
 
 def timestamp():
-    return (datetime.now() - _EPOCH).total_seconds()
+    return (datetime.now() - EPOCH).total_seconds()
 
 
 def gen_random(length=20):

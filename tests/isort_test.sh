@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-isort_result=$(isort -rc --wrap-length 120 --diff arq)
+isort_result=$(isort -rc -w 120 --diff arq)
 if [[ $isort_result == *"arq"* ]] ; then
     printf "changes:\n $isort_result\n\nisort indicates there's an import order problem\n"
     exit 1

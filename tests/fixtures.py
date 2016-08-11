@@ -16,6 +16,21 @@ class TestActor(Actor):
             r = a + b
             f.write('{}'.format(r))
 
+    @concurrent
+    async def subtract(self, a, b):
+        with open('subtract', 'w') as f:
+            try:
+                r = a - b
+            except TypeError as e:
+                r = str(e)
+            f.write('{}'.format(r))
+
+    @concurrent
+    async def save_values(self, *args):
+        with open('values', 'w') as f:
+            r = ', '.join('<{}>'.format(arg) for arg in args)
+            f.write('{}'.format(r))
+
     @concurrent(Actor.HIGH_QUEUE)
     async def high_add_numbers(self, a, b, c=4):
         with open('high_add_numbers', 'w') as f:
