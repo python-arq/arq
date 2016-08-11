@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import re
 from multiprocessing import Process
@@ -8,7 +9,7 @@ import pytest
 from arq.worker import import_string, start_worker, ImmediateExit
 
 from .fixtures import (Worker, EXAMPLE_FILE, WorkerQuit, WorkerFail, FoobarActor, kill_parent,
-                       MockRedisWorkerQuit, MockRedisTestActor, MockRedisWorker)
+                       MockRedisWorkerQuit, MockRedisTestActor, MockRedisWorker, CustomSettings)
 from .example import ActorTest
 
 
@@ -238,3 +239,18 @@ def test_repeat_worker_close(tmpworkdir, redis_conn, logcap):
     assert tmpworkdir.join('foo').exists()
     assert tmpworkdir.join('foo').read() == '5'  # because WorkerSignalQuit quit
     assert logcap.log.count('shutting down worker after') == 1
+
+
+async def test_custom_settings(actor, redis_conn):
+    await actor.store_info()
+
+    settings = CustomSettings()
+    worker = Worker(loop=actor.loop, batch=True, settings=settings)
+    await worker.run()
+    info = await redis_conn.get(b'actor_info')
+    info = info.decode()
+    info = json.loads(info)
+    assert info['is_shadow'] is True
+    assert info['settings']['data']['X_THING'] == 2
+
+    await worker.close()

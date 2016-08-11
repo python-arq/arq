@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import time
 import signal
@@ -43,6 +44,22 @@ class TestActor(Actor):
 
     async def direct_method(self, a, b):
         return a + b
+
+    @concurrent
+    async def store_info(self, key_suffix=''):
+        data = {
+            'self': str(self),
+            'class': self.__class__.__name__,
+            'is_shadow': self.is_shadow,
+            'loop': str(self.loop),
+            'settings': {
+                'data': dict(self._settings),
+                'class': self._settings.__class__.__name__
+            },
+        }
+        async with await self.get_redis_conn() as redis:
+            await redis.set('actor_info' + key_suffix, json.dumps(data, indent=2))
+        return data
 
 
 class MockRedisTestActor(MockRedisMixin, TestActor):
