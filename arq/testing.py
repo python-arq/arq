@@ -12,6 +12,18 @@ from arq import BaseWorker, RedisMixin, timestamp
 logger = logging.getLogger('arq.mock')
 
 
+class RaiseWorker(BaseWorker):
+    """
+    Worker which raises exceptions rather than logging them. Useful for testing.
+    """
+    @classmethod
+    def handle_execute_exc(cls, started_at, exc, j):
+        raise exc
+
+    def handle_prepare_exc(self, msg):
+        raise RuntimeError(msg)
+
+
 class MockRedis:
     def __init__(self, *, loop=None, data=None):
         self.loop = loop or asyncio.get_event_loop()

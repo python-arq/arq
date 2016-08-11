@@ -4,11 +4,12 @@ import re
 from multiprocessing import Process
 
 import pytest
+from arq.testing import RaiseWorker
 
 from arq.worker import import_string, start_worker, ImmediateExit
 
 from .fixtures import (Worker, EXAMPLE_FILE, WorkerQuit, WorkerFail, FoobarActor, kill_parent,
-                       MockRedisWorkerQuit, MockRedisTestActor, MockRedisWorker)
+                       MockRedisWorkerQuit, MockRedisTestActor, MockRedisWorker, TestActor)
 from .example import ActorTest
 
 
@@ -176,7 +177,7 @@ async def test_non_existent_function(redis_conn, actor, logcap):
     worker = Worker(batch=True, loop=actor.loop)
     await worker.run()
     assert worker.jobs_failed == 1
-    assert 'Job Error: shadow class "TestActor" has not function "doesnt_exist"' in logcap
+    assert 'Job Error: shadow class "TestActor" has no function "doesnt_exist"' in logcap
 
 
 def test_no_jobs(loop):
@@ -238,3 +239,23 @@ def test_repeat_worker_close(tmpworkdir, redis_conn, logcap):
     assert tmpworkdir.join('foo').exists()
     assert tmpworkdir.join('foo').read() == '5'  # because WorkerSignalQuit quit
     assert logcap.log.count('shutting down worker after') == 1
+
+
+async def test_raise_worker_execute(redis_conn, actor):
+    worker = RaiseWorker(batch=True, loop=actor.loop, shadows=[TestActor])
+
+    await actor.boom()
+    with pytest.raises(RuntimeError) as excinfo:
+        await worker.run()
+    assert excinfo.value.args[0] == 'boom'
+    await worker.close()
+
+
+async def test_raise_worker_prepare(redis_conn, actor):
+    worker = RaiseWorker(batch=True, loop=actor.loop, shadows=[TestActor])
+
+    await actor.enqueue_job('foobar', 1, 2)
+    with pytest.raises(RuntimeError) as excinfo:
+        await worker.run()
+    assert excinfo.value.args[0] == 'Job Error: shadow class "TestActor" has no function "foobar"'
+    await worker.close()

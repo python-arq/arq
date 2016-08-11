@@ -89,3 +89,12 @@ async def test_encode_non_datetimes(tmpworkdir, loop, redis_conn):
     assert tmpworkdir.join('values').exists()
     assert tmpworkdir.join('values').read() == "<{'a': 1}>, <{'a': 2}>"
     await worker.close()
+
+
+async def test_wrong_job_class(loop):
+    worker = DatetimeWorker(loop=loop, batch=True, shadows=[TestActor])
+    with pytest.raises(TypeError) as excinfo:
+        await worker.run()
+    assert excinfo.value.args[0].endswith("has a different job class to this worker: "
+                                          "<class 'arq.jobs.Job'> != <class 'arq.jobs.DatetimeJob'>")
+    await worker.close()

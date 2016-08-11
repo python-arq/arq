@@ -37,14 +37,15 @@ class BaseWorker(RedisMixin):
     job_class = Job
     shadows = None
 
-    def __init__(self, *, batch=False, shadows=None, queues=None, timeout_seconds=None, **kwargs):
+    def __init__(self, *, batch=False, shadows=None, job_class=None, queues=None, timeout_seconds=None, **kwargs):
         self._batch_mode = batch
         if self.shadows is None and shadows is None:
             raise TypeError('shadows not defined on worker')
         if shadows:
             self.shadows = shadows
-        self.timeout_seconds = timeout_seconds or self.timeout_seconds
+        self.job_class = job_class or self.job_class
         self._queues = queues
+        self.timeout_seconds = timeout_seconds or self.timeout_seconds
         self._pending_tasks = set()
         self.jobs_complete = 0
         self.jobs_failed = 0
@@ -62,6 +63,10 @@ class BaseWorker(RedisMixin):
     async def shadow_factory(self):
         rp = await self.get_redis_pool()
         shadows = [s(settings=self._settings, is_shadow=True, loop=self.loop, existing_pool=rp) for s in self.shadows]
+        for shadow in shadows:
+            if shadow.job_class != self.job_class:
+                raise TypeError('{s} has a different job class to this worker: '
+                                '{s.job_class} != {self.job_class}'.format(s=shadow, self=self))
         return {w.name: w for w in shadows}
 
     @classmethod
@@ -155,10 +160,7 @@ class BaseWorker(RedisMixin):
         try:
             shadow = self._shadows[j.class_name]
         except KeyError:
-            self.jobs_failed += 1
-            jobs_logger.error('Job Error: unable to find shadow for %r', j)
-            # exit with zero so we don't increment jobs_failed twice
-            return 0
+            return self.handle_prepare_exc('Job Error: unable to find shadow for {!r}'.format(j))
         try:
             func = getattr(shadow, j.func_name + '_direct')
         except AttributeError:
@@ -166,9 +168,8 @@ class BaseWorker(RedisMixin):
             try:
                 func = getattr(shadow, j.func_name)
             except AttributeError:
-                self.jobs_failed += 1
-                jobs_logger.error('Job Error: shadow class "%s" has not function "%s"', shadow.name, j.func_name)
-                return 0
+                msg = 'Job Error: shadow class "{}" has no function "{}"'.format(shadow.name, j.func_name)
+                return self.handle_prepare_exc(msg)
 
         started_at = timestamp()
         queue_time = started_at - j.queued_at
@@ -176,7 +177,7 @@ class BaseWorker(RedisMixin):
         try:
             result = await func(*j.args, **j.kwargs)
         except Exception as e:
-            await self.handle_exc(started_at, e, j)
+            self.handle_execute_exc(started_at, e, j)
             return 1
         else:
             self.log_job_result(started_at, result, j)
@@ -205,8 +206,14 @@ class BaseWorker(RedisMixin):
         sr = '' if result is None else ellipsis(repr(result))
         jobs_logger.info('%-4s ran in%7.3fs ← %s.%s ● %s', j.queue, job_time, j.class_name, j.func_name, sr)
 
+    def handle_prepare_exc(self, msg):
+        self.jobs_failed += 1
+        jobs_logger.error(msg)
+        # exit with zero so we don't increment jobs_failed twice
+        return 0
+
     @classmethod
-    async def handle_exc(cls, started_at, exc, j):
+    def handle_execute_exc(cls, started_at, exc, j):
         job_time = timestamp() - started_at
         exc_type = exc.__class__.__name__
         jobs_logger.exception('%-4s ran in%7.3fs ! %s: %s', j.queue, job_time, j, exc_type)
