@@ -55,6 +55,7 @@ async def test_dispatch_work(tmpworkdir, loop, logcap, redis_conn):
     assert ('MockRedisTestActor.add_numbers ▶ dft\n'
             'MockRedisTestActor.high_add_numbers ▶ high\n'
             'Initialising work manager, batch mode: True\n'
+            'Using first shadows job class "Job"\n'
             'Running worker with 1 shadow listening to 3 queues\n'
             'shadows: MockRedisTestActor | queues: high, dft, low\n'
             'populating quit queue to prompt exit: QUIT-<random>\n'

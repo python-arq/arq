@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from arq.jobs import DatetimeJob, JobSerialisationError
+from arq.jobs import DatetimeJob, JobSerialisationError, Job
 from arq.worker import BaseWorker
 
 from .fixtures import Worker, CustomSettings, TestActor
@@ -92,9 +92,17 @@ async def test_encode_non_datetimes(tmpworkdir, loop, redis_conn):
 
 
 async def test_wrong_job_class(loop):
-    worker = DatetimeWorker(loop=loop, batch=True, shadows=[TestActor])
+    worker = DatetimeWorker(loop=loop, batch=True, shadows=[TestActor, DatetimeActor])
     with pytest.raises(TypeError) as excinfo:
         await worker.run()
-    assert excinfo.value.args[0].endswith("has a different job class to this worker: "
-                                          "<class 'arq.jobs.Job'> != <class 'arq.jobs.DatetimeJob'>")
+    assert excinfo.value.args[0].endswith("has a different job class to the first shadow: "
+                                          "<class 'arq.jobs.DatetimeJob'> != <class 'arq.jobs.Job'>")
+    await worker.close()
+
+
+async def test_switch_job_class(loop):
+    worker = DatetimeWorker(loop=loop, batch=True, shadows=[TestActor])
+    assert worker.job_class is None
+    await worker.run()
+    assert worker.job_class == Job
     await worker.close()

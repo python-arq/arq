@@ -9,7 +9,7 @@ from multiprocessing import Process
 from signal import Signals
 
 from .logs import default_log_config
-from .main import Actor, Job
+from .main import Actor
 from .utils import RedisMixin, cached_property, ellipsis, gen_random, timestamp
 
 __all__ = ['BaseWorker', 'import_string', 'RunWorkerProcess']
@@ -34,16 +34,14 @@ class BaseWorker(RedisMixin):
     max_concurrent_tasks = 50
     shutdown_delay = 6
     timeout_seconds = 60
-    job_class = Job
     shadows = None
 
-    def __init__(self, *, batch=False, shadows=None, job_class=None, queues=None, timeout_seconds=None, **kwargs):
+    def __init__(self, *, batch=False, shadows=None, queues=None, timeout_seconds=None, **kwargs):
         self._batch_mode = batch
         if self.shadows is None and shadows is None:
             raise TypeError('shadows not defined on worker')
         if shadows:
             self.shadows = shadows
-        self.job_class = job_class or self.job_class
         self._queues = queues
         self.timeout_seconds = timeout_seconds or self.timeout_seconds
         self._pending_tasks = set()
@@ -55,6 +53,7 @@ class BaseWorker(RedisMixin):
         self.start = None
         self.running = True
         self._closed = False
+        self.job_class = None
         signal.signal(signal.SIGINT, self.handle_sig)
         signal.signal(signal.SIGTERM, self.handle_sig)
         super().__init__(**kwargs)
@@ -62,12 +61,8 @@ class BaseWorker(RedisMixin):
 
     async def shadow_factory(self):
         rp = await self.get_redis_pool()
-        shadows = [s(settings=self._settings, is_shadow=True, loop=self.loop, existing_pool=rp) for s in self.shadows]
-        for shadow in shadows:
-            if shadow.job_class != self.job_class:
-                raise TypeError('{s} has a different job class to this worker: '
-                                '{s.job_class} != {self.job_class}'.format(s=shadow, self=self))
-        return {w.name: w for w in shadows}
+        s = [s(settings=self._settings, is_shadow=True, loop=self.loop, existing_pool=rp) for s in self.shadows]
+        return s
 
     @classmethod
     def logging_config(cls, verbose):
@@ -98,8 +93,15 @@ class BaseWorker(RedisMixin):
     async def run(self):
         work_logger.info('Initialising work manager, batch mode: %s', self._batch_mode)
 
-        self._shadows = await self.shadow_factory()
-        assert isinstance(self._shadows, dict), 'shadow_factory should return a dict not %s' % type(self._shadows)
+        shadows = await self.shadow_factory()
+        assert isinstance(shadows, list), 'shadow_factory should return a list not %s' % type(shadows)
+        self.job_class = shadows[0].job_class
+        work_logger.debug('Using first shadows job class "%s"', self.job_class.__name__)
+        for shadow in shadows[1:]:
+            if shadow.job_class != self.job_class:
+                raise TypeError('{s} has a different job class to the first shadow: '
+                                '{s.job_class} != {self.job_class}'.format(s=shadow, self=self))
+        self._shadows = {w.name: w for w in shadows}
 
         work_logger.info('Running worker with %s shadow%s listening to %d queues',
                          len(self._shadows), '' if len(self._shadows) == 1 else 's', len(self.queues))
