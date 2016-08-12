@@ -15,7 +15,6 @@ class DatetimeActor(TestActor):
 
 
 class DatetimeWorker(BaseWorker):
-    job_class = DatetimeJob
     shadows = [DatetimeActor]
 
 
@@ -34,20 +33,6 @@ async def test_custom_settings(actor, redis_conn):
     await worker.close()
 
 
-async def test_bad_encoder(loop):
-    actor = TestActor(loop=loop)
-    with pytest.raises(JobSerialisationError):
-        await actor.save_values(datetime.now())
-    await actor.close()
-
-
-async def test_bad_encoder_dt(loop):
-    actor = DatetimeActor(loop=loop)
-    with pytest.raises(JobSerialisationError):
-        await actor.subtract(datetime)
-    await actor.close()
-
-
 async def test_encode_datetimes(tmpworkdir, loop, redis_conn):
     actor = DatetimeActor(loop=loop)
     d1 = datetime(2032, 2, 2, 9, 0)
@@ -62,6 +47,20 @@ async def test_encode_datetimes(tmpworkdir, loop, redis_conn):
     assert tmpworkdir.join('subtract').read() == '30 days, 0:00:00'
 
     await worker.close()
+
+
+async def test_bad_encoder(loop):
+    actor = TestActor(loop=loop)
+    with pytest.raises(JobSerialisationError):
+        await actor.save_values(datetime.now())
+    await actor.close()
+
+
+async def test_bad_encoder_dt(loop):
+    actor = DatetimeActor(loop=loop)
+    with pytest.raises(JobSerialisationError):
+        await actor.subtract(datetime)
+    await actor.close()
 
 
 async def test_encode_datetimes_tz(tmpworkdir, loop, redis_conn):
@@ -89,6 +88,20 @@ async def test_encode_non_datetimes(tmpworkdir, loop, redis_conn):
     assert worker.jobs_failed == 0
     assert tmpworkdir.join('values').exists()
     assert tmpworkdir.join('values').read() == "<{'a': 1}>, <{'a': 2}>"
+    await worker.close()
+
+
+async def test_existing_shadows(loop, redis_conn):
+    actor = DatetimeActor(loop=loop)
+    await actor.store_info()
+
+    worker = BaseWorker(loop=actor.loop, burst=True, existing_shadows=[actor])
+    await worker.run()
+    info = await redis_conn.get(b'actor_info')
+    info = json.loads(info.decode())
+    assert info['class'] == 'DatetimeActor'
+    assert info['is_shadow'] is False  # because it was initialised by us
+    assert worker.jobs_failed == 0
     await worker.close()
 
 

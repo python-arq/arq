@@ -36,11 +36,13 @@ class BaseWorker(RedisMixin):
     timeout_seconds = 60
     shadows = None
 
-    def __init__(self, *, burst=False, shadows=None, queues=None, timeout_seconds=None, **kwargs):
+    def __init__(self, *, burst=False, shadows=None, queues=None, timeout_seconds=None, existing_shadows=None,
+                 **kwargs):
         self._burst_mode = burst
         self.shadows = shadows or self.shadows
         self._queues = queues
         self.timeout_seconds = timeout_seconds or self.timeout_seconds
+        self.existing_shadows = existing_shadows
         self._pending_tasks = set()
 
         self.jobs_complete, self.jobs_failed, self.jobs_timed_out = 0, 0, 0
@@ -56,11 +58,12 @@ class BaseWorker(RedisMixin):
         self._closing_lock = asyncio.Lock(loop=self.loop)
 
     async def shadow_factory(self):
+        if self.existing_shadows:
+            return self.existing_shadows
         if self.shadows is None:
             raise TypeError('shadows not defined on worker')
         rp = await self.get_redis_pool()
-        s = [s(settings=self._settings, is_shadow=True, loop=self.loop, existing_pool=rp) for s in self.shadows]
-        return s
+        return [s(settings=self._settings, is_shadow=True, loop=self.loop, existing_pool=rp) for s in self.shadows]
 
     @classmethod
     def logging_config(cls, verbose):
@@ -88,7 +91,7 @@ class BaseWorker(RedisMixin):
     def run_until_complete(self):
         self.loop.run_until_complete(self.run())
 
-    async def run(self):
+    async def run(self, reuse=False):
         work_logger.info('Initialising work manager, burst mode: %s', self._burst_mode)
 
         shadows = await self.shadow_factory()
@@ -109,7 +112,11 @@ class BaseWorker(RedisMixin):
         try:
             await self.work()
         finally:
-            await self.close()
+            if reuse:
+                work_logger.info('waiting for %d jobs to finish', len(self._pending_tasks))
+                await asyncio.gather(*self._pending_tasks, loop=self.loop)
+            else:
+                await self.close()
             if self._task_exception:
                 work_logger.error('Found task exception "%s"', self._task_exception)
                 raise self._task_exception

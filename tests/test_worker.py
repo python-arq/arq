@@ -260,3 +260,18 @@ async def test_raise_worker_prepare(redis_conn, actor):
         await worker.run()
     assert excinfo.value.args[0] == 'Job Error: shadow class "TestActor" has no function "foobar"'
     await worker.close()
+
+
+async def test_rerun_worker(tmpworkdir, redis_conn, actor):
+    worker = Worker(burst=True, loop=actor.loop)
+
+    await actor.add_numbers(1, 2)
+    assert not tmpworkdir.join('add_numbers').exists()
+    await worker.run(reuse=True)
+    assert tmpworkdir.join('add_numbers').read() == '3'
+    assert worker.jobs_failed == 0
+
+    await actor.add_numbers(3, 4)
+    await worker.run()
+    assert tmpworkdir.join('add_numbers').read() == '7'
+    assert worker.jobs_failed == 0
