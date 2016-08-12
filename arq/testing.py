@@ -196,9 +196,10 @@ class StreamLog:
         self.loggers = []
         self.set_loggers()
 
-    def set_loggers(self, log_names=LOGS, level=logging.INFO, fmt='%(name)s: %(message)s'):
+    def set_loggers(self, *log_names, level=logging.INFO, fmt='%(name)s: %(message)s'):
         if self.loggers:
             self.finish()
+        log_names = log_names or LOGS
         self.loggers = [logging.getLogger(log_name) for log_name in log_names]
         self.handler.setFormatter(logging.Formatter(fmt))
         for logger in self.loggers:

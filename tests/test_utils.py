@@ -1,9 +1,11 @@
 import os
+import logging
 from collections import OrderedDict
 from datetime import datetime
 
 import pytest
 from arq import ConnectionSettings
+from arq.logs import ColourHandler
 from arq.utils import timestamp
 
 from .fixtures import CustomSettings
@@ -41,3 +43,12 @@ def test_timestamp():
     assert 7.99 < (datetime.now() - datetime.utcnow()).total_seconds() / 3600 < 8.01
     unix_stamp = int(datetime.now().strftime('%s'))
     assert abs(timestamp() - unix_stamp) < 2
+
+
+def test_arbitary_logger(capsys):
+    logger = logging.getLogger('foobar')
+    logger.addHandler(ColourHandler())
+    logger.warning('this is a test')
+    out, err = capsys.readouterr()
+    # click cleverly removes ANSI colours as the output is not a terminal
+    assert [out, err] == ['this is a test\n', '']

@@ -67,7 +67,7 @@ async def test_queue_not_found(loop):
 
 
 async def test_mock_timeout(loop, logcap):
-    logcap.set_loggers(('arq.main', 'arq.work', 'arq.mock'), logging.DEBUG)
+    logcap.set_loggers('arq.main', 'arq.work', 'arq.mock', level=logging.DEBUG)
     worker = MockRedisWorkerQuit(loop=loop)
     actor = MockRedisTestActor(loop=loop)
     worker.mock_data = actor.mock_data

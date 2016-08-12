@@ -317,7 +317,7 @@ class RunWorkerProcess:
         signal.signal(signal.SIGTERM, self.handle_sig_force)
         work_logger.warning('got signal: %s, waiting for worker pid=%s to finish...', Signals(signum).name,
                             self.process and self.process.pid)
-        for i in range(100):
+        for i in range(100):  # pragma: no branch
             if not self.process or not self.process.is_alive():
                 return
             time.sleep(0.1)
