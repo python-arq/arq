@@ -62,12 +62,12 @@ class RedisMixin:
         # the "or getattr(...) or" seems odd but it allows the mixin to work with subclasses with initialise
         # loop or settings before calling super().__init__ and don't pass those parameters.
         self.loop = loop or getattr(self, 'loop', None) or asyncio.get_event_loop()
-        self._settings = settings or getattr(self, '_settings', None) or ConnectionSettings()
+        self.settings = settings or getattr(self, 'settings', None) or ConnectionSettings()
         self._redis_pool = existing_pool
 
     async def create_redis_pool(self):
-        return await aioredis.create_pool((self._settings.R_HOST, self._settings.R_PORT), loop=self.loop,
-                                          db=self._settings.R_DATABASE, password=self._settings.R_PASSWORD)
+        return await aioredis.create_pool((self.settings.R_HOST, self.settings.R_PORT), loop=self.loop,
+                                          db=self.settings.R_DATABASE, password=self.settings.R_PASSWORD)
 
     async def get_redis_pool(self):
         if self._redis_pool is None:

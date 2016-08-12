@@ -68,8 +68,8 @@ class TestActor(Actor):
             'is_shadow': self.is_shadow,
             'loop': str(self.loop),
             'settings': {
-                'data': dict(self._settings),
-                'class': self._settings.__class__.__name__
+                'data': dict(self.settings),
+                'class': self.settings.__class__.__name__
             },
         }
         async with await self.get_redis_conn() as redis:
