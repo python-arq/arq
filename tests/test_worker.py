@@ -13,8 +13,8 @@ from .fixtures import (Worker, EXAMPLE_FILE, WorkerQuit, WorkerFail, FoobarActor
 from .example import ActorTest
 
 
-async def test_run_job_batch(tmpworkdir, redis_conn, actor):
-    worker = Worker(batch=True, loop=actor.loop)
+async def test_run_job_burst(tmpworkdir, redis_conn, actor):
+    worker = Worker(burst=True, loop=actor.loop)
 
     await actor.add_numbers(1, 2)
     assert not tmpworkdir.join('add_numbers').exists()
@@ -41,7 +41,7 @@ async def test_seperate_log_levels(mock_actor_worker, logcap):
     await actor.concat(a='1', b='2')
     await worker.run()
     log = re.sub('0.0\d\ds', '0.0XXs', logcap.log)
-    assert ('arq.work: Initialising work manager, batch mode: True\n'
+    assert ('arq.work: Initialising work manager, burst mode: True\n'
             'arq.work: Running worker with 1 shadow listening to 3 queues\n'
             'arq.work: shadows: MockRedisTestActor | queues: high, dft, low\n'
             'arq.work: shutting down worker, waiting for 1 jobs to finish\n'
@@ -174,7 +174,7 @@ def test_run_sigint_twice(tmpworkdir, redis_conn, loop, logcap):
 
 async def test_non_existent_function(redis_conn, actor, logcap):
     await actor.enqueue_job('doesnt_exist')
-    worker = Worker(batch=True, loop=actor.loop)
+    worker = Worker(burst=True, loop=actor.loop)
     await worker.run()
     assert worker.jobs_failed == 1
     assert 'Job Error: shadow class "TestActor" has no function "doesnt_exist"' in logcap
@@ -182,7 +182,7 @@ async def test_non_existent_function(redis_conn, actor, logcap):
 
 def test_no_jobs(loop):
     mock_actor = MockRedisTestActor(loop=loop)
-    mock_worker = MockRedisWorker(batch=True, loop=loop)
+    mock_worker = MockRedisWorker(burst=True, loop=loop)
     mock_worker.mock_data = mock_actor.mock_data
 
     loop.run_until_complete(mock_actor.boom())
@@ -196,7 +196,7 @@ def test_no_jobs(loop):
 
 async def test_shutdown_without_work(loop):
     mock_actor = MockRedisTestActor(loop=loop)
-    mock_worker = MockRedisWorker(loop=loop, batch=True)
+    mock_worker = MockRedisWorker(loop=loop, burst=True)
     mock_worker.mock_data = mock_actor.mock_data
     await mock_worker.close()
 
@@ -206,7 +206,7 @@ async def test_job_timeout(loop, logcap):
     actor = MockRedisTestActor(loop=loop)
     assert None is await actor.sleeper(0.2)
     assert None is await actor.sleeper(0.05)
-    worker = MockRedisWorker(batch=True, loop=loop, timeout_seconds=0.1)
+    worker = MockRedisWorker(burst=True, loop=loop, timeout_seconds=0.1)
     worker.mock_data = actor.mock_data
     await worker.run()
     log = re.sub('(\d.\d\d)\d', r'\1X', logcap.log)
@@ -243,7 +243,7 @@ def test_repeat_worker_close(tmpworkdir, redis_conn, logcap):
 
 
 async def test_raise_worker_execute(redis_conn, actor):
-    worker = RaiseWorker(batch=True, loop=actor.loop, shadows=[TestActor])
+    worker = RaiseWorker(burst=True, loop=actor.loop, shadows=[TestActor])
 
     await actor.boom()
     with pytest.raises(RuntimeError) as excinfo:
@@ -253,7 +253,7 @@ async def test_raise_worker_execute(redis_conn, actor):
 
 
 async def test_raise_worker_prepare(redis_conn, actor):
-    worker = RaiseWorker(batch=True, loop=actor.loop, shadows=[TestActor])
+    worker = RaiseWorker(burst=True, loop=actor.loop, shadows=[TestActor])
 
     await actor.enqueue_job('foobar', 1, 2)
     with pytest.raises(RuntimeError) as excinfo:

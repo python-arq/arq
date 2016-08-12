@@ -11,7 +11,7 @@ import arq.worker
 from .fixtures import EXAMPLE_FILE
 
 
-def test_simple_batch(tmpworkdir, monkeypatch):
+def test_simple_burst(tmpworkdir, monkeypatch):
     # we have to prevent RunWorkerProcess actually starting another process
     # TODO remove after https://bitbucket.org/ned/coveragepy/issues/512
     monkeypatch.setattr(arq.worker.Process, 'start', MagicMock())
@@ -19,7 +19,7 @@ def test_simple_batch(tmpworkdir, monkeypatch):
     monkeypatch.setattr(arq.worker.Process, 'exitcode', 0)
     tmpworkdir.join('test.py').write(EXAMPLE_FILE)
     runner = CliRunner()
-    result = runner.invoke(cli, ['--batch', 'test.py'])
+    result = runner.invoke(cli, ['--burst', 'test.py'])
     assert result.exit_code == 0
     output = re.sub('\d+:\d+:\d+', 'TIME', result.output)
     assert output == ('TIME MainProcess: starting work process "WorkProcess"\n'
@@ -35,7 +35,7 @@ def test_worker_exited_badly(tmpworkdir, monkeypatch):
     monkeypatch.setattr(arq.worker.Process, 'pid', 123)
     tmpworkdir.join('test.py').write(EXAMPLE_FILE)
     runner = CliRunner()
-    result = runner.invoke(cli, ['--batch', 'test.py'])
+    result = runner.invoke(cli, ['--burst', 'test.py'])
     assert result.exit_code == 3
     output = re.sub('\d+:\d+:\d+', 'TIME', result.output)
     assert ('TIME MainProcess: starting work process "WorkProcess"\n'

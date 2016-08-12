@@ -23,7 +23,7 @@ async def test_custom_settings(actor, redis_conn):
     await actor.store_info()
 
     settings = CustomSettings()
-    worker = Worker(loop=actor.loop, batch=True, settings=settings)
+    worker = Worker(loop=actor.loop, burst=True, settings=settings)
     await worker.run()
     info = await redis_conn.get(b'actor_info')
     info = info.decode()
@@ -55,7 +55,7 @@ async def test_encode_datetimes(tmpworkdir, loop, redis_conn):
     await actor.subtract(d1, d2)
     await actor.close()
 
-    worker = DatetimeWorker(loop=actor.loop, batch=True)
+    worker = DatetimeWorker(loop=actor.loop, burst=True)
     await worker.run()
     assert worker.jobs_failed == 0
     assert tmpworkdir.join('subtract').exists()
@@ -71,7 +71,7 @@ async def test_encode_datetimes_tz(tmpworkdir, loop, redis_conn):
     await actor.subtract(d1, d2)
     await actor.close()
 
-    worker = DatetimeWorker(loop=actor.loop, batch=True)
+    worker = DatetimeWorker(loop=actor.loop, burst=True)
     await worker.run()
     assert worker.jobs_failed == 0
     assert tmpworkdir.join('subtract').read() == '30 days, 1:00:00'
@@ -84,7 +84,7 @@ async def test_encode_non_datetimes(tmpworkdir, loop, redis_conn):
     await actor.save_values({'a': 1}, {'a': 2})
     await actor.close()
 
-    worker = DatetimeWorker(loop=actor.loop, batch=True)
+    worker = DatetimeWorker(loop=actor.loop, burst=True)
     await worker.run()
     assert worker.jobs_failed == 0
     assert tmpworkdir.join('values').exists()
@@ -93,7 +93,7 @@ async def test_encode_non_datetimes(tmpworkdir, loop, redis_conn):
 
 
 async def test_wrong_job_class(loop):
-    worker = DatetimeWorker(loop=loop, batch=True, shadows=[TestActor, TestActor, DatetimeActor])
+    worker = DatetimeWorker(loop=loop, burst=True, shadows=[TestActor, TestActor, DatetimeActor])
     with pytest.raises(TypeError) as excinfo:
         await worker.run()
     assert excinfo.value.args[0].endswith("has a different job class to the first shadow: "
@@ -102,7 +102,7 @@ async def test_wrong_job_class(loop):
 
 
 async def test_switch_job_class(loop):
-    worker = DatetimeWorker(loop=loop, batch=True, shadows=[TestActor])
+    worker = DatetimeWorker(loop=loop, burst=True, shadows=[TestActor])
     assert worker.job_class is None
     await worker.run()
     assert worker.job_class == Job

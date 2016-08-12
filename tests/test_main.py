@@ -45,7 +45,7 @@ async def test_dispatch_work(tmpworkdir, loop, logcap, redis_conn):
     assert len(actor.mock_data[b'arq:q:high']) == 1
     assert logcap.log == ('MockRedisTestActor.add_numbers ▶ dft\n'
                           'MockRedisTestActor.high_add_numbers ▶ high\n')
-    worker = MockRedisWorker(batch=True, loop=actor.loop)
+    worker = MockRedisWorker(burst=True, loop=actor.loop)
     worker.mock_data = actor.mock_data
     assert not tmpworkdir.join('add_numbers').exists()
     await worker.run()
@@ -54,7 +54,7 @@ async def test_dispatch_work(tmpworkdir, loop, logcap, redis_conn):
     log = re.sub("QUIT-.*", "QUIT-<random>", log)
     assert ('MockRedisTestActor.add_numbers ▶ dft\n'
             'MockRedisTestActor.high_add_numbers ▶ high\n'
-            'Initialising work manager, batch mode: True\n'
+            'Initialising work manager, burst mode: True\n'
             'Using first shadows job class "Job"\n'
             'Running worker with 1 shadow listening to 3 queues\n'
             'shadows: MockRedisTestActor | queues: high, dft, low\n'
@@ -81,13 +81,13 @@ async def test_handle_exception(loop, logcap):
     actor = MockRedisTestActor(loop=loop)
     assert logcap.log == ''
     assert None is await actor.boom()
-    worker = MockRedisWorker(batch=True, loop=actor.loop)
+    worker = MockRedisWorker(burst=True, loop=actor.loop)
     worker.mock_data = actor.mock_data
     await worker.run()
     log = re.sub('0.0\d\ds', '0.0XXs', logcap.log)
     log = re.sub(', line \d+,', ', line <no>,', log)
     log = re.sub('"/.*?/(\w+/\w+)\.py"', r'"/path/to/\1.py"', log)
-    assert ('Initialising work manager, batch mode: True\n'
+    assert ('Initialising work manager, burst mode: True\n'
             'Running worker with 1 shadow listening to 3 queues\n'
             'shadows: MockRedisTestActor | queues: high, dft, low\n'
             'shutting down worker, waiting for 1 jobs to finish\n'
@@ -137,7 +137,7 @@ async def test_custom_name(loop, logcap):
     actor = FoobarActor(loop=loop)
     assert re.match('^<FoobarActor\(foobar\) at 0x[a-f0-9]{12}>$', str(actor))
     assert None is await actor.concat('123', '456')
-    worker = MockRedisWorker(batch=True, loop=actor.loop, shadows=[FoobarActor])
+    worker = MockRedisWorker(burst=True, loop=actor.loop, shadows=[FoobarActor])
     worker.mock_data = actor.mock_data
     await worker.run()
     assert worker.jobs_failed == 0
@@ -172,7 +172,7 @@ async def test_dynamic_worker(tmpworkdir, loop, redis_conn):
     actor = TestActor(loop=loop)
     await actor.add_numbers(1, 2)
     assert not tmpworkdir.join('add_numbers').exists()
-    worker = BaseWorker(loop=loop, batch=True, shadows=[TestActor])
+    worker = BaseWorker(loop=loop, burst=True, shadows=[TestActor])
     await worker.run()
     await actor.close()
     assert tmpworkdir.join('add_numbers').exists()
@@ -183,7 +183,7 @@ async def test_dynamic_worker_mocked(tmpworkdir, loop):
     actor = MockRedisTestActor(loop=loop)
     await actor.add_numbers(1, 2)
     assert not tmpworkdir.join('add_numbers').exists()
-    worker = MockRedisBaseWorker(loop=loop, batch=True, shadows=[MockRedisTestActor])
+    worker = MockRedisBaseWorker(loop=loop, burst=True, shadows=[MockRedisTestActor])
     worker.mock_data = actor.mock_data
     await worker.run()
     await actor.close()
@@ -197,7 +197,7 @@ async def test_dynamic_worker_custom_queue(tmpworkdir, loop):
     actor = CustomActor(loop=loop)
     await actor.enqueue_job('add_numbers', 1, 1, queue='foobar')
     assert not tmpworkdir.join('add_numbers').exists()
-    worker = MockRedisBaseWorker(loop=loop, batch=True, queues=['foobar'], shadows=[CustomActor])
+    worker = MockRedisBaseWorker(loop=loop, burst=True, queues=['foobar'], shadows=[CustomActor])
     worker.mock_data = actor.mock_data
     await worker.run()
     await actor.close()

@@ -36,17 +36,16 @@ class BaseWorker(RedisMixin):
     timeout_seconds = 60
     shadows = None
 
-    def __init__(self, *, batch=False, shadows=None, queues=None, timeout_seconds=None, **kwargs):
-        self._batch_mode = batch
+    def __init__(self, *, burst=False, shadows=None, queues=None, timeout_seconds=None, **kwargs):
+        self._burst_mode = burst
         self.shadows = shadows or self.shadows
         self._queues = queues
         self.timeout_seconds = timeout_seconds or self.timeout_seconds
         self._pending_tasks = set()
-        self.jobs_complete = 0
-        self.jobs_failed = 0
-        self.jobs_timed_out = 0
+
+        self.jobs_complete, self.jobs_failed, self.jobs_timed_out = 0, 0, 0
         self._task_exception = None
-        self._shadows = {}
+        self._shadow_lookup = {}
         self.start = None
         self.running = True
         self._closed = False
@@ -73,11 +72,11 @@ class BaseWorker(RedisMixin):
 
     @cached_property
     def shadow_names(self):
-        return ', '.join(self._shadows.keys())
+        return ', '.join(self._shadow_lookup.keys())
 
     def get_redis_queues(self):
         q_lookup = {}
-        for s in self._shadows.values():
+        for s in self._shadow_lookup.values():
             q_lookup.update(s.queue_lookup)
         try:
             queues = [(q_lookup[q], q) for q in self.queues]
@@ -90,7 +89,7 @@ class BaseWorker(RedisMixin):
         self.loop.run_until_complete(self.run())
 
     async def run(self):
-        work_logger.info('Initialising work manager, batch mode: %s', self._batch_mode)
+        work_logger.info('Initialising work manager, burst mode: %s', self._burst_mode)
 
         shadows = await self.shadow_factory()
         assert isinstance(shadows, list), 'shadow_factory should return a list not %s' % type(shadows)
@@ -100,10 +99,10 @@ class BaseWorker(RedisMixin):
             if shadow.job_class != self.job_class:
                 raise TypeError('{s} has a different job class to the first shadow: '
                                 '{s.job_class} != {self.job_class}'.format(s=shadow, self=self))
-        self._shadows = {w.name: w for w in shadows}
+        self._shadow_lookup = {w.name: w for w in shadows}
 
         work_logger.info('Running worker with %s shadow%s listening to %d queues',
-                         len(self._shadows), '' if len(self._shadows) == 1 else 's', len(self.queues))
+                         len(self._shadow_lookup), '' if len(self._shadow_lookup) == 1 else 's', len(self.queues))
         work_logger.info('shadows: %s | queues: %s', self.shadow_names, ', '.join(self.queues))
 
         self.start = timestamp()
@@ -119,7 +118,7 @@ class BaseWorker(RedisMixin):
         redis_queues, queue_lookup = self.get_redis_queues()
         quit_queue = None
         async with await self.get_redis_conn() as redis:
-            if self._batch_mode:
+            if self._burst_mode:
                 quit_queue = b'QUIT-%s' % gen_random()
                 work_logger.debug('populating quit queue to prompt exit: %s', quit_queue.decode())
                 await redis.rpush(quit_queue, b'1')
@@ -130,7 +129,7 @@ class BaseWorker(RedisMixin):
                 if msg is None:
                     continue
                 _queue, data = msg
-                if self._batch_mode and _queue == quit_queue:
+                if self._burst_mode and _queue == quit_queue:
                     work_logger.debug('got job from the quit queue, stopping')
                     break
                 queue = queue_lookup[_queue]
@@ -159,7 +158,7 @@ class BaseWorker(RedisMixin):
 
     async def run_job(self, j):
         try:
-            shadow = self._shadows[j.class_name]
+            shadow = self._shadow_lookup[j.class_name]
         except KeyError:
             return self.handle_prepare_exc('Job Error: unable to find shadow for {!r}'.format(j))
         try:
@@ -228,8 +227,8 @@ class BaseWorker(RedisMixin):
             work_logger.info('shutting down worker after %0.3fs ◆ %d jobs done ◆ %d failed ◆ %d timed out',
                              t, self.jobs_complete, self.jobs_failed, self.jobs_timed_out)
 
-            if self._shadows:
-                await asyncio.wait([s.close() for s in self._shadows.values()], loop=self.loop)
+            if self._shadow_lookup:
+                await asyncio.wait([s.close() for s in self._shadow_lookup.values()], loop=self.loop)
             await super().close()
             self._closed = True
 
@@ -269,9 +268,9 @@ def import_string(file_path, attr_name):
     return attr
 
 
-def start_worker(worker_path, worker_class, batch, loop=None):
+def start_worker(worker_path, worker_class, burst, loop=None):
     worker_cls = import_string(worker_path, worker_class)
-    worker = worker_cls(batch=batch, loop=loop)
+    worker = worker_cls(burst=burst, loop=loop)
     work_logger.info('Starting %s on worker process pid=%d', worker_cls.__name__, os.getpid())
     try:
         worker.run_until_complete()
@@ -286,16 +285,16 @@ def start_worker(worker_path, worker_class, batch, loop=None):
 
 
 class RunWorkerProcess:
-    def __init__(self, worker_path, worker_class, batch=False):
+    def __init__(self, worker_path, worker_class, burst=False):
         signal.signal(signal.SIGINT, self.handle_sig)
         signal.signal(signal.SIGTERM, self.handle_sig)
         self.process = None
-        self.run_worker(worker_path, worker_class, batch)
+        self.run_worker(worker_path, worker_class, burst)
 
-    def run_worker(self, worker_path, worker_class, batch):
+    def run_worker(self, worker_path, worker_class, burst):
         name = 'WorkProcess'
         work_logger.info('starting work process "%s"', name)
-        self.process = Process(target=start_worker, args=(worker_path, worker_class, batch), name=name)
+        self.process = Process(target=start_worker, args=(worker_path, worker_class, burst), name=name)
         self.process.start()
         self.process.join()
         if self.process.exitcode == 0:
