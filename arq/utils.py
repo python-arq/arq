@@ -99,7 +99,7 @@ EPOCH_TZ = EPOCH.replace(tzinfo=create_tz())
 
 
 def timestamp():
-    return (datetime.now() - EPOCH).total_seconds()
+    return (datetime.utcnow() - EPOCH).total_seconds()
 
 
 def to_unix_timestamp(dt):

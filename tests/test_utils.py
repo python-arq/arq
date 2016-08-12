@@ -1,7 +1,9 @@
+import os
 from collections import OrderedDict
+from datetime import datetime
 
 import pytest
-from arq import ConnectionSettings
+from arq import ConnectionSettings, timestamp
 
 from .fixtures import CustomSettings
 
@@ -30,3 +32,11 @@ def test_custom_settings():
     assert settings.dict == OrderedDict([('R_HOST', 'localhost'), ('R_PORT', 6379),
                                          ('R_DATABASE', 0), ('R_PASSWORD', None),
                                          ('X_THING', 2), ('A_THING', 1)])
+
+
+def test_timestamp():
+    os.environ['TZ'] = 'Asia/Singapore'
+    # check we've successfully changed the timezone
+    assert 7.99 < (datetime.now() - datetime.utcnow()).total_seconds() / 3600 < 8.01
+    unix_stamp = int(datetime.now().strftime('%s'))
+    assert abs(timestamp() - unix_stamp) < 1
