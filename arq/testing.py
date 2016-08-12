@@ -26,6 +26,10 @@ class RaiseWorker(BaseWorker):
 
 
 class MockRedis:
+    """
+    Very simple mock of aioredis > Redis which allows jobs to be enqueued and executed without
+    redis.
+    """
     def __init__(self, *, loop=None, data=None):
         self.loop = loop or asyncio.get_event_loop()
         self.data = {} if data is None else data
@@ -94,6 +98,9 @@ class MockRedisPool:
 
 
 class MockRedisMixin(RedisMixin):
+    """
+    Dependent of RedisMixin which uses MockRedis rather than real redis to enqueue jobs.
+    """
     async def create_redis_pool(self):
         return self._redis_pool or MockRedisPool(self.loop)
 
@@ -109,11 +116,17 @@ class MockRedisMixin(RedisMixin):
 
 
 class MockRedisWorker(MockRedisMixin, BaseWorker):
-    pass
+    """
+    Dependent of Base Worker which executes jobs from MockRedis than real redis.
+    """
 
 
 @contextlib.contextmanager
 def loop_context(existing_loop=None):
+    """
+    context manager which creates an asyncio loop.
+    :param existing_loop: if supplied this loop is passed straight through and no new loop is created.
+    """
     if existing_loop:
         # loop already exists, pass it straight through
         yield existing_loop
@@ -154,6 +167,9 @@ def pytest_pyfunc_call(pyfuncitem):
 
 @pytest.yield_fixture
 def loop():
+    """
+    Yield fixture using loop_context()
+    """
     with loop_context() as _loop:
         yield _loop
 
@@ -173,6 +189,11 @@ def tmpworkdir(tmpdir):
 
 @pytest.yield_fixture
 def redis_conn(loop):
+    """
+    yield fixture which creates a redis connection, and flushes redis before the test.
+
+    Note: redis is not flushed after the test both for performance and to allow later debugging.
+    """
     async def _get_conn():
         conn = await create_redis(('localhost', 6379), loop=loop)
         await conn.flushall()
@@ -189,6 +210,9 @@ LOGS = ('arq.main', 'arq.work', 'arq.jobs')
 
 
 class StreamLog:
+    """
+    Log stream object which allows one or more lots to be captured and tested.
+    """
     def __init__(self):
         self.handler = None
         self.stream = io.StringIO()
@@ -229,14 +253,19 @@ class StreamLog:
         return item in self.log
 
     def __str__(self):
-        return 'logcap:\n' + self.log
+        return 'caplog:\n' + self.log
 
     def __repr__(self):
-        return '< logcap: {!r}>'.format(self.log)
+        return '< caplog: {!r}>'.format(self.log)
 
 
 @pytest.yield_fixture
-def logcap():
+def caplog():
+    """
+    Similar to pytest's "capsys" except logs are captured not stdout and stderr
+
+    See StreamLog for details on configuration and tests for examples of usage.
+    """
     stream_log = StreamLog()
 
     yield stream_log
@@ -245,18 +274,23 @@ def logcap():
 
 
 @pytest.yield_fixture
-def debug(logs=LOGS, level=logging.DEBUG):
+def debug():
+    """
+    fixture which causes all arq logs to display. For debugging purposes only, should alwasy
+    be removed before committing.
+    """
+    # TODO: could be extended to also work as a context manager and allow more control.
     handler = logging.StreamHandler()
-    handler.setLevel(level)
+    handler.setLevel(logging.DEBUG)
     handler.setFormatter(logging.Formatter('%(asctime)s %(name)8s %(levelname)8s: %(message)s', datefmt='%H:%M:%S'))
-    for logger_name in logs:
-        logger = logging.getLogger(logger_name)
-        logger.addHandler(handler)
-        logger.setLevel(level)
+    for logger_name in LOGS:
+        l = logging.getLogger(logger_name)
+        l.addHandler(handler)
+        l.setLevel(logging.DEBUG)
 
     yield
 
-    for logger_name in logs:
-        logger = logging.getLogger(logger_name)
-        logger.removeHandler(handler)
-        logger.setLevel(logging.NOTSET)
+    for logger_name in LOGS:
+        l = logging.getLogger(logger_name)
+        l.removeHandler(handler)
+        l.setLevel(logging.NOTSET)

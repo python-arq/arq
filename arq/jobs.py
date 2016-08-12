@@ -12,26 +12,51 @@ class JobSerialisationError(Exception):
 
 
 class Job:
+    """
+    Main Job class responsible for encoding and decoding jobs as they go
+    into and come out of redis.
+    """
     __slots__ = ('queue', 'queued_at', 'class_name', 'func_name', 'args', 'kwargs')
+
+    #: custom encoder for msgpack, see DatetimeJob for an example of usage
     msgpack_encoder = None
+
+    #: custom object hook for msgpack, see DatetimeJob for an example of usage
     msgpack_object_hook = None
 
-    def __init__(self, queue, data):
+    def __init__(self, queue: str, data: bytes):
+        """
+        Create a job instance be decoding a job definition eg. from redis.
+        :param queue: name of the queue the job was dequeued from
+        :param data: data to decode, as created by "encode" below
+        :return:
+        """
         self.queue = queue
         self.queued_at, self.class_name, self.func_name, self.args, self.kwargs = self._decode(data)
         self.queued_at /= 1000
 
     @classmethod
-    def encode(cls, *, queued_at=None, class_name, func_name, args, kwargs):
+    def encode(cls, *, queued_at: int=None, class_name: str, func_name: str,
+               args: tuple, kwargs: dict) -> bytes:
+        """
+        Create a byte string suitable for pushing into redis which contains all
+        required information about a job to be performed.
+
+        :param queued_at: time in ms unix time when the job was queue, if None now is used
+        :param class_name: name (see Actor definition) of the actor class where the job is defined
+        :param func_name: name of the function be called
+        :param args: arguments to pass to the function
+        :param kwargs: key word arguments to pass to the function
+        """
         queued_at = queued_at or int(timestamp() * 1000)
         return cls._encode([queued_at, class_name, func_name, args, kwargs])
 
     @classmethod
-    def _encode(cls, data):
+    def _encode(cls, data) -> bytes:
         return msgpack.packb(data, default=cls.msgpack_encoder, use_bin_type=True)
 
     @classmethod
-    def _decode(cls, data):
+    def _decode(cls, data: bytes):
         return msgpack.unpackb(data, object_hook=cls.msgpack_object_hook, encoding='utf8')
 
     def __str__(self):
@@ -55,6 +80,10 @@ TIMEZONE = 'O'
 
 
 class DatetimeJob(Job):
+    """
+    Alternative Job which
+    """
+
     @staticmethod
     def msgpack_encoder(obj):
         if isinstance(obj, datetime):

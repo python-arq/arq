@@ -13,6 +13,11 @@ LOG_COLOURS = {
 
 
 class ColourHandler(logging.StreamHandler):
+    """
+    Coloured log handler. Levels: debug: white, info: green, warning: yellow, else: red.
+
+    Date times (anything before the first colon) is magenta.
+    """
     def emit(self, record):
         log_entry = self.format(record)
         colour = LOG_COLOURS.get(record.levelno, 'red')
@@ -25,7 +30,13 @@ class ColourHandler(logging.StreamHandler):
             click.secho(log_entry, fg=colour)
 
 
-def default_log_config(verbose):
+def default_log_config(verbose: bool) -> dict:
+    """
+    Setup default config. for dictConfig.
+
+    :param verbose: level: DEBUG if True, INFO if False
+    :return: dict suitable for logging.config.dictConfig which configures arq logs
+    """
     log_level = 'DEBUG' if verbose else 'INFO'
     return {
         'version': 1,

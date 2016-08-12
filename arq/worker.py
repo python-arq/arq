@@ -10,7 +10,7 @@ from signal import Signals
 
 from .logs import default_log_config
 from .main import Actor
-from .utils import RedisMixin, cached_property, ellipsis, gen_random, timestamp
+from .utils import RedisMixin, ellipsis, gen_random, timestamp
 
 __all__ = ['BaseWorker', 'import_string', 'RunWorkerProcess']
 
@@ -31,13 +31,31 @@ class BadJob(Exception):
 
 
 class BaseWorker(RedisMixin):
+    """
+    Base class for Workers to inherit from
+    """
+    #: maximum number of jobs which can be execute at the same time by the event loop
     max_concurrent_tasks = 50
+
+    #: number of seconds after a termination signal (SIGINT or SIGTERM) is received to force quite the worker
     shutdown_delay = 6
+
+    #: default maximum duration of a job
     timeout_seconds = 60
+
+    #: shadow classes, a list of Actor classes for the Worker to run
     shadows = None
 
     def __init__(self, *, burst=False, shadows=None, queues=None, timeout_seconds=None, existing_shadows=None,
                  **kwargs):
+        """
+        :param burst: if True the worker will close as soon as no new jobs are found in the queue lists
+        :param shadows: list of Actor classes for the worker to run, overrides shadows already defined on the worker
+        :param queues: list of queue names for the Worker to listen on
+        :param timeout_seconds: maximum duration of a job, after that the job will be cancelled by the event loop
+        :param existing_shadows: list of shadow objects to use instead of initialising shadows, used for testing.
+        :param kwargs: other keyword arguments, see RedisMixin
+        """
         self._burst_mode = burst
         self.shadows = shadows or self.shadows
         self._queues = queues
@@ -57,7 +75,12 @@ class BaseWorker(RedisMixin):
         super().__init__(**kwargs)
         self._closing_lock = asyncio.Lock(loop=self.loop)
 
-    async def shadow_factory(self):
+    async def shadow_factory(self) -> list:
+        """
+        Initialise list of shadows and return them unless existing_shadows is set in which case they're returned.
+
+        Override to customise the way shadows are initialised.
+        """
         if self.existing_shadows:
             return self.existing_shadows
         if self.shadows is None:
@@ -66,14 +89,19 @@ class BaseWorker(RedisMixin):
         return [s(settings=self.settings, is_shadow=True, loop=self.loop, existing_pool=rp) for s in self.shadows]
 
     @classmethod
-    def logging_config(cls, verbose):
+    def logging_config(cls, verbose) -> dict:
+        """
+        Override to customise the logging setup for the arq worker.
+        :param verbose: verbose flag from cli, by default log level is INFO if False and DEBUG if True
+        :return: dict suitable for logging.config.dictConfig
+        """
         return default_log_config(verbose)
 
-    @cached_property
+    @property
     def queues(self):
         return self._queues or Actor.QUEUES
 
-    @cached_property
+    @property
     def shadow_names(self):
         return ', '.join(self._shadow_lookup.keys())
 

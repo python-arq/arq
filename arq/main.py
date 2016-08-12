@@ -11,8 +11,6 @@ main_logger = logging.getLogger('arq.main')
 
 
 class ActorMeta(type):
-    __doc__ = 'arq Actor'
-
     def __new__(mcs, cls, bases, classdict):
         queues = classdict.get('QUEUES')
         if queues and len(queues) != len(set(queues)):
@@ -21,13 +19,29 @@ class ActorMeta(type):
 
 
 class Actor(RedisMixin, metaclass=ActorMeta):
+    """
+    All classes which to to arq should inherit from Actor.
+
+    Actor defines three default queues: HIGH_QUEUE, DEFAULT_QUEUE and LOW_QUEUE which are processed
+    in that order of priority by the worker.
+
+    Actors operate in two modes: normal mode when you initialise them and use them, and "shadow mode"
+    where the actor is initialised by the worker and used to execute jobs.
+    """
     HIGH_QUEUE = 'high'
     DEFAULT_QUEUE = 'dft'
     LOW_QUEUE = 'low'
+
+    #: prefix prepended to all queue names to create the list keys in redis
     QUEUE_PREFIX = b'arq:q:'
+
+    #: if not none this name is used instead of the class name when encoding and referencing jobs
     name = None
+
+    #: job class to use when encoding and decoding jobs from this actor.
     job_class = Job
 
+    #: uses the actor cam enqueue jobs in, order is important, the first queue is highest priority.
     QUEUES = (
         HIGH_QUEUE,
         DEFAULT_QUEUE,
@@ -35,6 +49,11 @@ class Actor(RedisMixin, metaclass=ActorMeta):
     )
 
     def __init__(self, *, is_shadow=False, **kwargs):
+        """
+        :param is_shadow: whether the actor should be shadow mode, this should only be set by the work
+        :param kwargs: other kwargs, see RedisMixin for all available options
+        :return:
+        """
         self.queue_lookup = {q: self.QUEUE_PREFIX + q.encode() for q in self.QUEUES}
         self.name = self.name or self.__class__.__name__
         self.is_shadow = is_shadow
@@ -51,7 +70,14 @@ class Actor(RedisMixin, metaclass=ActorMeta):
                     raise RuntimeError(msg.format(self.name, name, attr_name))
                 setattr(self, name, unbound_direct.__get__(self, self.__class__))
 
-    async def enqueue_job(self, func_name, *args, queue=None, **kwargs):
+    async def enqueue_job(self, func_name: str, *args, queue: str=None, **kwargs):
+        """
+        Enqueue a job by pushing the encoded job information into the redis list specified by the queue
+        :param func_name: name of the function executing the job
+        :param args: arguments to pass to the function
+        :param queue: name of the queue to use, if None DEFAULT_QUEUE is used.
+        :param kwargs: key word arguments to pass to the function
+        """
         queue = queue or self.DEFAULT_QUEUE
         try:
             data = self.job_class.encode(class_name=self.name, func_name=func_name, args=args, kwargs=kwargs)
@@ -71,6 +97,13 @@ class Actor(RedisMixin, metaclass=ActorMeta):
 
 
 def concurrent(func_or_queue):
+    """
+    Decorating which defines a functions as concurrent, eg. it should be executed on the worker.
+
+    If you wish to call the function directly you can access the original function at "*_direct".
+
+    The decorator can optionally be used with one argument: the queue to use by default for the job.
+    """
     dec_queue = None
 
     def _func_wrapper(func):

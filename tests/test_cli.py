@@ -42,7 +42,7 @@ def test_worker_exited_badly(tmpworkdir, monkeypatch):
             'TIME MainProcess: worker process 123 exited badly with exit code 42\n') == output
 
 
-def test_main_process_sigint(tmpworkdir, monkeypatch, logcap):
+def test_main_process_sigint(tmpworkdir, monkeypatch, caplog):
     monkeypatch.setattr(arq.worker.Process, 'start', MagicMock())
     monkeypatch.setattr(arq.worker.Process, 'join', MagicMock())
     is_alive = MagicMock(side_effect=[True, True, False, False])
@@ -53,10 +53,10 @@ def test_main_process_sigint(tmpworkdir, monkeypatch, logcap):
     work_runner = arq.worker.RunWorkerProcess('test.py', 'Worker')
     work_runner.handle_sig(signal.SIGINT, None)
     assert is_alive.call_count == 3
-    assert 'got signal: SIGINT, waiting for worker pid=123 to finish...' in logcap
+    assert 'got signal: SIGINT, waiting for worker pid=123 to finish...' in caplog
 
 
-def test_main_process_sigint_twice(tmpworkdir, monkeypatch, logcap):
+def test_main_process_sigint_twice(tmpworkdir, monkeypatch, caplog):
     monkeypatch.setattr(arq.worker.Process, 'start', MagicMock())
     monkeypatch.setattr(arq.worker.Process, 'join', MagicMock())
     is_alive = MagicMock(return_value=False)
@@ -71,10 +71,10 @@ def test_main_process_sigint_twice(tmpworkdir, monkeypatch, logcap):
         work_runner.handle_sig_force(signal.SIGINT, None)
     assert is_alive.call_count == 1
     assert not os_kill.called
-    assert 'got signal: SIGINT again, forcing exit' in logcap
+    assert 'got signal: SIGINT again, forcing exit' in caplog
 
 
-def test_main_process_sigint_twice_worker_running(tmpworkdir, monkeypatch, logcap):
+def test_main_process_sigint_twice_worker_running(tmpworkdir, monkeypatch, caplog):
     monkeypatch.setattr(arq.worker.Process, 'start', MagicMock())
     monkeypatch.setattr(arq.worker.Process, 'join', MagicMock())
     is_alive = MagicMock(return_value=True)
@@ -90,4 +90,4 @@ def test_main_process_sigint_twice_worker_running(tmpworkdir, monkeypatch, logca
     assert is_alive.call_count == 1
     assert os_kill.called
     assert os_kill.call_args == ((123, signal.SIGTERM),)
-    assert 'got signal: SIGINT again, forcing exit' in logcap
+    assert 'got signal: SIGINT again, forcing exit' in caplog

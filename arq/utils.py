@@ -14,7 +14,6 @@ __all__ = [
 
 
 class SettingsMeta(type):
-    __doc__ = 'Settings'
     __dict__ = None
 
     @classmethod
@@ -35,12 +34,22 @@ class SettingsMeta(type):
 
 
 class ConnectionSettings(metaclass=SettingsMeta):
+    """
+    Class containing details of the redis connection, can be extended for systems requiring other
+    settings eg. for other connections.
+
+    All settings can be found with either settings.dict or dict(settings)
+    """
     R_HOST = 'localhost'
     R_PORT = 6379
     R_DATABASE = 0
     R_PASSWORD = None
 
     def __init__(self, **custom_settings):
+        """
+        :param custom_settings: Custom settings to override defaults, only attributes already defined
+        can be set.
+        """
         for name, value in custom_settings.items():
             if not hasattr(self, name):
                 raise TypeError('{} is not a valid setting name'.format(name))
@@ -55,41 +64,66 @@ class ConnectionSettings(metaclass=SettingsMeta):
 
 
 class RedisMixin:
+    """
+    Mixin used to fined a redis pool and access it.
+    """
     def __init__(self, *,
                  loop: asyncio.AbstractEventLoop=None,
                  settings: ConnectionSettings=None,
                  existing_pool: RedisPool=None):
+        """
+        :param loop: asyncio loop to use for the redis pool
+        :param settings: connection settings to use for the pool
+        :param existing_pool: existing pool, if set no new pool is craeted, instead this one is used
+        :return:
+        """
         # the "or getattr(...) or" seems odd but it allows the mixin to work with subclasses with initialise
         # loop or settings before calling super().__init__ and don't pass those parameters.
         self.loop = loop or getattr(self, 'loop', None) or asyncio.get_event_loop()
         self.settings = settings or getattr(self, 'settings', None) or ConnectionSettings()
         self._redis_pool = existing_pool
 
-    async def create_redis_pool(self):
+    async def create_redis_pool(self) -> RedisPool:
+        """
+        Create a new redis pool.
+        """
         return await aioredis.create_pool((self.settings.R_HOST, self.settings.R_PORT), loop=self.loop,
                                           db=self.settings.R_DATABASE, password=self.settings.R_PASSWORD)
 
-    async def get_redis_pool(self):
+    async def get_redis_pool(self) -> RedisPool:
+        """
+        Get the redis pool, if a pool is already initialised it's returned, else one is crated.
+        """
         if self._redis_pool is None:
             self._redis_pool = await self.create_redis_pool()
         return self._redis_pool
 
     async def get_redis_conn(self):
+        """
+        :return: redis connection context manager
+        """
         pool = await self.get_redis_pool()
         return pool.get()
 
     async def close(self):
+        """
+        Close the pool and wait for all connections to close.
+        """
         if self._redis_pool:
             self._redis_pool.close()
             await self._redis_pool.wait_closed()
             await self._redis_pool.clear()
 
 
-def create_tz(seconds=0):
-    if seconds == 0:
+def create_tz(utcoffset=0) -> timezone:
+    """
+    Create a python datetime.timezone with a given utc offset
+    :param utcoffset: utc offset in seconds, if 0 timezone.utc is returned.
+    """
+    if utcoffset == 0:
         return timezone.utc
     else:
-        return timezone(timedelta(seconds=seconds))
+        return timezone(timedelta(seconds=utcoffset))
 
 
 EPOCH = datetime(1970, 1, 1)
@@ -97,10 +131,16 @@ EPOCH_TZ = EPOCH.replace(tzinfo=create_tz())
 
 
 def timestamp():
+    """
+    :return: now in unix time, eg. seconds since 1970
+    """
     return (datetime.utcnow() - EPOCH).total_seconds()
 
 
-def to_unix_ms(dt):
+def to_unix_ms(dt: datetime) -> int:
+    """
+    convert a datetime to number of milliseconds since 1970
+    """
     utcoffset = dt.utcoffset()
     if utcoffset is not None:
         utcoffset = utcoffset.total_seconds()
@@ -110,30 +150,33 @@ def to_unix_ms(dt):
         return int((dt - EPOCH).total_seconds() * 1000), None
 
 
-def from_unix_ms(ms, utcoffset=None):
+def from_unix_ms(ms: int, utcoffset: int=None) -> datetime:
+    """
+    convert int to a datetime
+    :param ms: number of milliseconds since 1970
+    :param utcoffset: if set a timezone i added to the datime based on the offset in seconds.
+    """
     dt = EPOCH + timedelta(milliseconds=ms)
     if utcoffset is not None:
         dt = dt.replace(tzinfo=create_tz(utcoffset))
     return dt
 
 
-def gen_random(length=20):
+def gen_random(length: int=20) -> str:
+    """
+    Create a random string.
+
+    :param length: length of string to created, default 20
+    """
     return base64.urlsafe_b64encode(os.urandom(length))[:length]
 
 
-class cached_property:
-    def __init__(self, func):
-        self.__doc__ = getattr(func, '__doc__')
-        self.func = func
-
-    def __get__(self, obj, cls):
-        if obj is None:  # pragma: no cover
-            return self
-        value = obj.__dict__[self.func.__name__] = self.func(obj)
-        return value
-
-
-def ellipsis(s, length=80):
+def ellipsis(s: str, length: int=80) -> str:
+    """
+    Truncate a string and add an ellipsis (three dots) to the end if it was too long
+    :param s: string to possibly truncate
+    :param length: length to truncate the string to
+    """
     if len(s) > length:
         s = s[:length - 1] + '…'
     return s

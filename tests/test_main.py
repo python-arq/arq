@@ -36,21 +36,21 @@ async def test_enqueue_redis_job(actor, redis_conn):
     assert data == ['TestActor', 'add_numbers', [1, 2], {}]
 
 
-async def test_dispatch_work(tmpworkdir, loop, logcap, redis_conn):
-    logcap.set_loggers(level=logging.DEBUG, fmt='%(message)s')
+async def test_dispatch_work(tmpworkdir, loop, caplog, redis_conn):
+    caplog.set_loggers(level=logging.DEBUG, fmt='%(message)s')
     actor = MockRedisTestActor(loop=loop)
     assert None is await actor.add_numbers(1, 2)
     assert None is await actor.high_add_numbers(3, 4, c=5)
     assert len(actor.mock_data[b'arq:q:dft']) == 1
     assert len(actor.mock_data[b'arq:q:high']) == 1
-    assert logcap.log == ('MockRedisTestActor.add_numbers ▶ dft\n'
+    assert caplog.log == ('MockRedisTestActor.add_numbers ▶ dft\n'
                           'MockRedisTestActor.high_add_numbers ▶ high\n')
     worker = MockRedisWorker(burst=True, loop=actor.loop)
     worker.mock_data = actor.mock_data
     assert not tmpworkdir.join('add_numbers').exists()
     await worker.run()
     assert tmpworkdir.join('add_numbers').read() == '3'
-    log = re.sub('0.0\d\ds', '0.0XXs', logcap.log)
+    log = re.sub('0.0\d\ds', '0.0XXs', caplog.log)
     log = re.sub("QUIT-.*", "QUIT-<random>", log)
     assert ('MockRedisTestActor.add_numbers ▶ dft\n'
             'MockRedisTestActor.high_add_numbers ▶ high\n'
@@ -71,20 +71,20 @@ async def test_dispatch_work(tmpworkdir, loop, logcap, redis_conn):
             'task complete, 1 jobs done, 0 failed\n'
             'task complete, 2 jobs done, 0 failed\n'
             'shutting down worker after 0.0XXs ◆ 2 jobs done ◆ 0 failed ◆ 0 timed out\n') == log
-    # quick check of logcap's str and repr
-    assert str(logcap).startswith('logcap:\nMockRedisTestActor')
-    assert repr(logcap).startswith("< logcap: 'MockRedisTestActor")
+    # quick check of caplog's str and repr
+    assert str(caplog).startswith('caplog:\nMockRedisTestActor')
+    assert repr(caplog).startswith("< caplog: 'MockRedisTestActor")
 
 
-async def test_handle_exception(loop, logcap):
-    logcap.set_loggers(fmt='%(message)s')
+async def test_handle_exception(loop, caplog):
+    caplog.set_loggers(fmt='%(message)s')
     actor = MockRedisTestActor(loop=loop)
-    assert logcap.log == ''
+    assert caplog.log == ''
     assert None is await actor.boom()
     worker = MockRedisWorker(burst=True, loop=actor.loop)
     worker.mock_data = actor.mock_data
     await worker.run()
-    log = re.sub('0.0\d\ds', '0.0XXs', logcap.log)
+    log = re.sub('0.0\d\ds', '0.0XXs', caplog.log)
     log = re.sub(', line \d+,', ', line <no>,', log)
     log = re.sub('"/.*?/(\w+/\w+)\.py"', r'"/path/to/\1.py"', log)
     assert ('Initialising work manager, burst mode: True\n'
@@ -133,7 +133,7 @@ async def test_duplicate_direct_name():
                                      'this breaks arq direct method binding of "foo"')
 
 
-async def test_custom_name(loop, logcap):
+async def test_custom_name(loop, caplog):
     actor = FoobarActor(loop=loop)
     assert re.match('^<FoobarActor\(foobar\) at 0x[a-f0-9]{12}>$', str(actor))
     assert None is await actor.concat('123', '456')
@@ -141,31 +141,31 @@ async def test_custom_name(loop, logcap):
     worker.mock_data = actor.mock_data
     await worker.run()
     assert worker.jobs_failed == 0
-    assert 'foobar.concat(123, 456)' in logcap.log
+    assert 'foobar.concat(123, 456)' in caplog.log
 
 
-async def test_call_direct(mock_actor_worker, logcap):
-    logcap.set_level(logging.INFO)
+async def test_call_direct(mock_actor_worker, caplog):
+    caplog.set_level(logging.INFO)
     actor, worker = mock_actor_worker
     await actor.enqueue_job('direct_method', 1, 2)
     await worker.run()
     assert worker.jobs_failed == 0
     assert worker.jobs_complete == 1
-    log = re.sub('0.0\d\ds', '0.0XXs', logcap.log)
+    log = re.sub('0.0\d\ds', '0.0XXs', caplog.log)
     assert ('arq.jobs: dft  queued  0.0XXs → MockRedisTestActor.direct_method(1, 2)\n'
             'arq.jobs: dft  ran in  0.0XXs ← MockRedisTestActor.direct_method ● 3') in log
 
 
-async def test_direct_binding(mock_actor_worker, logcap):
-    logcap.set_level(logging.INFO)
+async def test_direct_binding(mock_actor_worker, caplog):
+    caplog.set_level(logging.INFO)
     actor, worker = mock_actor_worker
     assert None is await actor.concat('a', 'b')
     assert 'a + b' == await actor.concat_direct('a', 'b')
     await worker.run()
     assert worker.jobs_failed == 0
     assert worker.jobs_complete == 1
-    assert 'MockRedisTestActor.concat' in logcap
-    assert 'MockRedisTestActor.concat_direct' not in logcap
+    assert 'MockRedisTestActor.concat' in caplog
+    assert 'MockRedisTestActor.concat_direct' not in caplog
 
 
 async def test_dynamic_worker(tmpworkdir, loop, redis_conn):
