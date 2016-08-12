@@ -1,8 +1,8 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import msgpack
 
-from .utils import EPOCH, EPOCH_TZ, create_tz, ellipsis, timestamp
+from .utils import ellipsis, from_unix_timestamp, timestamp, to_unix_timestamp
 
 __all__ = ['JobSerialisationError', 'Job']
 
@@ -49,28 +49,24 @@ class Job:
         return '<Job {} on {}>'.format(self, self.queue)
 
 
-DATETIME = '_dt_'
+# unicode clock is small to encode and should be fairly unlikely to clash with another dict key
+DATETIME = '⌚'
+TIMEZONE = 'O'
 
 
 class DatetimeJob(Job):
     @staticmethod
     def msgpack_encoder(obj):
         if isinstance(obj, datetime):
-            utcoffset = obj.utcoffset()
-            if utcoffset is not None:
-                utcoffset = utcoffset.total_seconds()
-                unix = (obj - EPOCH_TZ).total_seconds() + utcoffset
-                return {DATETIME: unix, 'o': int(utcoffset)}
-            else:
-                return {DATETIME: (obj - EPOCH).total_seconds()}
+            ts, tz = to_unix_timestamp(obj)
+            result = {DATETIME: ts}
+            if tz is not None:
+                result[TIMEZONE] = tz
+            return result
         return obj
 
     @staticmethod
     def msgpack_object_hook(obj):
-        if DATETIME in obj:
-            dt = EPOCH + timedelta(seconds=obj[DATETIME])
-            utcoffset = obj.get('o')
-            if utcoffset is not None:
-                dt = dt.replace(tzinfo=create_tz(utcoffset))
-            return dt
+        if DATETIME in obj and len(obj) <= 2:
+            return from_unix_timestamp(obj[DATETIME], utcoffset=obj.get(TIMEZONE))
         return obj

@@ -102,11 +102,28 @@ def timestamp():
     return (datetime.now() - EPOCH).total_seconds()
 
 
+def to_unix_timestamp(dt):
+    utcoffset = dt.utcoffset()
+    if utcoffset is not None:
+        utcoffset = utcoffset.total_seconds()
+        unix = (dt - EPOCH_TZ).total_seconds() + utcoffset
+        return unix, int(utcoffset)
+    else:
+        return (dt - EPOCH).total_seconds(), None
+
+
+def from_unix_timestamp(ts, utcoffset=None):
+    dt = EPOCH + timedelta(seconds=ts)
+    if utcoffset is not None:
+        dt = dt.replace(tzinfo=create_tz(utcoffset))
+    return dt
+
+
 def gen_random(length=20):
     return base64.urlsafe_b64encode(os.urandom(length))[:length]
 
 
-class cached_property(object):
+class cached_property:
     def __init__(self, func):
         self.__doc__ = getattr(func, '__doc__')
         self.func = func

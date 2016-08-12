@@ -205,7 +205,8 @@ async def test_dynamic_worker_custom_queue(tmpworkdir, loop):
     assert tmpworkdir.join('add_numbers').read() == '2'
 
 
-def test_worker_no_shadow():
+async def test_worker_no_shadow(loop):
+    worker = MockRedisBaseWorker(loop=loop)
     with pytest.raises(TypeError) as excinfo:
-        MockRedisBaseWorker()
+        await worker.run()
     assert excinfo.value.args[0] == 'shadows not defined on worker'

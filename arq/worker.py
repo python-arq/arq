@@ -38,10 +38,7 @@ class BaseWorker(RedisMixin):
 
     def __init__(self, *, batch=False, shadows=None, queues=None, timeout_seconds=None, **kwargs):
         self._batch_mode = batch
-        if self.shadows is None and shadows is None:
-            raise TypeError('shadows not defined on worker')
-        if shadows:
-            self.shadows = shadows
+        self.shadows = shadows or self.shadows
         self._queues = queues
         self.timeout_seconds = timeout_seconds or self.timeout_seconds
         self._pending_tasks = set()
@@ -60,6 +57,8 @@ class BaseWorker(RedisMixin):
         self._closing_lock = asyncio.Lock(loop=self.loop)
 
     async def shadow_factory(self):
+        if self.shadows is None:
+            raise TypeError('shadows not defined on worker')
         rp = await self.get_redis_pool()
         s = [s(settings=self._settings, is_shadow=True, loop=self.loop, existing_pool=rp) for s in self.shadows]
         return s

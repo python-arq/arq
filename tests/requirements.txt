@@ -6,3 +6,4 @@ pep8
 pytest
 pytest-cov
 pytest-sugar
+pytz

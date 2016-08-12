@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
+import pytz
 
 from arq.jobs import DatetimeJob, JobSerialisationError, Job
 from arq.worker import BaseWorker
@@ -92,7 +93,7 @@ async def test_encode_non_datetimes(tmpworkdir, loop, redis_conn):
 
 
 async def test_wrong_job_class(loop):
-    worker = DatetimeWorker(loop=loop, batch=True, shadows=[TestActor, DatetimeActor])
+    worker = DatetimeWorker(loop=loop, batch=True, shadows=[TestActor, TestActor, DatetimeActor])
     with pytest.raises(TypeError) as excinfo:
         await worker.run()
     assert excinfo.value.args[0].endswith("has a different job class to the first shadow: "
@@ -106,3 +107,41 @@ async def test_switch_job_class(loop):
     await worker.run()
     assert worker.job_class == Job
     await worker.close()
+
+
+def test_naïve_dt_encoding():
+    t = datetime(2000, 1, 1)
+    assert str(t) == '2000-01-01 00:00:00'
+    p = DatetimeJob._encode(t)
+    t2 = DatetimeJob._decode(p)
+    assert t == t2
+    assert str(t2) == '2000-01-01 00:00:00'
+
+
+def test_utc_dt_encoding():
+    t = datetime(2000, 1, 1, tzinfo=timezone.utc)
+    assert str(t) == '2000-01-01 00:00:00+00:00'
+    p = DatetimeJob._encode(t)
+    t2 = DatetimeJob._decode(p)
+    assert t == t2
+    assert str(t2) == '2000-01-01 00:00:00+00:00'
+
+
+def test_new_york_dt_encoding():
+    t = datetime(2000, 1, 1, tzinfo=timezone(timedelta(hours=-5)))
+    assert str(t) == '2000-01-01 00:00:00-05:00'
+    p = DatetimeJob._encode(t)
+    t2 = DatetimeJob._decode(p)
+    assert t == t2
+    assert str(t2) == '2000-01-01 00:00:00-05:00'
+
+
+def test_pytz_new_york_dt_encoding():
+    ny = pytz.timezone('America/New_York')
+    t = ny.localize(datetime(2000, 1, 1))
+    assert str(t) == '2000-01-01 00:00:00-05:00'
+    p = DatetimeJob._encode(t)
+    t2 = DatetimeJob._decode(p)
+    assert t == t2
+    assert datetime(2000, 1, 1, tzinfo=timezone(timedelta(hours=-5))) == t2
+    assert str(t2) == '2000-01-01 00:00:00-05:00'
