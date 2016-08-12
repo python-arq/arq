@@ -173,8 +173,7 @@ class BaseWorker(RedisMixin):
                 return self.handle_prepare_exc(msg)
 
         started_at = timestamp()
-        queue_time = started_at - j.queued_at
-        self.log_job_start(queue_time, j)
+        self.log_job_start(started_at, j)
         try:
             result = await func(*j.args, **j.kwargs)
         except Exception as e:
@@ -195,9 +194,9 @@ class BaseWorker(RedisMixin):
         jobs_logger.debug('task complete, %d jobs done, %d failed', self.jobs_complete, self.jobs_failed)
 
     @classmethod
-    def log_job_start(cls, queue_time, j):
+    def log_job_start(cls, started_at, j):
         if jobs_logger.isEnabledFor(logging.INFO):
-            jobs_logger.info('%-4s queued%7.3fs → %s', j.queue, queue_time, j)
+            jobs_logger.info('%-4s queued%7.3fs → %s', j.queue, started_at - j.queued_at, j)
 
     @classmethod
     def log_job_result(cls, started_at, result, j):
@@ -215,9 +214,8 @@ class BaseWorker(RedisMixin):
 
     @classmethod
     def handle_execute_exc(cls, started_at, exc, j):
-        job_time = timestamp() - started_at
         exc_type = exc.__class__.__name__
-        jobs_logger.exception('%-4s ran in%7.3fs ! %s: %s', j.queue, job_time, j, exc_type)
+        jobs_logger.exception('%-4s ran in%7.3fs ! %s: %s', j.queue, timestamp() - started_at, j, exc_type)
 
     async def close(self):
         with await self._closing_lock:

@@ -212,6 +212,7 @@ async def test_job_timeout(loop, logcap):
     log = re.sub('(\d.\d\d)\d', r'\1X', logcap.log)
     log = re.sub(', line \d+,', ', line <no>,', log)
     log = re.sub('"/.*?/(\w+/\w+)\.py"', r'"/path/to/\1.py"', log)
+    print(log)
     assert ('arq.jobs: dft  queued  0.00Xs → MockRedisTestActor.sleeper(0.2)\n'
             'arq.jobs: dft  queued  0.00Xs → MockRedisTestActor.sleeper(0.05)\n'
             'arq.jobs: dft  ran in  0.05Xs ← MockRedisTestActor.sleeper ● 0.05\n'

@@ -2,7 +2,7 @@ from datetime import datetime
 
 import msgpack
 
-from .utils import ellipsis, from_unix_timestamp, timestamp, to_unix_timestamp
+from .utils import ellipsis, from_unix_ms, timestamp, to_unix_ms
 
 __all__ = ['JobSerialisationError', 'Job']
 
@@ -58,7 +58,7 @@ class DatetimeJob(Job):
     @staticmethod
     def msgpack_encoder(obj):
         if isinstance(obj, datetime):
-            ts, tz = to_unix_timestamp(obj)
+            ts, tz = to_unix_ms(obj)
             result = {DATETIME: ts}
             if tz is not None:
                 result[TIMEZONE] = tz
@@ -68,5 +68,5 @@ class DatetimeJob(Job):
     @staticmethod
     def msgpack_object_hook(obj):
         if DATETIME in obj and len(obj) <= 2:
-            return from_unix_timestamp(obj[DATETIME], utcoffset=obj.get(TIMEZONE))
+            return from_unix_ms(obj[DATETIME], utcoffset=obj.get(TIMEZONE))
         return obj

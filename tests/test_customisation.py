@@ -145,3 +145,22 @@ def test_pytz_new_york_dt_encoding():
     assert t == t2
     assert datetime(2000, 1, 1, tzinfo=timezone(timedelta(hours=-5))) == t2
     assert str(t2) == '2000-01-01 00:00:00-05:00'
+
+
+def test_dt_encoding_with_ms():
+    t = datetime(2000, 1, 1, 0, 0, 0, 123000)
+    assert str(t) == '2000-01-01 00:00:00.123000'
+    p = DatetimeJob._encode(t)
+    t2 = DatetimeJob._decode(p)
+    assert t == t2
+    assert str(t2) == '2000-01-01 00:00:00.123000'
+
+
+def test_dt_encoding_with_μs():
+    t = datetime(2000, 1, 1, 0, 0, 0, 123456)
+    assert str(t) == '2000-01-01 00:00:00.123456'
+    p = DatetimeJob._encode(t)
+    t2 = DatetimeJob._decode(p)
+    assert t != t2
+    assert (t - t2) == timedelta(microseconds=456)
+    assert str(t2) == '2000-01-01 00:00:00.123000'

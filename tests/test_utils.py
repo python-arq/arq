@@ -40,4 +40,4 @@ def test_timestamp():
     # check we've successfully changed the timezone
     assert 7.99 < (datetime.now() - datetime.utcnow()).total_seconds() / 3600 < 8.01
     unix_stamp = int(datetime.now().strftime('%s'))
-    assert abs(timestamp() - unix_stamp) < 1
+    assert abs(timestamp() - unix_stamp) < 2

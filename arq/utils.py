@@ -100,18 +100,18 @@ def timestamp():
     return (datetime.utcnow() - EPOCH).total_seconds()
 
 
-def to_unix_timestamp(dt):
+def to_unix_ms(dt):
     utcoffset = dt.utcoffset()
     if utcoffset is not None:
         utcoffset = utcoffset.total_seconds()
         unix = (dt - EPOCH_TZ).total_seconds() + utcoffset
-        return unix, int(utcoffset)
+        return int(unix * 1000), int(utcoffset)
     else:
-        return (dt - EPOCH).total_seconds(), None
+        return int((dt - EPOCH).total_seconds() * 1000), None
 
 
-def from_unix_timestamp(ts, utcoffset=None):
-    dt = EPOCH + timedelta(seconds=ts)
+def from_unix_ms(ms, utcoffset=None):
+    dt = EPOCH + timedelta(milliseconds=ms)
     if utcoffset is not None:
         dt = dt.replace(tzinfo=create_tz(utcoffset))
     return dt
