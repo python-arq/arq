@@ -10,8 +10,6 @@ from aioredis.pool import RedisPool
 __all__ = [
     'ConnectionSettings',
     'RedisMixin',
-    'timestamp',
-    'cached_property'
 ]
 
 

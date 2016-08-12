@@ -2,5 +2,5 @@
 from .jobs import *
 from .main import *
 from .utils import *
-from .version import VERSION
+from .version import *
 from .worker import *

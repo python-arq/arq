@@ -3,7 +3,8 @@ from collections import OrderedDict
 from datetime import datetime
 
 import pytest
-from arq import ConnectionSettings, timestamp
+from arq import ConnectionSettings
+from arq.utils import timestamp
 
 from .fixtures import CustomSettings
 
