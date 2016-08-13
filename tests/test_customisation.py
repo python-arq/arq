@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -111,6 +112,19 @@ async def test_wrong_job_class(loop):
         await worker.run()
     assert excinfo.value.args[0].endswith("has a different job class to the first shadow: "
                                           "<class 'arq.jobs.DatetimeJob'> != <class 'arq.jobs.Job'>")
+    await worker.close()
+
+
+async def test_wrong_queues(loop):
+    class DifferentQueuesActor(TestActor):
+        queues = (TestActor.DEFAULT_QUEUE, 'foobar')
+
+    worker = DatetimeWorker(loop=loop, burst=True, shadows=[TestActor, TestActor, DifferentQueuesActor])
+    with pytest.raises(TypeError) as excinfo:
+        await worker.run()
+    msg = re.sub('0x\w+>', '0x123>', excinfo.value.args[0])
+    assert msg == ("<DifferentQueuesActor(DifferentQueuesActor) at 0x123> has a different "
+                   "list of queues to the first shadow: ('dft', 'foobar') != ('high', 'dft', 'low')")
     await worker.close()
 
 

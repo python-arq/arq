@@ -12,7 +12,7 @@ main_logger = logging.getLogger('arq.main')
 
 class ActorMeta(type):
     def __new__(mcs, cls, bases, classdict):
-        queues = classdict.get('QUEUES')
+        queues = classdict.get('queues')
         if queues and len(queues) != len(set(queues)):
             raise AssertionError('{} looks like it has duplicated queue names: {}'.format(cls, queues))
         return super().__new__(mcs, cls, bases, classdict)
@@ -28,8 +28,13 @@ class Actor(RedisMixin, metaclass=ActorMeta):
     Actors operate in two modes: normal mode when you initialise them and use them, and "shadow mode"
     where the actor is initialised by the worker and used to execute jobs.
     """
+    #: highest priority queue, the can be overwritten by changing .queues
     HIGH_QUEUE = 'high'
+
+    #: default queue, this is a special value as it's used in enqueue_job
     DEFAULT_QUEUE = 'dft'
+
+    #: lowest priority queue, the can be overwritten by changing .queues
     LOW_QUEUE = 'low'
 
     #: prefix prepended to all queue names to create the list keys in redis
@@ -42,7 +47,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
     job_class = Job
 
     #: uses the actor cam enqueue jobs in, order is important, the first queue is highest priority.
-    QUEUES = (
+    queues = (
         HIGH_QUEUE,
         DEFAULT_QUEUE,
         LOW_QUEUE,
@@ -54,7 +59,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         :param kwargs: other kwargs, see RedisMixin for all available options
         :return:
         """
-        self.queue_lookup = {q: self.QUEUE_PREFIX + q.encode() for q in self.QUEUES}
+        self.queue_lookup = {q: self.QUEUE_PREFIX + q.encode() for q in self.queues}
         self.name = self.name or self.__class__.__name__
         self.is_shadow = is_shadow
         self._bind_direct_methods()

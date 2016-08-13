@@ -57,10 +57,7 @@ async def test_wrong_worker(mock_actor_worker, loop, caplog):
     assert 'Job Error: unable to find shadow for <Job foobar.concat(a, b) on dft>' in caplog
 
 async def test_queue_not_found(loop):
-    class WrongWorker(MockRedisWorkerQuit):
-        queues = ['foobar']
-
-    worker = WrongWorker(loop=loop)
+    worker = MockRedisWorkerQuit(loop=loop, queues=['foobar'])
     with pytest.raises(KeyError) as excinfo:
         await worker.run()
     assert "queue not found in queue lookups from shadows, queues: ['foobar']" in excinfo.value.args[0]

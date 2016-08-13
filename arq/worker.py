@@ -9,7 +9,6 @@ from multiprocessing import Process
 from signal import Signals
 
 from .logs import default_log_config
-from .main import Actor
 from .utils import RedisMixin, ellipsis, gen_random, timestamp
 
 __all__ = ['BaseWorker', 'import_string', 'RunWorkerProcess']
@@ -51,14 +50,14 @@ class BaseWorker(RedisMixin):
         """
         :param burst: if True the worker will close as soon as no new jobs are found in the queue lists
         :param shadows: list of Actor classes for the worker to run, overrides shadows already defined on the worker
-        :param queues: list of queue names for the Worker to listen on
+        :param queues: list of queue names for the Worker to listen on, by default queues is taken from the shadows
         :param timeout_seconds: maximum duration of a job, after that the job will be cancelled by the event loop
         :param existing_shadows: list of shadow objects to use instead of initialising shadows, used for testing.
         :param kwargs: other keyword arguments, see RedisMixin
         """
         self._burst_mode = burst
         self.shadows = shadows or self.shadows
-        self._queues = queues
+        self.queues = queues
         self.timeout_seconds = timeout_seconds or self.timeout_seconds
         self.existing_shadows = existing_shadows
         self._pending_tasks = set()
@@ -98,10 +97,6 @@ class BaseWorker(RedisMixin):
         return default_log_config(verbose)
 
     @property
-    def queues(self):
-        return self._queues or Actor.QUEUES
-
-    @property
     def shadow_names(self):
         return ', '.join(self._shadow_lookup.keys())
 
@@ -130,6 +125,14 @@ class BaseWorker(RedisMixin):
             if shadow.job_class != self.job_class:
                 raise TypeError('{s} has a different job class to the first shadow: '
                                 '{s.job_class} != {self.job_class}'.format(s=shadow, self=self))
+
+        if not self.queues:
+            self.queues = shadows[0].queues
+            for shadow in shadows[1:]:
+                if shadow.queues != self.queues:
+                    raise TypeError('{s} has a different list of queues to the first shadow: '
+                                    '{s.queues} != {self.queues}'.format(s=shadow, self=self))
+
         self._shadow_lookup = {w.name: w for w in shadows}
 
         work_logger.info('Running worker with %s shadow%s listening to %d queues',

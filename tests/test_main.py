@@ -114,7 +114,7 @@ async def test_bad_def():
 async def test_repeat_queue():
     with pytest.raises(AssertionError) as excinfo:
         class BadActor(Actor):
-            QUEUES = ('a', 'a')
+            queues = ('a', 'a')
     assert excinfo.value.args[0] == "BadActor looks like it has duplicated queue names: ('a', 'a')"
 
 
@@ -193,7 +193,7 @@ async def test_dynamic_worker_mocked(tmpworkdir, loop):
 
 async def test_dynamic_worker_custom_queue(tmpworkdir, loop):
     class CustomActor(MockRedisTestActor):
-        QUEUES = ['foobar']
+        queues = ['foobar']
     actor = CustomActor(loop=loop)
     await actor.enqueue_job('add_numbers', 1, 1, queue='foobar')
     assert not tmpworkdir.join('add_numbers').exists()
