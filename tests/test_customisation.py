@@ -5,10 +5,10 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import pytz
 
-from arq.jobs import DatetimeJob, JobSerialisationError, Job
+from arq.jobs import DatetimeJob, Job, JobSerialisationError
 from arq.worker import BaseWorker
 
-from .fixtures import Worker, CustomSettings, TestActor
+from .fixtures import CustomSettings, TestActor, Worker
 
 
 class DatetimeActor(TestActor):

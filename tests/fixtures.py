@@ -1,11 +1,11 @@
 import asyncio
 import json
 import os
-import time
 import signal
+import time
 from pathlib import Path
 
-from arq import concurrent, Actor, BaseWorker, ConnectionSettings
+from arq import Actor, BaseWorker, ConnectionSettings, concurrent
 from arq.testing import MockRedisMixin
 
 

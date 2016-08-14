@@ -1,4 +1,4 @@
-from arq import concurrent, BaseWorker, Actor
+from arq import Actor, BaseWorker, concurrent
 
 
 class ActorTest(Actor):

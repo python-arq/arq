@@ -1,9 +1,10 @@
-import os
 import logging
+import os
 from collections import OrderedDict
 from datetime import datetime
 
 import pytest
+
 from arq import ConnectionSettings
 from arq.logs import ColourHandler
 from arq.utils import timestamp

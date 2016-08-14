@@ -2,11 +2,11 @@ import re
 import signal
 from unittest.mock import MagicMock
 
-from click.testing import CliRunner
 import pytest
+from click.testing import CliRunner
 
-from arq.cli import cli
 import arq.worker
+from arq.cli import cli
 
 from .fixtures import EXAMPLE_FILE
 

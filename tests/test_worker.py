@@ -4,14 +4,13 @@ import re
 from multiprocessing import Process
 
 import pytest
+
 from arq.testing import RaiseWorker
+from arq.worker import ImmediateExit, import_string, start_worker
 
-from arq.worker import import_string, start_worker, ImmediateExit
-
-from .fixtures import (Worker, EXAMPLE_FILE, WorkerQuit, WorkerFail, FoobarActor, kill_parent,
-                       MockRedisWorkerQuit, MockRedisTestActor, MockRedisWorker, TestActor)
 from .example import ActorTest
-
+from .fixtures import (EXAMPLE_FILE, FoobarActor, MockRedisTestActor, MockRedisWorker, MockRedisWorkerQuit, TestActor,
+                       Worker, WorkerFail, WorkerQuit, kill_parent)
 
 async def test_run_job_burst(tmpworkdir, redis_conn, actor):
     worker = Worker(burst=True, loop=actor.loop)

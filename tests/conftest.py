@@ -1,6 +1,6 @@
 import pytest
 
-from .fixtures import TestActor, MockRedisTestActor, MockRedisWorker
+from .fixtures import MockRedisTestActor, MockRedisWorker, TestActor
 
 pytest_plugins = 'arq.testing'
 

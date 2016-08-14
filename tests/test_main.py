@@ -4,11 +4,10 @@ import re
 import msgpack
 import pytest
 
-from arq import Actor, concurrent, BaseWorker
+from arq import Actor, BaseWorker, concurrent
 from arq.testing import MockRedisWorker as MockRedisBaseWorker
 
-from .fixtures import MockRedisTestActor, MockRedisWorker, FoobarActor, TestActor
-
+from .fixtures import FoobarActor, MockRedisTestActor, MockRedisWorker, TestActor
 
 async def test_simple_job_dispatch(loop, debug):
     actor = MockRedisTestActor(loop=loop)
