@@ -5,8 +5,7 @@ arq
 
 Job queues in python with asyncio, redis and msgpack.
 
-See `documentation <https://samuelcolvin.github.io/arq/index.html>`__
-for more details.
+See `documentation`_ for more details.
 
 .. |Build Status| image:: https://travis-ci.org/samuelcolvin/arq.svg?branch=master
    :target: https://travis-ci.org/samuelcolvin/arq
@@ -16,3 +15,4 @@ for more details.
    :target: https://pypi.python.org/pypi/arq
 .. |license| image:: https://img.shields.io/pypi/l/arq.svg
    :target: https://github.com/samuelcolvin/arq
+.. _documentation: https://samuelcolvin.github.io/arq/
