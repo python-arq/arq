@@ -6,6 +6,7 @@ arq
 
 |pypi| |license|
 
+Current Version: |version|
 
 Job queues in python with asyncio, redis and msgpack.
 
@@ -79,7 +80,7 @@ API Reference
    :members:
 
 .. automodule:: arq.utils
-   :members:
+   :members: create_tz, timestamp, timestamp, to_unix_ms, from_unix_ms, gen_random, ellipsis
 
 .. automodule:: arq.testing
    :members:
