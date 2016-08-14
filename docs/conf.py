@@ -141,7 +141,6 @@ html_theme_options = {
     'codecov_button': True,
     'page_width': '1200px',
     'github_banner': True,
-
     'github_type': 'star',
 }
 
