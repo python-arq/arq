@@ -1,5 +1,6 @@
 codecov
 coverage
+docutils
 flake8
 isort
 pep8

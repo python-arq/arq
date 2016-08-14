@@ -5,14 +5,11 @@ services:
 python:
 - '3.5'
 install:
-- pip install -e .
-- pip install -U -r tests/requirements.txt
+- make install
 script:
-- flake8 arq/ tests/
-- ./tests/isort_test.sh
-- py.test --cov=arq
+- make lint
+- make test
 after_success:
-- coverage combine
 - codecov
 deploy:
   provider: pypi
