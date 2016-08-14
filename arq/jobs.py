@@ -1,6 +1,8 @@
 """
 :mod:`jobs`
 ===========
+
+Defines the ``Job`` class and decedents which deal with encoding and decoding job data.
 """
 from datetime import datetime
 
@@ -85,9 +87,10 @@ TIMEZONE = 'O'
 
 class DatetimeJob(Job):
     """
-    Alternative Job which
+    Alternative Job which copes with datetimes. None timezone naïve dates are supported but
+    the returned datetimes will use python datetime's ``timezone`` class to define the timezone
+    regardless of the timezone class originally used on the datetime object.
     """
-
     @staticmethod
     def msgpack_encoder(obj):
         if isinstance(obj, datetime):

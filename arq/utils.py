@@ -1,6 +1,8 @@
 """
-:mod:`utilities`
-================
+:mod:`utils`
+============
+
+Utilises for running arq used by modules.
 """
 import asyncio
 import base64

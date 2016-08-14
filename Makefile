@@ -45,3 +45,7 @@ clean:
 docs:
 	make -C docs html
 	@echo "open file://`pwd`/docs/_build/html/index.html"
+
+.PHONY: deploy-docs
+deploy-docs: docs
+	ghp-import -m "update docs" -p docs/_build/html/

@@ -3,6 +3,7 @@ coverage
 docutils
 flake8
 isort
+ghp-import
 pep8
 pytest
 pytest-cov

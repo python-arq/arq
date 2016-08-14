@@ -134,7 +134,16 @@ html_theme = 'alabaster'
 # further.  For a list of options available for each theme, see the
 # documentation.
 #
-# html_theme_options = {}
+html_theme_options = {
+    'github_user': 'samuelcolvin',
+    'github_repo': 'arq',
+    'travis_button': True,
+    'codecov_button': True,
+    'page_width': '1200px',
+    'github_banner': True,
+
+    'github_type': 'star',
+}
 
 # Add any paths that contain custom themes here, relative to this directory.
 # html_theme_path = []
@@ -184,7 +193,11 @@ html_static_path = ['_static']
 # Custom sidebar templates, maps document names to template names.
 #
 html_sidebars = {
-   '**': ['localtoc.html', 'searchbox.html'],
+    '**': [
+        'about.html',
+        'localtoc.html',
+        'searchbox.html',
+    ]
 }
 
 # Additional templates that should be rendered to pages, maps page names to

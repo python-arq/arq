@@ -1,6 +1,8 @@
 """
 :mod:`worker`
 =============
+
+Responsible for executing jobs in the worker processes.
 """
 import asyncio
 import logging
@@ -310,7 +312,15 @@ def import_string(file_path, attr_name):
     return attr
 
 
-def start_worker(worker_path, worker_class, burst, loop=None):
+def start_worker(worker_path: str, worker_class: str, burst: bool, loop: asyncio.AbstractEventLoop=None):
+    """
+    Run from within the subprocess to load the worker class and execute jobs.
+
+    :param worker_path: full path to the python file containing the worker definition
+    :param worker_class: name of the worker class to be loaded and used
+    :param burst: whether or not to run in burst mode
+    :param loop: asyncio loop use to or None
+    """
     worker_cls = import_string(worker_path, worker_class)
     worker = worker_cls(burst=burst, loop=loop)
     work_logger.info('Starting %s on worker process pid=%d', worker_cls.__name__, os.getpid())
@@ -327,6 +337,9 @@ def start_worker(worker_path, worker_class, burst, loop=None):
 
 
 class RunWorkerProcess:
+    """
+    Responsible for starting a process to run the worker, monitoring it and possibly killing it.
+    """
     def __init__(self, worker_path, worker_class, burst=False):
         signal.signal(signal.SIGINT, self.handle_sig)
         signal.signal(signal.SIGTERM, self.handle_sig)

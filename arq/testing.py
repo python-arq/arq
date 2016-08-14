@@ -1,6 +1,14 @@
 """
 :mod:`testing`
 ==============
+
+pytest plugin and other utilities useful when writing tests for code using arq.
+
+include the plugin in your tests's `conftest.py` file with::
+
+    pytest_plugins = 'arq.testing'
+
+See arq's own tests for examples of usage.
 """
 import asyncio
 import contextlib

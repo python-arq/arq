@@ -1,6 +1,8 @@
 """
 :mod:`main`
 ===========
+
+Defines the main ``Actor`` class and ``concurrent`` decorator for using arq from within your code.
 """
 import inspect
 import logging
