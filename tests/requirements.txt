@@ -8,3 +8,4 @@ pytest
 pytest-cov
 pytest-sugar
 pytz
+sphinx

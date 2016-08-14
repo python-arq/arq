@@ -1,3 +1,7 @@
+"""
+:mod:`main`
+===========
+"""
 import inspect
 import logging
 from functools import wraps
@@ -20,7 +24,7 @@ class ActorMeta(type):
 
 class Actor(RedisMixin, metaclass=ActorMeta):
     """
-    All classes which to to arq should inherit from Actor.
+    All classes which wish to use arq should inherit from Actor.
 
     Actor defines three default queues: HIGH_QUEUE, DEFAULT_QUEUE and LOW_QUEUE which are processed
     in that order of priority by the worker.

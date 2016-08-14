@@ -1,3 +1,7 @@
+"""
+:mod:`worker`
+=============
+"""
 import asyncio
 import logging
 import os

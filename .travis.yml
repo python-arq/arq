@@ -9,6 +9,7 @@ install:
 script:
 - make lint
 - make test
+- make docs
 after_success:
 - codecov
 deploy:

@@ -1,3 +1,7 @@
+"""
+:mod:`testing`
+==============
+"""
 import asyncio
 import contextlib
 import io

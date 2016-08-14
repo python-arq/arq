@@ -1,26 +1,32 @@
+.PHONY: install
 install:
 	pip install -U pip
 	pip install -e .
 	pip install -Ur tests/requirements.txt
 
+.PHONY: isort
 isort:
 	isort -rc -w 120 arq
 	isort -rc -w 120 tests
 
-
+.PHONY: lint
 lint:
 	python setup.py check -rms
 	flake8 arq/ tests/
 	./tests/isort_test.sh
 
+.PHONY: test
 test:
 	py.test --cov=arq && coverage combine
 
+.PHONY: .test-build-cov
 .test-build-cov:
 	py.test --cov=arq && (echo "building coverage html"; coverage combine; coverage html)
 
+.PHONY: all
 all: .test-build-cov lint
 
+.PHONY: clean
 clean:
 	rm -rf `find . -name __pycache__`
 	rm -f `find . -type f -name '*.py[co]' `
@@ -35,8 +41,7 @@ clean:
 	make -C docs clean
 	python setup.py clean
 
-doc:
+.PHONY: docs
+docs:
 	make -C docs html
 	@echo "open file://`pwd`/docs/_build/html/index.html"
-
-.PHONY: install isort lint test .test-build-cov all clean doc

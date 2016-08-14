@@ -11,3 +11,4 @@ htmlcov/
 /dist
 test.py
 *.egg-info
+docs/_build/

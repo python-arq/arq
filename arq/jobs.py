@@ -1,3 +1,7 @@
+"""
+:mod:`jobs`
+===========
+"""
 from datetime import datetime
 
 import msgpack

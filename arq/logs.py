@@ -1,3 +1,7 @@
+"""
+:mod:`logs`
+===========
+"""
 import logging
 import re
 
