@@ -37,11 +37,23 @@ Job queues in python with asyncio, redis and msgpack.
     and easy to reason with - currently arq is only about 500
     lines, that won't change significantly.
 
+Dependencies
+------------
+
+Required **before pip install**:
+
+* `Python 3.5.0+`_ Asyncio is used throughout with new style ``async/await`` syntax.
+* `Redis`_ Redis lists are used to communication between the front end and worker, redis can also be used to store job results.
+
+Installed as dependencies by pip:
+
+* `msgpack`_ used to encode and decode job information.
+* `aioredis`_ is used as the non-block asyncio interface to redis.
+* `click`_ is used for the CLI interface "`arq`".
+
 
 Install
 -------
-
-**Python >=3.5** and **redis** are required. After that:
 
 ::
 
@@ -86,3 +98,8 @@ Indices and tables
 .. _asyncio: https://docs.python.org/3/library/asyncio.html
 .. _benchmarks: https://github.com/samuelcolvin/arq/tree/master/performance_benchmarks
 .. _aiohttp: http://aiohttp.readthedocs.io/en/stable/
+.. _Python 3.5.0+: https://docs.python.org/3/whatsnew/3.5.html
+.. _Redis: http://redis.io/
+.. _msgpack: http://msgpack.org/index.html
+.. _aioredis: http://aioredis.readthedocs.io/
+.. _click: http://click.pocoo.org/6/
