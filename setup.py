@@ -1,18 +1,10 @@
+from pathlib import Path
+
 from importlib.machinery import SourceFileLoader
 from setuptools import setup
 
-long_description = """
-|Build Status| |Coverage|
-
-Job queues and RPC in python with asyncio, redis and msgpack.
-
-See `github <https://github.com/samuelcolvin/arq>`__ for more details.
-
-.. |Build Status| image:: https://travis-ci.org/samuelcolvin/arq.svg?branch=master
-   :target: https://travis-ci.org/samuelcolvin/arq
-.. |Coverage| image:: https://codecov.io/github/samuelcolvin/arq/coverage.svg?branch=master
-   :target: https://codecov.io/github/samuelcolvin/arq?branch=master
-"""
+with Path(__file__).resolve().parent.joinpath('README.rst').open() as f:
+    long_description = f.read()
 
 # avoid loading the package before requirements are installed:
 version = SourceFileLoader('version', 'arq/version.py').load_module()
