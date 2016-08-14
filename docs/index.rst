@@ -8,35 +8,33 @@ arq
 
 Current Version: |version|
 
-Job queues in python with asyncio, redis and msgpack.
+Job queues and RPC in python with asyncio, redis and msgpack.
 
 
 **non-blocking**
     arq is built using python's `asyncio`_ allowing
-    non-blocking job enqueuing and job execution.
+    non-blocking job enqueuing and execution. Multiple jobs (potentially hundresds) can be run simultaneously
+    using a pool of ``asyncio`` ``Tasks``.
 
 **pre-forked**
-    In other works the worker starts two processes and uses the subprocess to execute
+    The worker starts two processes and uses the subprocess to execute
     all jobs, there's no overhead in forking a process for each job.
 
 **fast**
     Asyncio, pre-forking and use of msgpack for job encoding make
     arq around 7x faster (see `benchmarks`_) than
-    rq for small jobs with no io, with io that might increase to around 40x
-    faster. TODO
+    `rq`_ (arq's inspiration) for short jobs with no io, with io that might increase to around 40x
+    faster. (TODO)
 
 **elegant**
-    arq uses a novel approach to variable scope
-    with the ``@concurrent`` decorator being applied to bound methods of
-    "Actor" classes which hold the connection pool. This works well with
-    `aiohttp`_, avoids extended
-    head scratching over how variables like connections are defined (is this
-    attached to the request? or thread local? or truly global? where am I,
-    what does global mean?) and allows for easier testing. See below.
+    arq uses a novel approach to variable scope with the ``@concurrent`` decorator being applied to bound
+    methods of ``Actor`` classes which hold the connection pool. This works well with `aiohttp`_, allows for easier
+    testing and avoids extended head scratching over how variables like connections are defined (is this attached
+    to the request? or thread local? or truly global? where am I, hell, what does global even mean?) and allows for
+    easier testing.
 
 **small**
-    and easy to reason with - currently arq is only about 500
-    lines, that won't change significantly.
+    and easy to reason with - currently arq is only about 500 lines, that won't change significantly.
 
 Dependencies
 ------------
@@ -48,7 +46,7 @@ Required **before pip install**:
 
 Installed as dependencies by pip:
 
-* `msgpack`_ used to encode and decode job information.
+* `msgpack`_ is used for its simplicity and performance to encode and decode job information.
 * `aioredis`_ is used as the non-block asyncio interface to redis.
 * `click`_ is used for the CLI interface "`arq`".
 
@@ -56,11 +54,9 @@ Installed as dependencies by pip:
 Install
 -------
 
-::
+Just::
 
     pip install arq
-
-Should install everything you need.
 
 .. include:: usage.rst
 
@@ -80,7 +76,7 @@ API Reference
    :members:
 
 .. automodule:: arq.utils
-   :members: create_tz, timestamp, timestamp, to_unix_ms, from_unix_ms, gen_random, ellipsis
+   :members: ConnectionSettings, RedisMixin, create_tz, timestamp, timestamp, to_unix_ms, from_unix_ms, gen_random, ellipsis
 
 .. automodule:: arq.testing
    :members:
@@ -97,6 +93,7 @@ Indices and tables
 .. |license| image:: https://img.shields.io/pypi/l/arq.svg
    :target: https://github.com/samuelcolvin/arq
 .. _asyncio: https://docs.python.org/3/library/asyncio.html
+.. _rq: http://python-rq.org/
 .. _benchmarks: https://github.com/samuelcolvin/arq/tree/master/performance_benchmarks
 .. _aiohttp: http://aiohttp.readthedocs.io/en/stable/
 .. _Python 3.5.0+: https://docs.python.org/3/whatsnew/3.5.html

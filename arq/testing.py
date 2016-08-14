@@ -137,6 +137,7 @@ class MockRedisWorker(MockRedisMixin, BaseWorker):
 def loop_context(existing_loop=None):
     """
     context manager which creates an asyncio loop.
+
     :param existing_loop: if supplied this loop is passed straight through and no new loop is created.
     """
     if existing_loop:

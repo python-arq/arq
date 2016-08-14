@@ -33,9 +33,9 @@ class Job:
     def __init__(self, queue: str, data: bytes):
         """
         Create a job instance be decoding a job definition eg. from redis.
+
         :param queue: name of the queue the job was dequeued from
         :param data: data to decode, as created by "encode" below
-        :return:
         """
         self.queue = queue
         self.queued_at, self.class_name, self.func_name, self.args, self.kwargs = self._decode(data)

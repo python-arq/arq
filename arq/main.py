@@ -62,8 +62,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
     def __init__(self, *, is_shadow=False, **kwargs):
         """
         :param is_shadow: whether the actor should be shadow mode, this should only be set by the work
-        :param kwargs: other kwargs, see RedisMixin for all available options
-        :return:
+        :param kwargs: other keyword arguments, see :meth:`arq.utils.RedisMixin` for all available options
         """
         self.queue_lookup = {q: self.QUEUE_PREFIX + q.encode() for q in self.queues}
         self.name = self.name or self.__class__.__name__
@@ -84,6 +83,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
     async def enqueue_job(self, func_name: str, *args, queue: str=None, **kwargs):
         """
         Enqueue a job by pushing the encoded job information into the redis list specified by the queue
+
         :param func_name: name of the function executing the job
         :param args: arguments to pass to the function
         :param queue: name of the queue to use, if None DEFAULT_QUEUE is used.

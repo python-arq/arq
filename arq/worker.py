@@ -51,15 +51,20 @@ class BaseWorker(RedisMixin):
     #: shadow classes, a list of Actor classes for the Worker to run
     shadows = None
 
-    def __init__(self, *, burst=False, shadows=None, queues=None, timeout_seconds=None, existing_shadows=None,
+    def __init__(self, *,
+                 burst: bool=False,
+                 shadows: list=None,
+                 queues: list=None,
+                 timeout_seconds: int=None,
+                 existing_shadows=None,
                  **kwargs):
         """
         :param burst: if True the worker will close as soon as no new jobs are found in the queue lists
         :param shadows: list of Actor classes for the worker to run, overrides shadows already defined on the worker
         :param queues: list of queue names for the Worker to listen on, by default queues is taken from the shadows
         :param timeout_seconds: maximum duration of a job, after that the job will be cancelled by the event loop
-        :param existing_shadows: list of shadow objects to use instead of initialising shadows, used for testing.
-        :param kwargs: other keyword arguments, see RedisMixin
+        :param existing_shadows: list of shadow objects to use instead of initialising shadows, used for testing
+        :param kwargs: other keyword arguments, see :meth:`arq.utils.RedisMixin` for all available options
         """
         self._burst_mode = burst
         self.shadows = shadows or self.shadows
@@ -97,6 +102,7 @@ class BaseWorker(RedisMixin):
     def logging_config(cls, verbose) -> dict:
         """
         Override to customise the logging setup for the arq worker.
+
         :param verbose: verbose flag from cli, by default log level is INFO if False and DEBUG if True
         :return: dict suitable for logging.config.dictConfig
         """
@@ -294,6 +300,7 @@ def import_string(file_path, attr_name):
     """
     Import attribute/class from from a python module. Raise ImportError if the import failed.
     Approximately stolen from django.
+
     :param file_path: path to python module
     :param attr_name: attribute to get from module
     :return: attribute

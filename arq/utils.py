@@ -81,7 +81,6 @@ class RedisMixin:
         :param loop: asyncio loop to use for the redis pool
         :param settings: connection settings to use for the pool
         :param existing_pool: existing pool, if set no new pool is craeted, instead this one is used
-        :return:
         """
         # the "or getattr(...) or" seems odd but it allows the mixin to work with subclasses with initialise
         # loop or settings before calling super().__init__ and don't pass those parameters.
@@ -123,7 +122,8 @@ class RedisMixin:
 
 def create_tz(utcoffset=0) -> timezone:
     """
-    Create a python datetime.timezone with a given utc offset
+    Create a python datetime.timezone with a given utc offset.
+
     :param utcoffset: utc offset in seconds, if 0 timezone.utc is returned.
     """
     if utcoffset == 0:
@@ -158,7 +158,8 @@ def to_unix_ms(dt: datetime) -> int:
 
 def from_unix_ms(ms: int, utcoffset: int=None) -> datetime:
     """
-    convert int to a datetime
+    convert int to a datetime.
+
     :param ms: number of milliseconds since 1970
     :param utcoffset: if set a timezone i added to the datime based on the offset in seconds.
     """
@@ -180,6 +181,7 @@ def gen_random(length: int=20) -> str:
 def ellipsis(s: str, length: int=80) -> str:
     """
     Truncate a string and add an ellipsis (three dots) to the end if it was too long
+
     :param s: string to possibly truncate
     :param length: length to truncate the string to
     """

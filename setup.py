@@ -4,7 +4,7 @@ from setuptools import setup
 long_description = """
 |Build Status| |Coverage|
 
-Job queues in python with asyncio, redis and msgpack.
+Job queues and RPC in python with asyncio, redis and msgpack.
 
 See `github <https://github.com/samuelcolvin/arq>`__ for more details.
 
