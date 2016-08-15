@@ -13,11 +13,10 @@ isort:
 lint:
 	python setup.py check -rms
 	flake8 arq/ tests/
-	./tests/isort_test.sh
 
 .PHONY: test
 test:
-	py.test --cov=arq && coverage combine
+	py.test --cov=arq --isort && coverage combine
 
 .PHONY: .test-build-cov
 .test-build-cov:

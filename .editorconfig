@@ -8,6 +8,7 @@ insert_final_newline = true
 [*.py]
 indent_style = space
 indent_size = 4
+line_length=120
 
 [Makefile]
 indent_style = tab
