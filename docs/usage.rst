@@ -100,7 +100,7 @@ you would also need to define a worker to run the jobs)
 
 See :meth:`arq.main.Actor.enqueue_job` for more details.
 
-Worer Customisation
+Worker Customisation
 ...................
 
 Workers can be customised in numerous ways, this is preferred to command line arguments as it's easier to
