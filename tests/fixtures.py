@@ -9,7 +9,7 @@ from arq import Actor, BaseWorker, ConnectionSettings, concurrent
 from arq.testing import MockRedisMixin
 
 
-class TestActor(Actor):
+class DemoActor(Actor):
     @concurrent
     async def add_numbers(self, a, b):
         with open('add_numbers', 'w') as f:
@@ -77,12 +77,12 @@ class TestActor(Actor):
         return data
 
 
-class MockRedisTestActor(MockRedisMixin, TestActor):
+class MockRedisDemoActor(MockRedisMixin, DemoActor):
     pass
 
 
 class Worker(BaseWorker):
-    shadows = [TestActor]
+    shadows = [DemoActor]
 
 
 class WorkerQuit(Worker):
@@ -103,7 +103,7 @@ class WorkerFail(Worker):
 
 
 class MockRedisWorker(MockRedisMixin, BaseWorker):
-    shadows = [MockRedisTestActor]
+    shadows = [MockRedisDemoActor]
 
 
 class MockRedisWorkerQuit(MockRedisWorker):
@@ -112,7 +112,7 @@ class MockRedisWorkerQuit(MockRedisWorker):
         self.running = False
 
 
-class FoobarActor(MockRedisTestActor):
+class FoobarActor(MockRedisDemoActor):
     name = 'foobar'
 
 

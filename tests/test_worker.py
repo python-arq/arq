@@ -9,7 +9,7 @@ from arq.testing import RaiseWorker
 from arq.worker import ImmediateExit, import_string, start_worker
 
 from .example import ActorTest
-from .fixtures import (EXAMPLE_FILE, FoobarActor, MockRedisTestActor, MockRedisWorker, MockRedisWorkerQuit, TestActor,
+from .fixtures import (EXAMPLE_FILE, DemoActor, FoobarActor, MockRedisDemoActor, MockRedisWorker, MockRedisWorkerQuit,
                        Worker, WorkerFail, WorkerQuit, kill_parent)
 
 async def test_run_job_burst(tmpworkdir, redis_conn, actor):
@@ -28,9 +28,9 @@ async def test_long_args(mock_actor_worker, caplog):
     await actor.concat(a=v, b=v)
     await worker.run()
     log = re.sub('0.0\d\ds', '0.0XXs', caplog.log)
-    assert ("dft  queued  0.0XXs → MockRedisTestActor.concat"
+    assert ("dft  queued  0.0XXs → MockRedisDemoActor.concat"
             "(a='0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19', b='0,1,2,3,4,5,6,7,8,9,1…)\n") in log
-    assert ("dft  ran in  0.0XXs ← MockRedisTestActor.concat ● "
+    assert ("dft  ran in  0.0XXs ← MockRedisDemoActor.concat ● "
             "'0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19 + 0,1,2,3,4,5,6,7,8,9,10,11,…\n") in log
 
 
@@ -42,7 +42,7 @@ async def test_seperate_log_levels(mock_actor_worker, caplog):
     log = re.sub('0.0\d\ds', '0.0XXs', caplog.log)
     assert ('arq.work: Initialising work manager, burst mode: True\n'
             'arq.work: Running worker with 1 shadow listening to 3 queues\n'
-            'arq.work: shadows: MockRedisTestActor | queues: high, dft, low\n'
+            'arq.work: shadows: MockRedisDemoActor | queues: high, dft, low\n'
             'arq.work: shutting down worker, waiting for 1 jobs to finish\n'
             'arq.work: shutting down worker after 0.0XXs ◆ 1 jobs done ◆ 0 failed ◆ 0 timed out\n') == log
 
@@ -65,7 +65,7 @@ async def test_queue_not_found(loop):
 async def test_mock_timeout(loop, caplog):
     caplog.set_loggers('arq.main', 'arq.work', 'arq.mock', level=logging.DEBUG)
     worker = MockRedisWorkerQuit(loop=loop)
-    actor = MockRedisTestActor(loop=loop)
+    actor = MockRedisDemoActor(loop=loop)
     worker.mock_data = actor.mock_data
 
     assert None is await actor.concat('a', 'b')
@@ -119,7 +119,7 @@ async def test_run_quit(tmpworkdir, redis_conn, actor, caplog):
     worker = WorkerQuit(loop=actor.loop)
     await worker.run()
     assert tmpworkdir.join('save_slow').read() == '3'
-    assert '1 pending tasks, waiting for one to finish before creating task for TestActor.save_slow(2, 0.1)' in caplog
+    assert '1 pending tasks, waiting for one to finish before creating task for DemoActor.save_slow(2, 0.1)' in caplog
 
 
 async def test_task_exc(redis_conn, actor, caplog):
@@ -173,11 +173,11 @@ async def test_non_existent_function(redis_conn, actor, caplog):
     worker = Worker(burst=True, loop=actor.loop)
     await worker.run()
     assert worker.jobs_failed == 1
-    assert 'Job Error: shadow class "TestActor" has no function "doesnt_exist"' in caplog
+    assert 'Job Error: shadow class "DemoActor" has no function "doesnt_exist"' in caplog
 
 
 def test_no_jobs(loop):
-    mock_actor = MockRedisTestActor(loop=loop)
+    mock_actor = MockRedisDemoActor(loop=loop)
     mock_worker = MockRedisWorker(burst=True, loop=loop)
     mock_worker.mock_data = mock_actor.mock_data
 
@@ -191,7 +191,7 @@ def test_no_jobs(loop):
 
 
 async def test_shutdown_without_work(loop):
-    mock_actor = MockRedisTestActor(loop=loop)
+    mock_actor = MockRedisDemoActor(loop=loop)
     mock_worker = MockRedisWorker(loop=loop, burst=True)
     mock_worker.mock_data = mock_actor.mock_data
     await mock_worker.close()
@@ -199,7 +199,7 @@ async def test_shutdown_without_work(loop):
 
 async def test_job_timeout(loop, caplog):
     caplog.set_loggers()
-    actor = MockRedisTestActor(loop=loop)
+    actor = MockRedisDemoActor(loop=loop)
     assert None is await actor.sleeper(0.2)
     assert None is await actor.sleeper(0.05)
     worker = MockRedisWorker(burst=True, loop=loop, timeout_seconds=0.1)
@@ -209,11 +209,11 @@ async def test_job_timeout(loop, caplog):
     log = re.sub(', line \d+,', ', line <no>,', log)
     log = re.sub('"/.*?/(\w+/\w+)\.py"', r'"/path/to/\1.py"', log)
     print(log)
-    assert ('arq.jobs: dft  queued  0.00Xs → MockRedisTestActor.sleeper(0.2)\n'
-            'arq.jobs: dft  queued  0.00Xs → MockRedisTestActor.sleeper(0.05)\n'
-            'arq.jobs: dft  ran in  0.05Xs ← MockRedisTestActor.sleeper ● 0.05\n'
-            'arq.jobs: job timed out <Job MockRedisTestActor.sleeper(0.2) on dft>\n'
-            'arq.jobs: dft  ran in  0.10Xs ! MockRedisTestActor.sleeper(0.2): CancelledError\n') in log
+    assert ('arq.jobs: dft  queued  0.00Xs → MockRedisDemoActor.sleeper(0.2)\n'
+            'arq.jobs: dft  queued  0.00Xs → MockRedisDemoActor.sleeper(0.05)\n'
+            'arq.jobs: dft  ran in  0.05Xs ← MockRedisDemoActor.sleeper ● 0.05\n'
+            'arq.jobs: job timed out <Job MockRedisDemoActor.sleeper(0.2) on dft>\n'
+            'arq.jobs: dft  ran in  0.10Xs ! MockRedisDemoActor.sleeper(0.2): CancelledError\n') in log
     assert ('raise CancelledError\n'
             'concurrent.futures._base.CancelledError\n'
             'arq.work: shutting down worker after 0.10Xs ◆ 2 jobs done ◆ 1 failed ◆ 1 timed out\n') in log
@@ -239,7 +239,7 @@ def test_repeat_worker_close(tmpworkdir, redis_conn, caplog):
 
 
 async def test_raise_worker_execute(redis_conn, actor):
-    worker = RaiseWorker(burst=True, loop=actor.loop, shadows=[TestActor])
+    worker = RaiseWorker(burst=True, loop=actor.loop, shadows=[DemoActor])
 
     await actor.boom()
     with pytest.raises(RuntimeError) as excinfo:
@@ -249,12 +249,12 @@ async def test_raise_worker_execute(redis_conn, actor):
 
 
 async def test_raise_worker_prepare(redis_conn, actor):
-    worker = RaiseWorker(burst=True, loop=actor.loop, shadows=[TestActor])
+    worker = RaiseWorker(burst=True, loop=actor.loop, shadows=[DemoActor])
 
     await actor.enqueue_job('foobar', 1, 2)
     with pytest.raises(RuntimeError) as excinfo:
         await worker.run()
-    assert excinfo.value.args[0] == 'Job Error: shadow class "TestActor" has no function "foobar"'
+    assert excinfo.value.args[0] == 'Job Error: shadow class "DemoActor" has no function "foobar"'
     await worker.close()
 
 

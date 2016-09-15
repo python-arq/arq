@@ -8,10 +8,10 @@ import pytz
 from arq.jobs import DatetimeJob, Job, JobSerialisationError
 from arq.worker import BaseWorker
 
-from .fixtures import CustomSettings, TestActor, Worker
+from .fixtures import CustomSettings, DemoActor, Worker
 
 
-class DatetimeActor(TestActor):
+class DatetimeActor(DemoActor):
     job_class = DatetimeJob
 
 
@@ -51,7 +51,7 @@ async def test_encode_datetimes(tmpworkdir, loop, redis_conn):
 
 
 async def test_bad_encoder(loop):
-    actor = TestActor(loop=loop)
+    actor = DemoActor(loop=loop)
     with pytest.raises(JobSerialisationError):
         await actor.save_values(datetime.now())
     await actor.close()
@@ -107,7 +107,7 @@ async def test_existing_shadows(loop, redis_conn):
 
 
 async def test_wrong_job_class(loop):
-    worker = DatetimeWorker(loop=loop, burst=True, shadows=[TestActor, TestActor, DatetimeActor])
+    worker = DatetimeWorker(loop=loop, burst=True, shadows=[DemoActor, DemoActor, DatetimeActor])
     with pytest.raises(TypeError) as excinfo:
         await worker.run()
     assert excinfo.value.args[0].endswith("has a different job class to the first shadow: "
@@ -116,10 +116,10 @@ async def test_wrong_job_class(loop):
 
 
 async def test_wrong_queues(loop):
-    class DifferentQueuesActor(TestActor):
-        queues = (TestActor.DEFAULT_QUEUE, 'foobar')
+    class DifferentQueuesActor(DemoActor):
+        queues = (DemoActor.DEFAULT_QUEUE, 'foobar')
 
-    worker = DatetimeWorker(loop=loop, burst=True, shadows=[TestActor, TestActor, DifferentQueuesActor])
+    worker = DatetimeWorker(loop=loop, burst=True, shadows=[DemoActor, DemoActor, DifferentQueuesActor])
     with pytest.raises(TypeError) as excinfo:
         await worker.run()
     msg = re.sub('0x\w+>', '0x123>', excinfo.value.args[0])
@@ -129,7 +129,7 @@ async def test_wrong_queues(loop):
 
 
 async def test_switch_job_class(loop):
-    worker = DatetimeWorker(loop=loop, burst=True, shadows=[TestActor])
+    worker = DatetimeWorker(loop=loop, burst=True, shadows=[DemoActor])
     assert worker.job_class is None
     await worker.run()
     assert worker.job_class == Job

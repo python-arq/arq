@@ -7,10 +7,10 @@ import pytest
 from arq import Actor, BaseWorker, concurrent
 from arq.testing import MockRedisWorker as MockRedisBaseWorker
 
-from .fixtures import FoobarActor, MockRedisTestActor, MockRedisWorker, TestActor
+from .fixtures import DemoActor, FoobarActor, MockRedisDemoActor, MockRedisWorker
 
 async def test_simple_job_dispatch(loop, debug):
-    actor = MockRedisTestActor(loop=loop)
+    actor = MockRedisDemoActor(loop=loop)
     assert None is await actor.add_numbers(1, 2)
     assert len(actor.mock_data) == 1
     assert list(actor.mock_data.keys())[0] == b'arq:q:dft'
@@ -19,7 +19,7 @@ async def test_simple_job_dispatch(loop, debug):
     data = msgpack.unpackb(v[0], encoding='utf8')
     # timestamp
     assert 1e12 < data.pop(0) < 3e12
-    assert data == ['MockRedisTestActor', 'add_numbers', [1, 2], {}]
+    assert data == ['MockRedisDemoActor', 'add_numbers', [1, 2], {}]
 
 
 async def test_enqueue_redis_job(actor, redis_conn):
@@ -32,18 +32,18 @@ async def test_enqueue_redis_job(actor, redis_conn):
     data = msgpack.unpackb(dft_queue[0], encoding='utf8')
     # timestamp
     assert 1e12 < data.pop(0) < 3e12
-    assert data == ['TestActor', 'add_numbers', [1, 2], {}]
+    assert data == ['DemoActor', 'add_numbers', [1, 2], {}]
 
 
 async def test_dispatch_work(tmpworkdir, loop, caplog, redis_conn):
     caplog.set_loggers(level=logging.DEBUG, fmt='%(message)s')
-    actor = MockRedisTestActor(loop=loop)
+    actor = MockRedisDemoActor(loop=loop)
     assert None is await actor.add_numbers(1, 2)
     assert None is await actor.high_add_numbers(3, 4, c=5)
     assert len(actor.mock_data[b'arq:q:dft']) == 1
     assert len(actor.mock_data[b'arq:q:high']) == 1
-    assert caplog.log == ('MockRedisTestActor.add_numbers ▶ dft\n'
-                          'MockRedisTestActor.high_add_numbers ▶ high\n')
+    assert caplog.log == ('MockRedisDemoActor.add_numbers ▶ dft\n'
+                          'MockRedisDemoActor.high_add_numbers ▶ high\n')
     worker = MockRedisWorker(burst=True, loop=actor.loop)
     worker.mock_data = actor.mock_data
     assert not tmpworkdir.join('add_numbers').exists()
@@ -51,33 +51,33 @@ async def test_dispatch_work(tmpworkdir, loop, caplog, redis_conn):
     assert tmpworkdir.join('add_numbers').read() == '3'
     log = re.sub('0.0\d\ds', '0.0XXs', caplog.log)
     log = re.sub("QUIT-.*", "QUIT-<random>", log)
-    assert ('MockRedisTestActor.add_numbers ▶ dft\n'
-            'MockRedisTestActor.high_add_numbers ▶ high\n'
+    assert ('MockRedisDemoActor.add_numbers ▶ dft\n'
+            'MockRedisDemoActor.high_add_numbers ▶ high\n'
             'Initialising work manager, burst mode: True\n'
             'Using first shadows job class "Job"\n'
             'Running worker with 1 shadow listening to 3 queues\n'
-            'shadows: MockRedisTestActor | queues: high, dft, low\n'
+            'shadows: MockRedisDemoActor | queues: high, dft, low\n'
             'populating quit queue to prompt exit: QUIT-<random>\n'
             'starting main blpop loop\n'
             'scheduling job from queue high\n'
             'scheduling job from queue dft\n'
             'got job from the quit queue, stopping\n'
             'shutting down worker, waiting for 2 jobs to finish\n'
-            'high queued  0.0XXs → MockRedisTestActor.high_add_numbers(3, 4, c=5)\n'
-            'high ran in  0.0XXs ← MockRedisTestActor.high_add_numbers ● 12\n'
-            'dft  queued  0.0XXs → MockRedisTestActor.add_numbers(1, 2)\n'
-            'dft  ran in  0.0XXs ← MockRedisTestActor.add_numbers ● \n'
+            'high queued  0.0XXs → MockRedisDemoActor.high_add_numbers(3, 4, c=5)\n'
+            'high ran in  0.0XXs ← MockRedisDemoActor.high_add_numbers ● 12\n'
+            'dft  queued  0.0XXs → MockRedisDemoActor.add_numbers(1, 2)\n'
+            'dft  ran in  0.0XXs ← MockRedisDemoActor.add_numbers ● \n'
             'task complete, 1 jobs done, 0 failed\n'
             'task complete, 2 jobs done, 0 failed\n'
             'shutting down worker after 0.0XXs ◆ 2 jobs done ◆ 0 failed ◆ 0 timed out\n') == log
     # quick check of caplog's str and repr
-    assert str(caplog).startswith('caplog:\nMockRedisTestActor')
-    assert repr(caplog).startswith("< caplog: 'MockRedisTestActor")
+    assert str(caplog).startswith('caplog:\nMockRedisDemoActor')
+    assert repr(caplog).startswith("< caplog: 'MockRedisDemoActor")
 
 
 async def test_handle_exception(loop, caplog):
     caplog.set_loggers(fmt='%(message)s')
-    actor = MockRedisTestActor(loop=loop)
+    actor = MockRedisDemoActor(loop=loop)
     assert caplog.log == ''
     assert None is await actor.boom()
     worker = MockRedisWorker(burst=True, loop=actor.loop)
@@ -88,10 +88,10 @@ async def test_handle_exception(loop, caplog):
     log = re.sub('"/.*?/(\w+/\w+)\.py"', r'"/path/to/\1.py"', log)
     assert ('Initialising work manager, burst mode: True\n'
             'Running worker with 1 shadow listening to 3 queues\n'
-            'shadows: MockRedisTestActor | queues: high, dft, low\n'
+            'shadows: MockRedisDemoActor | queues: high, dft, low\n'
             'shutting down worker, waiting for 1 jobs to finish\n'
-            'dft  queued  0.0XXs → MockRedisTestActor.boom()\n'
-            'dft  ran in  0.0XXs ! MockRedisTestActor.boom(): RuntimeError\n'
+            'dft  queued  0.0XXs → MockRedisDemoActor.boom()\n'
+            'dft  ran in  0.0XXs ! MockRedisDemoActor.boom(): RuntimeError\n'
             'Traceback (most recent call last):\n'
             '  File "/path/to/arq/worker.py", line <no>, in run_job\n'
             '    result = await func(*j.args, **j.kwargs)\n'
@@ -151,8 +151,8 @@ async def test_call_direct(mock_actor_worker, caplog):
     assert worker.jobs_failed == 0
     assert worker.jobs_complete == 1
     log = re.sub('0.0\d\ds', '0.0XXs', caplog.log)
-    assert ('arq.jobs: dft  queued  0.0XXs → MockRedisTestActor.direct_method(1, 2)\n'
-            'arq.jobs: dft  ran in  0.0XXs ← MockRedisTestActor.direct_method ● 3') in log
+    assert ('arq.jobs: dft  queued  0.0XXs → MockRedisDemoActor.direct_method(1, 2)\n'
+            'arq.jobs: dft  ran in  0.0XXs ← MockRedisDemoActor.direct_method ● 3') in log
 
 
 async def test_direct_binding(mock_actor_worker, caplog):
@@ -163,15 +163,15 @@ async def test_direct_binding(mock_actor_worker, caplog):
     await worker.run()
     assert worker.jobs_failed == 0
     assert worker.jobs_complete == 1
-    assert 'MockRedisTestActor.concat' in caplog
-    assert 'MockRedisTestActor.concat_direct' not in caplog
+    assert 'MockRedisDemoActor.concat' in caplog
+    assert 'MockRedisDemoActor.concat_direct' not in caplog
 
 
 async def test_dynamic_worker(tmpworkdir, loop, redis_conn):
-    actor = TestActor(loop=loop)
+    actor = DemoActor(loop=loop)
     await actor.add_numbers(1, 2)
     assert not tmpworkdir.join('add_numbers').exists()
-    worker = BaseWorker(loop=loop, burst=True, shadows=[TestActor])
+    worker = BaseWorker(loop=loop, burst=True, shadows=[DemoActor])
     await worker.run()
     await actor.close()
     assert tmpworkdir.join('add_numbers').exists()
@@ -179,10 +179,10 @@ async def test_dynamic_worker(tmpworkdir, loop, redis_conn):
 
 
 async def test_dynamic_worker_mocked(tmpworkdir, loop):
-    actor = MockRedisTestActor(loop=loop)
+    actor = MockRedisDemoActor(loop=loop)
     await actor.add_numbers(1, 2)
     assert not tmpworkdir.join('add_numbers').exists()
-    worker = MockRedisBaseWorker(loop=loop, burst=True, shadows=[MockRedisTestActor])
+    worker = MockRedisBaseWorker(loop=loop, burst=True, shadows=[MockRedisDemoActor])
     worker.mock_data = actor.mock_data
     await worker.run()
     await actor.close()
@@ -191,7 +191,7 @@ async def test_dynamic_worker_mocked(tmpworkdir, loop):
 
 
 async def test_dynamic_worker_custom_queue(tmpworkdir, loop):
-    class CustomActor(MockRedisTestActor):
+    class CustomActor(MockRedisDemoActor):
         queues = ['foobar']
     actor = CustomActor(loop=loop)
     await actor.enqueue_job('add_numbers', 1, 1, queue='foobar')
