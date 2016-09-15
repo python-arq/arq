@@ -10,11 +10,13 @@ Current Version: |version|
 
 Job queues and RPC in python with asyncio, redis and msgpack.
 
-arq was conceived as a simplified and more performant success to `rq`_
+*arq* was conceived as a simple, modern and performant successor to `rq`_.
+
+Why use *arq*?
 
 **non-blocking**
-    arq is built using python's `asyncio`_ allowing
-    non-blocking job enqueuing and execution. Multiple jobs (potentially hundres) can be run simultaneously
+    *arq* is built using python 3's `asyncio`_ allowing
+    non-blocking job enqueuing and execution. Multiple jobs (potentially hundreds) can be run simultaneously
     using a pool of *asyncio* ``Tasks``.
 
 **pre-forked**
@@ -23,18 +25,18 @@ arq was conceived as a simplified and more performant success to `rq`_
 
 **fast**
     Asyncio, pre-forking and use of `msgpack`_ for job encoding make
-    arq around 7x faster (see `benchmarks`_) than
+    *arq* around 7x faster (see `benchmarks`_) than
     *rq* for short jobs with no io. With io that might increase to around 40x
     faster. (TODO)
 
 **elegant**
-    arq uses a novel approach to variable scope with the ``@concurrent`` decorator being applied to bound
+    *arq* uses a novel approach to variable scope with the ``@concurrent`` decorator being applied to bound
     methods of ``Actor`` classes which hold the connection pool. This works well with `aiohttp`_, allows for easier
     testing and avoids extended head scratching over how variables like connections are defined (is this attached
     to the request? or thread local? or truly global? where am I, hell, what does global even mean?).
 
 **small**
-    and easy to reason with - currently arq is only about 500 lines, that won't change significantly.
+    and easy to reason with - currently *arq* is only about 500 lines, that won't change significantly.
 
 Dependencies
 ------------
