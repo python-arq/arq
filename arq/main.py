@@ -2,7 +2,7 @@
 :mod:`main`
 ===========
 
-Defines the main ``Actor`` class and ``concurrent`` decorator for using arq from within your code.
+Defines the main ``Actor`` class and ``@concurrent`` decorator for using arq from within your code.
 """
 import inspect
 import logging
@@ -34,25 +34,26 @@ class Actor(RedisMixin, metaclass=ActorMeta):
     Actors operate in two modes: normal mode when you initialise them and use them, and "shadow mode"
     where the actor is initialised by the worker and used to execute jobs.
     """
-    #: highest priority queue, the can be overwritten by changing .queues
+    #: highest priority queue, this can be overwritten by changing :attr:`arq.main.Actor.queues`
     HIGH_QUEUE = 'high'
 
-    #: default queue, this is a special value as it's used in enqueue_job
+    #: default queue, this is a special value as it's used in :meth:`arq.main.Actor.enqueue_job`
     DEFAULT_QUEUE = 'dft'
 
-    #: lowest priority queue, the can be overwritten by changing .queues
+    #: lowest priority queue, can be overwritten
     LOW_QUEUE = 'low'
 
     #: prefix prepended to all queue names to create the list keys in redis
     QUEUE_PREFIX = b'arq:q:'
 
-    #: if not none this name is used instead of the class name when encoding and referencing jobs
+    #: if not None this name is used instead of the class name when encoding and referencing jobs,
+    #: if None the class's name is used
     name = None
 
-    #: job class to use when encoding and decoding jobs from this actor.
+    #: job class to use when encoding and decoding jobs from this actor
     job_class = Job
 
-    #: uses the actor cam enqueue jobs in, order is important, the first queue is highest priority.
+    #: queues the actor can enqueue jobs in, order is important, the first queue is highest priority
     queues = (
         HIGH_QUEUE,
         DEFAULT_QUEUE,
@@ -61,8 +62,8 @@ class Actor(RedisMixin, metaclass=ActorMeta):
 
     def __init__(self, *, is_shadow=False, **kwargs):
         """
-        :param is_shadow: whether the actor should be shadow mode, this should only be set by the work
-        :param kwargs: other keyword arguments, see :meth:`arq.utils.RedisMixin` for all available options
+        :param is_shadow: whether the actor should be in shadow mode, this should only be set by the worker
+        :param kwargs: other keyword arguments, see :class:`arq.utils.RedisMixin` for all available options
         """
         self.queue_lookup = {q: self.QUEUE_PREFIX + q.encode() for q in self.queues}
         self.name = self.name or self.__class__.__name__
@@ -86,7 +87,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
 
         :param func_name: name of the function executing the job
         :param args: arguments to pass to the function
-        :param queue: name of the queue to use, if None DEFAULT_QUEUE is used.
+        :param queue: name of the queue to use, if None ``DEFAULT_QUEUE`` is used.
         :param kwargs: key word arguments to pass to the function
         """
         queue = queue or self.DEFAULT_QUEUE
@@ -109,9 +110,9 @@ class Actor(RedisMixin, metaclass=ActorMeta):
 
 def concurrent(func_or_queue):
     """
-    Decorating which defines a functions as concurrent, eg. it should be executed on the worker.
+    Decorator which defines a functions as concurrent, eg. it should be executed on the worker.
 
-    If you wish to call the function directly you can access the original function at "*_direct".
+    If you wish to call the function directly you can access the original function at ``*_direct``.
 
     The decorator can optionally be used with one argument: the queue to use by default for the job.
     """

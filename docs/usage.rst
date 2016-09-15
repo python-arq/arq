@@ -51,7 +51,7 @@ To execute the jobs, either after running ``demo.py`` or before/during::
 
     arq demo.py
 
-For details on the ``arq`` CLI::
+For details on the *arq* CLI::
 
     arq --help
 
@@ -59,7 +59,7 @@ Multiple Queues
 ...............
 
 Functions can be assigned to different queues, by default arq defines three queues:
-``HIGH_QUEUE``, ``DEFAULT_QUEUE`` and ``LOW_QUEUE`` which are prioritised by the worker in the order.
+``HIGH_QUEUE``, ``DEFAULT_QUEUE`` and ``LOW_QUEUE`` which are prioritised by the worker in that order.
 
 .. code:: python
 
@@ -74,12 +74,12 @@ Functions can be assigned to different queues, by default arq defines three queu
         async def email_premium_user(self, user_id):
             send_user_email(user_id)
 
-(Just a snippet, won't run as is)
+(Just a snippet, won't run "as is")
 
 Direct Enqueuing
 ................
 
-Functions can we enqueued direction whether or no they're decorated with ``@concurrent``.
+Functions can we enqueued directly whether or no they're decorated with ``@concurrent``.
 
 .. code:: python
 
@@ -101,7 +101,7 @@ you would also need to define a worker to run the jobs)
 See :meth:`arq.main.Actor.enqueue_job` for more details.
 
 Worker Customisation
-...................
+....................
 
 Workers can be customised in numerous ways, this is preferred to command line arguments as it's easier to
 document and record.
@@ -130,7 +130,7 @@ document and record.
             return conf
 
 (This script is more-or-less complete,
-provided ``Downloader`` and ``FooBar`` are defined and import it should run "as is")
+provided ``Downloader`` and ``FooBar`` are defined and imported it should run "as is")
 
 See :meth:`arq.worker.BaseWorker` for more customisation options.
 

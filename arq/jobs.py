@@ -2,7 +2,7 @@
 :mod:`jobs`
 ===========
 
-Defines the ``Job`` class and decedents which deal with encoding and decoding job data.
+Defines the ``Job`` class and descendants which deal with encoding and decoding job data.
 """
 from datetime import datetime
 
@@ -24,10 +24,10 @@ class Job:
     """
     __slots__ = ('queue', 'queued_at', 'class_name', 'func_name', 'args', 'kwargs')
 
-    #: custom encoder for msgpack, see DatetimeJob for an example of usage
+    #: custom encoder for msgpack, see :class:`arq.jobs.DatetimeJob` for an example of usage
     msgpack_encoder = None
 
-    #: custom object hook for msgpack, see DatetimeJob for an example of usage
+    #: custom object hook for msgpack, see :class:`arq.jobs.DatetimeJob` for an example of usage
     msgpack_object_hook = None
 
     def __init__(self, queue: str, data: bytes):
@@ -35,7 +35,7 @@ class Job:
         Create a job instance be decoding a job definition eg. from redis.
 
         :param queue: name of the queue the job was dequeued from
-        :param data: data to decode, as created by "encode" below
+        :param data: data to decode, as created by :meth:`arq.jobs.Job.encode`
         """
         self.queue = queue
         self.queued_at, self.class_name, self.func_name, self.args, self.kwargs = self._decode(data)
@@ -49,7 +49,7 @@ class Job:
         required information about a job to be performed.
 
         :param queued_at: time in ms unix time when the job was queue, if None now is used
-        :param class_name: name (see Actor definition) of the actor class where the job is defined
+        :param class_name: name (see :attr:`arq.main.Actor.name`) of the actor class where the job is defined
         :param func_name: name of the function be called
         :param args: arguments to pass to the function
         :param kwargs: key word arguments to pass to the function
@@ -88,8 +88,8 @@ TIMEZONE = 'O'
 class DatetimeJob(Job):
     """
     Alternative Job which copes with datetimes. None timezone naïve dates are supported but
-    the returned datetimes will use python datetime's ``timezone`` class to define the timezone
-    regardless of the timezone class originally used on the datetime object.
+    the returned datetimes will use a :mod:`datetime.timezone` class to define the timezone
+    regardless of the timezone class originally used on the datetime object (eg. ``pytz``).
     """
     @staticmethod
     def msgpack_encoder(obj):

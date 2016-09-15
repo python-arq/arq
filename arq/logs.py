@@ -39,7 +39,7 @@ def default_log_config(verbose: bool) -> dict:
     Setup default config. for dictConfig.
 
     :param verbose: level: DEBUG if True, INFO if False
-    :return: dict suitable for logging.config.dictConfig which configures arq logs
+    :return: dict suitable for ``logging.config.dictConfig``
     """
     log_level = 'DEBUG' if verbose else 'INFO'
     return {

@@ -2,7 +2,7 @@
 :mod:`worker`
 =============
 
-Responsible for executing jobs in the worker processes.
+Responsible for executing jobs on the worker.
 """
 import asyncio
 import logging
@@ -37,12 +37,12 @@ class BadJob(Exception):
 
 class BaseWorker(RedisMixin):
     """
-    Base class for Workers to inherit from
+    Base class for Workers to inherit from.
     """
     #: maximum number of jobs which can be execute at the same time by the event loop
     max_concurrent_tasks = 50
 
-    #: number of seconds after a termination signal (SIGINT or SIGTERM) is received to force quite the worker
+    #: number of seconds after a termination signal (SIGINT or SIGTERM) is received to force quit the worker
     shutdown_delay = 6
 
     #: default maximum duration of a job
@@ -59,12 +59,14 @@ class BaseWorker(RedisMixin):
                  existing_shadows=None,
                  **kwargs):
         """
-        :param burst: if True the worker will close as soon as no new jobs are found in the queue lists
-        :param shadows: list of Actor classes for the worker to run, overrides shadows already defined on the worker
-        :param queues: list of queue names for the Worker to listen on, by default queues is taken from the shadows
+        :param burst: if true the worker will close as soon as no new jobs are found in the queue lists
+        :param shadows: list of :class:`arq.main.Actor` classes for the worker to run,
+            overrides shadows already defined in the class definition
+        :param queues: list of queue names for the worker to listen on, if None queues is taken from the shadows
         :param timeout_seconds: maximum duration of a job, after that the job will be cancelled by the event loop
-        :param existing_shadows: list of shadow objects to use instead of initialising shadows, used for testing
-        :param kwargs: other keyword arguments, see :meth:`arq.utils.RedisMixin` for all available options
+        :param existing_shadows: list of shadow objects to use instead of initialising shadows,
+            generally only used for testing
+        :param kwargs: other keyword arguments, see :class:`arq.utils.RedisMixin` for all available options
         """
         self._burst_mode = burst
         self.shadows = shadows or self.shadows
@@ -102,9 +104,10 @@ class BaseWorker(RedisMixin):
     def logging_config(cls, verbose) -> dict:
         """
         Override to customise the logging setup for the arq worker.
+        By default just uses :func:`arq.logs.default_log_config`.
 
-        :param verbose: verbose flag from cli, by default log level is INFO if False and DEBUG if True
-        :return: dict suitable for logging.config.dictConfig
+        :param verbose: verbose flag from cli, by default log level is INFO if false and DEBUG if true
+        :return: dict suitable for ``logging.config.dictConfig``
         """
         return default_log_config(verbose)
 
@@ -298,7 +301,7 @@ class BaseWorker(RedisMixin):
 
 def import_string(file_path, attr_name):
     """
-    Import attribute/class from from a python module. Raise ImportError if the import failed.
+    Import attribute/class from from a python module. Raise ``ImportError`` if the import failed.
     Approximately stolen from django.
 
     :param file_path: path to python module
