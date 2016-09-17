@@ -9,6 +9,7 @@ import base64
 import os
 from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
+from typing import Tuple
 
 import aioredis
 from aioredis.pool import RedisPool
@@ -20,7 +21,7 @@ __all__ = [
 
 
 class SettingsMeta(type):
-    __dict__ = None
+    __dict__ = None  # type: OrderedDict[str, object]
 
     @classmethod
     def __prepare__(mcs, *args, **kwargs):
@@ -49,7 +50,7 @@ class ConnectionSettings(metaclass=SettingsMeta):
     R_HOST = 'localhost'
     R_PORT = 6379
     R_DATABASE = 0
-    R_PASSWORD = None
+    R_PASSWORD = None  # type: str
 
     def __init__(self, **custom_settings):
         """
@@ -76,7 +77,7 @@ class RedisMixin:
     def __init__(self, *,
                  loop: asyncio.AbstractEventLoop=None,
                  settings: ConnectionSettings=None,
-                 existing_pool: RedisPool=None):
+                 existing_pool: RedisPool=None) -> None:
         """
         :param loop: asyncio loop to use for the redis pool
         :param settings: connection settings to use for the pool
@@ -127,7 +128,7 @@ def create_tz(utcoffset=0) -> timezone:
     :param utcoffset: utc offset in seconds, if 0 timezone.utc is returned.
     """
     if utcoffset == 0:
-        return timezone.utc
+        return timezone.utc  # type: ignore
     else:
         return timezone(timedelta(seconds=utcoffset))
 
@@ -136,20 +137,20 @@ EPOCH = datetime(1970, 1, 1)
 EPOCH_TZ = EPOCH.replace(tzinfo=create_tz())
 
 
-def timestamp():
+def timestamp() -> float:
     """
     :return: now in unix time, eg. seconds since 1970
     """
     return (datetime.utcnow() - EPOCH).total_seconds()
 
 
-def to_unix_ms(dt: datetime) -> int:
+def to_unix_ms(dt: datetime) -> Tuple[int, int]:
     """
     convert a datetime to number of milliseconds since 1970
     """
     utcoffset = dt.utcoffset()
     if utcoffset is not None:
-        utcoffset = utcoffset.total_seconds()
+        utcoffset = utcoffset.total_seconds()  # type: ignore # looks like an error TODO
         unix = (dt - EPOCH_TZ).total_seconds() + utcoffset
         return int(unix * 1000), int(utcoffset)
     else:
@@ -169,7 +170,7 @@ def from_unix_ms(ms: int, utcoffset: int=None) -> datetime:
     return dt
 
 
-def gen_random(length: int=20) -> str:
+def gen_random(length: int=20) -> bytes:
     """
     Create a random string.
 

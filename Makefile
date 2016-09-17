@@ -13,6 +13,7 @@ isort:
 lint:
 	python setup.py check -rms
 	flake8 arq/ tests/
+	mypy --fast-parser --silent-imports arq/
 
 .PHONY: test
 test:

@@ -12,7 +12,7 @@ import sys
 import time
 from importlib import import_module, reload
 from multiprocessing import Process
-from signal import Signals
+from signal import Signals  # type: ignore
 
 from .logs import default_log_config
 from .utils import RedisMixin, ellipsis, gen_random, timestamp
@@ -57,7 +57,7 @@ class BaseWorker(RedisMixin):
                  queues: list=None,
                  timeout_seconds: int=None,
                  existing_shadows=None,
-                 **kwargs):
+                 **kwargs) -> None:
         """
         :param burst: if true the worker will close as soon as no new jobs are found in the queue lists
         :param shadows: list of :class:`arq.main.Actor` classes for the worker to run,
@@ -73,18 +73,18 @@ class BaseWorker(RedisMixin):
         self.queues = queues
         self.timeout_seconds = timeout_seconds or self.timeout_seconds
         self.existing_shadows = existing_shadows
-        self._pending_tasks = set()
+        self._pending_tasks = set()  # type: Set[asyncio.futures.Future]
 
         self.jobs_complete, self.jobs_failed, self.jobs_timed_out = 0, 0, 0
-        self._task_exception = None
-        self._shadow_lookup = {}
-        self.start = None
+        self._task_exception = None  # type: Exception
+        self._shadow_lookup = {}  # type: Dict[str, object] # TODO
+        self.start = None  # type: float
         self.running = True
         self._closed = False
-        self.job_class = None
+        self.job_class = None  # type: type # TODO
         signal.signal(signal.SIGINT, self.handle_sig)
         signal.signal(signal.SIGTERM, self.handle_sig)
-        super().__init__(**kwargs)
+        super().__init__(**kwargs)  # type: ignore # TODO
         self._closing_lock = asyncio.Lock(loop=self.loop)
 
     async def shadow_factory(self) -> list:

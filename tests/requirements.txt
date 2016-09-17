@@ -4,6 +4,7 @@ docutils
 flake8
 isort
 ghp-import
+mypy-lang
 pep8
 pytest
 pytest-cov
@@ -11,3 +12,4 @@ pytest-isort
 pytest-sugar
 pytz
 sphinx
+typed-ast

@@ -25,12 +25,12 @@ class Job:
     __slots__ = ('queue', 'queued_at', 'class_name', 'func_name', 'args', 'kwargs')
 
     #: custom encoder for msgpack, see :class:`arq.jobs.DatetimeJob` for an example of usage
-    msgpack_encoder = None
+    msgpack_encoder = None  # type: function
 
     #: custom object hook for msgpack, see :class:`arq.jobs.DatetimeJob` for an example of usage
-    msgpack_object_hook = None
+    msgpack_object_hook = None  # type: function
 
-    def __init__(self, queue: str, data: bytes):
+    def __init__(self, queue: str, data: bytes) -> None:
         """
         Create a job instance be decoding a job definition eg. from redis.
 

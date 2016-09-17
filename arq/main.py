@@ -48,7 +48,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
 
     #: if not None this name is used instead of the class name when encoding and referencing jobs,
     #: if None the class's name is used
-    name = None
+    name = None  # type: str
 
     #: job class to use when encoding and decoding jobs from this actor
     job_class = Job
@@ -92,7 +92,8 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         """
         queue = queue or self.DEFAULT_QUEUE
         try:
-            data = self.job_class.encode(class_name=self.name, func_name=func_name, args=args, kwargs=kwargs)
+            data = self.job_class.encode(class_name=self.name, func_name=func_name,  # type: ignore
+                                         args=args, kwargs=kwargs)  # type: ignore
         except TypeError as e:
             raise JobSerialisationError(str(e)) from e
         main_logger.debug('%s.%s ▶ %s', self.name, func_name, queue)
