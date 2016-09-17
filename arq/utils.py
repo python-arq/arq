@@ -55,7 +55,7 @@ class ConnectionSettings(metaclass=SettingsMeta):
     def __init__(self, **custom_settings):
         """
         :param custom_settings: Custom settings to override defaults, only attributes already defined
-        can be set.
+            can be set.
         """
         for name, value in custom_settings.items():
             if not hasattr(self, name):
