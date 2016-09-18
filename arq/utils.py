@@ -147,10 +147,12 @@ def timestamp() -> float:
 def to_unix_ms(dt: datetime) -> Tuple[int, int]:
     """
     convert a datetime to number of milliseconds since 1970
+    :param dt: datetime to evaluate
+    :return: tuple - (unix time in milliseconds, utc offset in seconds)
     """
     utcoffset = dt.utcoffset()
     if utcoffset is not None:
-        utcoffset = utcoffset.total_seconds()  # type: ignore # looks like an error TODO
+        utcoffset = utcoffset.total_seconds()  # type: ignore # TODO fix after python/typeshed#554
         unix = (dt - EPOCH_TZ).total_seconds() + utcoffset
         return int(unix * 1000), int(utcoffset)
     else:
@@ -163,6 +165,7 @@ def from_unix_ms(ms: int, utcoffset: int=None) -> datetime:
 
     :param ms: number of milliseconds since 1970
     :param utcoffset: if set a timezone i added to the datime based on the offset in seconds.
+    :return: datetime - including timezone if utcoffset is not None, else timezone naïve
     """
     dt = EPOCH + timedelta(milliseconds=ms)
     if utcoffset is not None:
