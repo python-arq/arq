@@ -10,7 +10,7 @@ import msgpack
 
 from .utils import ellipsis, from_unix_ms, timestamp, to_unix_ms
 
-__all__ = ['JobSerialisationError', 'Job']
+__all__ = ['JobSerialisationError', 'Job', 'DatetimeJob']
 
 
 class JobSerialisationError(Exception):
@@ -55,7 +55,10 @@ class Job:
         :param kwargs: key word arguments to pass to the function
         """
         queued_at = queued_at or int(timestamp() * 1000)
-        return cls._encode([queued_at, class_name, func_name, args, kwargs])
+        try:
+            return cls._encode([queued_at, class_name, func_name, args, kwargs])
+        except TypeError as e:
+            raise JobSerialisationError(str(e)) from e
 
     @classmethod
     def _encode(cls, data) -> bytes:
@@ -99,7 +102,8 @@ class DatetimeJob(Job):
             if tz is not None:
                 result[TIMEZONE] = tz
             return result
-        return obj
+        else:
+            return obj
 
     @staticmethod
     def msgpack_object_hook(obj):

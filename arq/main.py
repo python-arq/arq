@@ -8,7 +8,7 @@ import inspect
 import logging
 from functools import wraps
 
-from .jobs import Job, JobSerialisationError
+from .jobs import Job
 from .utils import RedisMixin
 
 __all__ = ['Actor', 'concurrent']
@@ -91,11 +91,8 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         :param kwargs: key word arguments to pass to the function
         """
         queue = queue or self.DEFAULT_QUEUE
-        try:
-            data = self.job_class.encode(class_name=self.name, func_name=func_name,  # type: ignore
-                                         args=args, kwargs=kwargs)  # type: ignore
-        except TypeError as e:
-            raise JobSerialisationError(str(e)) from e
+        data = self.job_class.encode(class_name=self.name, func_name=func_name,  # type: ignore
+                                     args=args, kwargs=kwargs)  # type: ignore
         main_logger.debug('%s.%s ▶ %s', self.name, func_name, queue)
 
         # use the pool directly rather than get_redis_conn to avoid one extra await
