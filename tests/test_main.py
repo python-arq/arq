@@ -124,12 +124,12 @@ async def test_duplicate_direct_name():
         async def foo(self):
             pass
 
-        def foo_direct(self):
+        def foo__direct(self):
             pass
     with pytest.raises(RuntimeError) as excinfo:
         BadActor()
     print(excinfo.value)
-    assert excinfo.value.args[0] == ('BadActor already has a method "foo_direct", '
+    assert excinfo.value.args[0] == ('BadActor already has a method "foo__direct", '
                                      'this breaks arq direct method binding of "foo"')
 
 
@@ -160,12 +160,12 @@ async def test_direct_binding(mock_actor_worker, caplog):
     caplog.set_level(logging.INFO)
     actor, worker = mock_actor_worker
     assert None is await actor.concat('a', 'b')
-    assert 'a + b' == await actor.concat_direct('a', 'b')
+    assert 'a + b' == await actor.concat__direct('a', 'b')
     await worker.run()
     assert worker.jobs_failed == 0
     assert worker.jobs_complete == 1
     assert 'MockRedisDemoActor.concat' in caplog
-    assert 'MockRedisDemoActor.concat_direct' not in caplog
+    assert 'MockRedisDemoActor.concat__direct' not in caplog
 
 
 async def test_dynamic_worker(tmpworkdir, loop, redis_conn):

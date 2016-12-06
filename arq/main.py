@@ -75,7 +75,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         for attr_name in dir(self.__class__):
             unbound_direct = getattr(getattr(self.__class__, attr_name), 'unbound_direct', None)
             if unbound_direct:
-                name = attr_name + '_direct'
+                name = attr_name + '__direct'
                 if hasattr(self, name):
                     msg = '{} already has a method "{}", this breaks arq direct method binding of "{}"'
                     raise RuntimeError(msg.format(self.name, name, attr_name))
@@ -110,7 +110,7 @@ def concurrent(func_or_queue):
     """
     Decorator which defines a functions as concurrent, eg. it should be executed on the worker.
 
-    If you wish to call the function directly you can access the original function at ``*_direct``.
+    If you wish to call the function directly you can access the original function at ``*__direct``.
 
     The decorator can optionally be used with one argument: the queue to use by default for the job.
     """

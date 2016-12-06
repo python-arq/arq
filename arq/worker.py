@@ -215,7 +215,7 @@ class BaseWorker(RedisMixin):
         except KeyError:
             return self.handle_prepare_exc('Job Error: unable to find shadow for {!r}'.format(j))
         try:
-            func = getattr(shadow, j.func_name + '_direct')
+            func = getattr(shadow, j.func_name + '__direct')
         except AttributeError:
             # try the method name directly for causes where enqueue_job is called manually
             try:
