@@ -152,9 +152,9 @@ def to_unix_ms(dt: datetime) -> Tuple[int, int]:
     """
     utcoffset = dt.utcoffset()
     if utcoffset is not None:
-        utcoffset = utcoffset.total_seconds()  # type: ignore # TODO fix after python/typeshed#554
-        unix = (dt - EPOCH_TZ).total_seconds() + utcoffset
-        return int(unix * 1000), int(utcoffset)
+        _utcoffset = utcoffset.total_seconds()
+        unix = (dt - EPOCH_TZ).total_seconds() + _utcoffset
+        return int(unix * 1000), int(_utcoffset)
     else:
         return int((dt - EPOCH).total_seconds() * 1000), None
 

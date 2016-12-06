@@ -12,6 +12,7 @@ from .example import ActorTest
 from .fixtures import (EXAMPLE_FILE, DemoActor, FoobarActor, MockRedisDemoActor, MockRedisWorker, MockRedisWorkerQuit,
                        Worker, WorkerFail, WorkerQuit, kill_parent)
 
+
 async def test_run_job_burst(tmpworkdir, redis_conn, actor):
     worker = Worker(burst=True, loop=actor.loop)
 
@@ -46,6 +47,7 @@ async def test_seperate_log_levels(mock_actor_worker, caplog):
             'arq.work: shutting down worker, waiting for 1 jobs to finish\n'
             'arq.work: shutting down worker after 0.0XXs ◆ 1 jobs done ◆ 0 failed ◆ 0 timed out\n') == log
 
+
 async def test_wrong_worker(mock_actor_worker, loop, caplog):
     actor, worker = mock_actor_worker
     actor2 = FoobarActor(loop=loop)
@@ -54,6 +56,7 @@ async def test_wrong_worker(mock_actor_worker, loop, caplog):
     await worker.run()
     assert worker.jobs_failed == 1
     assert 'Job Error: unable to find shadow for <Job foobar.concat(a, b) on dft>' in caplog
+
 
 async def test_queue_not_found(loop):
     worker = MockRedisWorkerQuit(loop=loop, queues=['foobar'])

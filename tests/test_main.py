@@ -9,6 +9,7 @@ from arq.testing import MockRedisWorker as MockRedisBaseWorker
 
 from .fixtures import DemoActor, FoobarActor, MockRedisDemoActor, MockRedisWorker
 
+
 async def test_simple_job_dispatch(loop, debug):
     actor = MockRedisDemoActor(loop=loop)
     assert None is await actor.add_numbers(1, 2)

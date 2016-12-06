@@ -44,11 +44,11 @@ setup(
         arq=arq.cli:cli
     """,
     install_requires=[
-        'aioredis>=0.2.8',
+        'aioredis>=0.2.9',
         'click>=6.6',
         'msgpack-python>=0.4.8',
     ],
     extras_require={
-        'testing': ['pytest>=2.9.2'],
+        'testing': ['pytest>=3.0.5'],
     },
 )

@@ -1,8 +1,8 @@
 .PHONY: install
 install:
-	pip install -U pip
+	pip install -U pip setuptools
 	pip install -e .
-	pip install -Ur tests/requirements.txt
+	pip install -r tests/requirements.txt
 
 .PHONY: isort
 isort:
@@ -13,11 +13,12 @@ isort:
 lint:
 	python setup.py check -rms
 	flake8 arq/ tests/
+	pytest arq -p no:sugar -q --cache-clear
 	mypy --fast-parser --silent-imports arq/
 
 .PHONY: test
 test:
-	py.test --cov=arq --isort && coverage combine
+	py.test --cov=arq && coverage combine
 
 .PHONY: .test-build-cov
 .test-build-cov:
