@@ -71,9 +71,6 @@ async def test_dispatch_work(tmpworkdir, loop, caplog, redis_conn):
             'task complete, 1 jobs done, 0 failed\n'
             'task complete, 2 jobs done, 0 failed\n'
             'shutting down worker after 0.0XXs ◆ 2 jobs done ◆ 0 failed ◆ 0 timed out\n') == log
-    # quick check of caplog's str and repr
-    assert str(caplog).startswith('caplog:\nMockRedisDemoActor')
-    assert repr(caplog).startswith("< caplog: 'MockRedisDemoActor")
 
 
 async def test_handle_exception(loop, caplog):

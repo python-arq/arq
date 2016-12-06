@@ -1,8 +1,27 @@
 import pytest
 
+from aioredis import create_redis
+
 from .fixtures import DemoActor, MockRedisDemoActor, MockRedisWorker
 
-pytest_plugins = 'arq.testing'
+
+@pytest.yield_fixture
+def redis_conn(loop):
+    """
+    yield fixture which creates a redis connection, and flushes redis before the test.
+
+    Note: redis is not flushed after the test both for performance and to allow later debugging.
+    """
+    async def _get_conn():
+        conn = await create_redis(('localhost', 6379), loop=loop)
+        await conn.flushall()
+        return conn
+    conn = loop.run_until_complete(_get_conn())
+    conn.loop = loop
+    yield conn
+
+    conn.close()
+    loop.run_until_complete(conn.wait_closed())
 
 
 @pytest.yield_fixture
@@ -25,3 +44,9 @@ def mock_actor_worker(mock_actor):
     _worker.mock_data = mock_actor.mock_data
     yield mock_actor, _worker
     mock_actor.loop.run_until_complete(_worker.close())
+
+
+@pytest.fixture
+def caplog(caplog):
+    caplog.set_loggers(log_names=('arq.main', 'arq.work', 'arq.jobs'), fmt='%(name)s: %(message)s')
+    return caplog

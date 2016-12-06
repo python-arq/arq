@@ -66,7 +66,7 @@ async def test_queue_not_found(loop):
 
 
 async def test_mock_timeout(loop, caplog):
-    caplog.set_loggers('arq.main', 'arq.work', 'arq.mock', level=logging.DEBUG)
+    caplog.set_loggers(log_names=('arq.main', 'arq.work', 'arq.mock'), level=logging.DEBUG)
     worker = MockRedisWorkerQuit(loop=loop)
     actor = MockRedisDemoActor(loop=loop)
     worker.mock_data = actor.mock_data
