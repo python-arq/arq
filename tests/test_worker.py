@@ -217,8 +217,7 @@ async def test_job_timeout(loop, caplog):
             'arq.jobs: dft  ran in  0.05Xs ← MockRedisDemoActor.sleeper ● 0.05\n'
             'arq.jobs: job timed out <Job MockRedisDemoActor.sleeper(0.2) on dft>\n'
             'arq.jobs: dft  ran in  0.10Xs ! MockRedisDemoActor.sleeper(0.2): CancelledError\n') in log
-    assert ('raise CancelledError\n'
-            'concurrent.futures._base.CancelledError\n'
+    assert ('concurrent.futures._base.CancelledError\n'
             'arq.work: shutting down worker after 0.10Xs ◆ 2 jobs done ◆ 1 failed ◆ 1 timed out\n') in log
 
 

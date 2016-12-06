@@ -1,5 +1,4 @@
 import logging
-import os
 from collections import OrderedDict
 from datetime import datetime
 
@@ -39,9 +38,10 @@ def test_custom_settings():
 
 
 def test_timestamp():
-    os.environ['TZ'] = 'Asia/Singapore'
+    # tests should always be run with TZ=Asia/Singapore
     # check we've successfully changed the timezone
-    assert 7.99 < (datetime.now() - datetime.utcnow()).total_seconds() / 3600 < 8.01
+    assert 7.99 < (datetime.now() - datetime.utcnow()).total_seconds() / 3600 < 8.01, ('timezone not set to '
+                                                                                       'Asia/Singapore')
     unix_stamp = int(datetime.now().strftime('%s'))
     assert abs(timestamp() - unix_stamp) < 2
 

@@ -18,11 +18,11 @@ lint:
 
 .PHONY: test
 test:
-	py.test --cov=arq && coverage combine
+	TZ=Asia/Singapore pytest --cov=arq && coverage combine
 
 .PHONY: .test-build-cov
 .test-build-cov:
-	py.test --cov=arq && (echo "building coverage html"; coverage combine; coverage html)
+	TZ=Asia/Singapore pytest --cov=arq && (echo "building coverage html"; coverage combine; coverage html)
 
 .PHONY: all
 all: .test-build-cov lint
