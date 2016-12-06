@@ -17,7 +17,7 @@ script:
 - make test
 - make docs
 after_success:
-- codecov
+- bash <(curl -s https://codecov.io/bash)
 deploy:
   provider: pypi
   user: samuelcolvin
