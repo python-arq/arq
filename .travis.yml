@@ -4,6 +4,11 @@ services:
 - redis-server
 python:
 - '3.5'
+- '3.6-dev'
+- 'nightly'
+matrix:
+  allow_failures:
+  - python: 'nightly'
 install:
 - make install
 script:
@@ -20,3 +25,4 @@ deploy:
   distributions: sdist bdist_wheel
   on:
     tags: true
+    python: 3.5
