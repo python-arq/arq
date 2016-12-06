@@ -44,7 +44,7 @@ def default_log_config(verbose: bool) -> dict:
     log_level = 'DEBUG' if verbose else 'INFO'
     return {
         'version': 1,
-        'disable_existing_loggers': True,
+        'disable_existing_loggers': False,
         'handlers': {
             'colour': {
                 'level': log_level,
