@@ -138,8 +138,8 @@ class BaseWorker(RedisMixin):
         work_logger.debug('Using first shadows job class "%s"', self.job_class.__name__)
         for shadow in shadows[1:]:
             if shadow.job_class != self.job_class:
-                raise TypeError('{s} has a different job class to the first shadow: '
-                                '{s.job_class} != {self.job_class}'.format(s=shadow, self=self))
+                raise TypeError("shadows don't match: {s} has a different job class to the first shadow, "
+                                "{s.job_class} != {self.job_class}".format(s=shadow, self=self))
 
         if not self.queues:
             self.queues = shadows[0].queues
@@ -341,7 +341,9 @@ def start_worker(worker_path: str, worker_class: str, burst: bool, loop: asyncio
         pass
     except Exception as e:
         work_logger.exception('Worker exiting after an unhandled error: %s', e.__class__.__name__)
-        raise
+        # could raise here instead of sys.exit but that causes the traceback to be printed twice,
+        # if it's needed "raise_exc" would need to be added a new argument to the function
+        sys.exit(1)
     finally:
         worker.loop.run_until_complete(worker.close())
 

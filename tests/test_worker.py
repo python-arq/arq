@@ -6,7 +6,7 @@ from multiprocessing import Process
 import pytest
 
 from arq.testing import RaiseWorker
-from arq.worker import ImmediateExit, import_string, start_worker
+from arq.worker import import_string, start_worker
 
 from .example import ActorTest
 from .fixtures import (EXAMPLE_FILE, DemoActor, FoobarActor, MockRedisDemoActor, MockRedisWorker, MockRedisWorkerQuit,
@@ -161,7 +161,7 @@ def test_run_sigint_twice(tmpworkdir, redis_conn, loop, caplog):
     loop.run_until_complete(actor.close())
 
     tmpworkdir.join('test.py').write(EXAMPLE_FILE)
-    with pytest.raises(ImmediateExit):
+    with pytest.raises(SystemExit):
         start_worker('test.py', 'WorkerSignalTwiceQuit', False, loop=loop)
     assert tmpworkdir.join('foo').exists()
     assert tmpworkdir.join('foo').read() == '1'
