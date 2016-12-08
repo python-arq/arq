@@ -60,15 +60,17 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         LOW_QUEUE,
     )
 
-    def __init__(self, *args, is_shadow=False, **kwargs):
+    def __init__(self, *args, is_shadow=False, concurrency_enabled=True, **kwargs):
         """
         :param is_shadow: whether the actor should be in shadow mode, this should only be set by the worker
+        :param concurrency_enabled: **For testing only** if set to False methods are called directly not queued
         :param kwargs: other keyword arguments, see :class:`arq.utils.RedisMixin` for all available options
         """
         self.queue_lookup = {q: self.QUEUE_PREFIX + q.encode() for q in self.queues}
         self.name = self.name or self.__class__.__name__
         self.is_shadow = is_shadow
         self._bind_direct_methods()
+        self._concurrency_enabled = concurrency_enabled
         super().__init__(*args, **kwargs)
 
     def _bind_direct_methods(self):
@@ -84,7 +86,11 @@ class Actor(RedisMixin, metaclass=ActorMeta):
 
     async def enqueue_job(self, func_name: str, *args, queue: str=None, **kwargs):
         """
-        Enqueue a job by pushing the encoded job information into the redis list specified by the queue
+        Enqueue a job by pushing the encoded job information into the redis list specified by the queue.
+
+        Alternatively if concurrency is disabled the job will be encoded, then decoded and ran.
+        Disabled concurrency (set via ``disable_concurrency`` init keyword argument) is designed for use in testing,
+        hence the job is encoded then decoded to keep tests as close as possible to production.
 
         :param func_name: name of the function executing the job
         :param args: arguments to pass to the function
@@ -96,12 +102,16 @@ class Actor(RedisMixin, metaclass=ActorMeta):
                                      args=args, kwargs=kwargs)  # type: ignore
         main_logger.debug('%s.%s ▶ %s', self.name, func_name, queue)
 
-        # use the pool directly rather than get_redis_conn to avoid one extra await
-        pool = self._redis_pool or await self.get_redis_pool()
-
-        queue_list = self.queue_lookup[queue]
-        async with pool.get() as redis:
-            await redis.rpush(queue_list, data)
+        if self._concurrency_enabled:
+            queue_list = self.queue_lookup[queue]
+            # use the pool directly rather than get_redis_conn to avoid one extra await
+            pool = self._redis_pool or await self.get_redis_pool()
+            async with pool.get() as redis:
+                await redis.rpush(queue_list, data)
+        else:
+            j = self.job_class(queue, data)
+            func = getattr(self, j.func_name + '__direct')
+            await func(*j.args, **j.kwargs)
 
     def __repr__(self):
         return '<{self.__class__.__name__}({self.name}) at 0x{id:02x}>'.format(self=self, id=id(self))

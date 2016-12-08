@@ -11,9 +11,10 @@ from arq.testing import MockRedisWorker as MockRedisBaseWorker
 from .fixtures import DemoActor, FoobarActor, MockRedisDemoActor, MockRedisWorker
 
 
-async def test_simple_job_dispatch(loop, debug):
+async def test_simple_job_dispatch(tmpworkdir, loop, debug):
     actor = MockRedisDemoActor(loop=loop)
     assert None is await actor.add_numbers(1, 2)
+    assert not tmpworkdir.join('add_numbers').exists()
     assert len(actor.mock_data) == 1
     assert list(actor.mock_data.keys())[0] == b'arq:q:dft'
     v = actor.mock_data[b'arq:q:dft']
@@ -22,6 +23,13 @@ async def test_simple_job_dispatch(loop, debug):
     # timestamp
     assert 1e12 < data.pop(0) < 3e12
     assert data == ['MockRedisDemoActor', 'add_numbers', [1, 2], {}]
+
+
+async def test_concurrency_disabled_job_dispatch(tmpworkdir, loop):
+    actor = MockRedisDemoActor(loop=loop, concurrency_enabled=False)
+    assert None is await actor.add_numbers(1, 2)
+    assert tmpworkdir.join('add_numbers').read_text('utf8') == '3'
+    assert len(actor.mock_data) == 0
 
 
 async def test_enqueue_redis_job(actor, redis_conn):
