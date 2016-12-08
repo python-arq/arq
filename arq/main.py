@@ -60,7 +60,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         LOW_QUEUE,
     )
 
-    def __init__(self, *, is_shadow=False, **kwargs):
+    def __init__(self, *args, is_shadow=False, **kwargs):
         """
         :param is_shadow: whether the actor should be in shadow mode, this should only be set by the worker
         :param kwargs: other keyword arguments, see :class:`arq.utils.RedisMixin` for all available options
@@ -69,12 +69,13 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         self.name = self.name or self.__class__.__name__
         self.is_shadow = is_shadow
         self._bind_direct_methods()
-        super().__init__(**kwargs)
+        super().__init__(*args, **kwargs)
 
     def _bind_direct_methods(self):
         for attr_name in dir(self.__class__):
             unbound_direct = getattr(getattr(self.__class__, attr_name), 'unbound_direct', None)
-            if unbound_direct:
+            # the isfunction check guards against MagicMock messing things up.
+            if unbound_direct and inspect.isfunction(unbound_direct):
                 name = attr_name + '__direct'
                 if hasattr(self, name):
                     msg = '{} already has a method "{}", this breaks arq direct method binding of "{}"'

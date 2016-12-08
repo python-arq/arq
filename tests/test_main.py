@@ -1,5 +1,6 @@
 import logging
 import re
+from asyncio import Future
 
 import msgpack
 import pytest
@@ -207,3 +208,13 @@ async def test_worker_no_shadow(loop):
     with pytest.raises(TypeError) as excinfo:
         await worker.run()
     assert excinfo.value.args[0] == 'shadows not defined on worker'
+
+
+async def test_mocked_actor(mocker, loop):
+    m = mocker.patch('tests.test_main.DemoActor.direct_method')
+    r = Future(loop=loop)
+    r.set_result(123)
+    m.return_value = r
+    actor = DemoActor(loop=loop)
+    v = await actor.direct_method(1, 1)
+    assert v == 123
