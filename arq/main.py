@@ -128,7 +128,7 @@ def concurrent(func_or_queue):
         async def _enqueuer(obj, *args, queue_name=None, **kwargs):
             await obj.enqueue_job(func_name, *args, queue=queue_name or dec_queue, **kwargs)
 
-        # NOTE: direct is (and has to be) unbound: http://stackoverflow.com/a/7891681/949890
+        # NOTE: direct is (and has to be) unbound at this stage, it is bound by _bind_direct_methods
         _enqueuer.unbound_direct = func
         return _enqueuer
 
