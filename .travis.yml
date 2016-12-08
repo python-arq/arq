@@ -8,7 +8,6 @@ python:
 - 'nightly'
 matrix:
   allow_failures:
-  - python: '3.6-dev'
   - python: 'nightly'
 install:
 - make install
