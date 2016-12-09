@@ -83,7 +83,7 @@ class RedisMixin:
         :param settings: connection settings to use for the pool
         :param existing_pool: existing pool, if set no new pool is craeted, instead this one is used
         """
-        # the "or getattr(...) or" seems odd but it allows the mixin to work with subclasses with initialise
+        # the "or getattr(...) or" seems odd but it allows the mixin to work with subclasses which initialise
         # loop or settings before calling super().__init__ and don't pass those parameters.
         self.loop = loop or getattr(self, 'loop', None) or asyncio.get_event_loop()
         self.settings = settings or getattr(self, 'settings', None) or ConnectionSettings()
