@@ -2,14 +2,14 @@
 :mod:`utils`
 ============
 
-Utilises for running arq used by modules.
+Utilises for running arq used by other modules.
 """
 import asyncio
 import base64
 import os
 from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
-from typing import Tuple
+from typing import Tuple, Union
 
 import aioredis
 from aioredis.pool import RedisPool
@@ -144,7 +144,7 @@ def timestamp() -> float:
     return (datetime.utcnow() - EPOCH).total_seconds()
 
 
-def to_unix_ms(dt: datetime) -> Tuple[int, int]:
+def to_unix_ms(dt: datetime) -> Tuple[int, Union[int, None]]:
     """
     convert a datetime to number of milliseconds since 1970
     :param dt: datetime to evaluate
