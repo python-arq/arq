@@ -14,11 +14,6 @@ from typing import Tuple, Union
 import aioredis
 from aioredis.pool import RedisPool
 
-__all__ = [
-    'ConnectionSettings',
-    'RedisMixin',
-]
-
 
 class SettingsMeta(type):
     __dict__ = None  # type: OrderedDict[str, object]
