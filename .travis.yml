@@ -47,5 +47,5 @@ deploy:
   provider: script
   script: make travis-deploy-docs
   on:
-    # tags: true
+    tags: true
     python: 3.5
