@@ -13,10 +13,7 @@ from typing import Tuple, Union
 import aioredis
 from aioredis.pool import RedisPool
 
-__all__ = [
-    'RedisSettings',
-    'RedisMixin',
-]
+__all__ = ['RedisSettings', 'RedisMixin']
 
 
 class RedisSettings:

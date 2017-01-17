@@ -36,7 +36,7 @@ Why use *arq*?
     to the request? or thread local? or truly global? where am I, hell, what does global even mean?).
 
 **small**
-    and easy to reason with - currently *arq* is only about 500 lines, that won't change significantly.
+    and easy to reason with - currently *arq* is only about 600 lines, that won't change significantly.
 
 Dependencies
 ------------
@@ -82,6 +82,8 @@ API Reference
 
 .. automodule:: arq.testing
    :members:
+
+.. include:: ../HISTORY.rst
 
 Indices and tables
 ------------------
