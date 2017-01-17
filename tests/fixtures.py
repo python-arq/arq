@@ -5,7 +5,7 @@ import signal
 import time
 from pathlib import Path
 
-from arq import Actor, BaseWorker, ConnectionSettings, concurrent
+from arq import Actor, BaseWorker, concurrent
 from arq.testing import MockRedisMixin
 
 
@@ -114,15 +114,6 @@ class MockRedisWorkerQuit(MockRedisWorker):
 
 class FoobarActor(MockRedisDemoActor):
     name = 'foobar'
-
-
-class NonSettingParent:
-    __dict__ = {1: 2}
-
-
-class CustomSettings(NonSettingParent, ConnectionSettings):
-    X_THING = 2
-    A_THING = 1
 
 
 def kill_parent():

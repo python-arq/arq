@@ -56,7 +56,6 @@ class BaseWorker(RedisMixin):
                  shadows: list=None,
                  queues: list=None,
                  timeout_seconds: int=None,
-                 existing_shadows=None,
                  **kwargs) -> None:
         """
         :param burst: if true the worker will close as soon as no new jobs are found in the queue lists
@@ -64,15 +63,12 @@ class BaseWorker(RedisMixin):
             overrides shadows already defined in the class definition
         :param queues: list of queue names for the worker to listen on, if None queues is taken from the shadows
         :param timeout_seconds: maximum duration of a job, after that the job will be cancelled by the event loop
-        :param existing_shadows: list of shadow objects to use instead of initialising shadows,
-            generally only used for testing
         :param kwargs: other keyword arguments, see :class:`arq.utils.RedisMixin` for all available options
         """
         self._burst_mode = burst
         self.shadows = shadows or self.shadows
         self.queues = queues
         self.timeout_seconds = timeout_seconds or self.timeout_seconds
-        self.existing_shadows = existing_shadows
         self._pending_tasks = set()  # type: Set[asyncio.futures.Future]
 
         self.jobs_complete, self.jobs_failed, self.jobs_timed_out = 0, 0, 0
@@ -93,12 +89,11 @@ class BaseWorker(RedisMixin):
 
         Override to customise the way shadows are initialised.
         """
-        if self.existing_shadows:
-            return self.existing_shadows
         if self.shadows is None:
             raise TypeError('shadows not defined on worker')
         rp = await self.get_redis_pool()
-        return [s(settings=self.settings, is_shadow=True, loop=self.loop, existing_pool=rp) for s in self.shadows]
+        return [s(redis_settings=self.redis_settings, is_shadow=True, loop=self.loop, existing_pool=rp)
+                for s in self.shadows]
 
     @classmethod
     def logging_config(cls, verbose) -> dict:

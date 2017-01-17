@@ -1,4 +1,3 @@
-import json
 import re
 from datetime import datetime, timedelta, timezone
 
@@ -8,7 +7,7 @@ import pytz
 from arq.jobs import DatetimeJob, Job, JobSerialisationError
 from arq.worker import BaseWorker
 
-from .fixtures import CustomSettings, DemoActor, Worker
+from .fixtures import DemoActor
 
 
 class DatetimeActor(DemoActor):
@@ -17,21 +16,6 @@ class DatetimeActor(DemoActor):
 
 class DatetimeWorker(BaseWorker):
     shadows = [DatetimeActor]
-
-
-async def test_custom_settings(actor, redis_conn):
-    await actor.store_info()
-
-    settings = CustomSettings()
-    worker = Worker(loop=actor.loop, burst=True, settings=settings)
-    await worker.run()
-    info = await redis_conn.get(b'actor_info')
-    info = info.decode()
-    info = json.loads(info)
-    assert info['is_shadow'] is True
-    assert info['settings']['data']['X_THING'] == 2
-
-    await worker.close()
 
 
 async def test_encode_datetimes(tmpworkdir, loop, redis_conn):
@@ -89,20 +73,6 @@ async def test_encode_non_datetimes(tmpworkdir, loop, redis_conn):
     assert worker.jobs_failed == 0
     assert tmpworkdir.join('values').exists()
     assert tmpworkdir.join('values').read() == "<{'a': 1}>, <{'a': 2}>"
-    await worker.close()
-
-
-async def test_existing_shadows(loop, redis_conn):
-    actor = DatetimeActor(loop=loop)
-    await actor.store_info()
-
-    worker = BaseWorker(loop=actor.loop, burst=True, existing_shadows=[actor])
-    await worker.run()
-    info = await redis_conn.get(b'actor_info')
-    info = json.loads(info.decode())
-    assert info['class'] == 'DatetimeActor'
-    assert info['is_shadow'] is False  # because it was initialised by us
-    assert worker.jobs_failed == 0
     await worker.close()
 
 
