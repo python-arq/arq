@@ -33,7 +33,7 @@ env:
 - secure: "CT1j0VZeLoqBBiMXLOImIBGiPDgPeNZ9xHBf+7bhvurCjcXnFwfhwKFk59o6O1PNLiLB21zeKP9QBLwHaAnQfeahP4+I/FkqowN1NjeKzm95wqFnQvZap3ww33/NYt8Wbs+LBK6SF6GjBJpcV7MMwpDjrxXW4+rN4zVcZNQEcE4t5Gcs49twVqU+nTUwNMuYO1GORhNvM4FNIJ2GI578GFA16WVoiRyfu2wij0mgp0WMddQFJUwxvG37Ehu3DxVkj5pxH9UPouH4j6MVnnx+8Uv36Ux+4j7lOavhqWgbSZkPAFTS7gq3STlPbLWzAwJMkI0fWCW67wPvNCGp6d7HJbRq/g3tld02adg/herdtDbwbqkaR/Ahltbjkl/pshX6u/HA7UnPtp1q9g5qnWJOd+ip/ngSKoIcJb9aYeqqrHMB2wIKJZit1hlwgFwRGgW3HNMWAuoTpdMuFGUSrGWg2oKAUFiwMhhOww7DIHsj1S3uOc6JfGEo9K5IODZdjSge3FeeDQwpU0vZWlCD9bXJoWHVIbtckPRQhlrD/9cojEIhpU1wV+xO/yp5qdtEJGoTaAyn7xdN+pfsujeMElgbU5oUZjtI5rbglHQM3N1ZQOwaK514vMHguBoW8f3kvSx0Bpub/aCgWDQDvnSuX+nzZbkoCAs2igvsQtefqAWnrE4="
 
 deploy:
-  provider: pypi
+- provider: pypi
   user: samuelcolvin
   password:
     secure: fM1AEWtweEM0JMJET4ONgbk0E3FlPo0A4lymNRj+iKBAG1qhYtR+jJNtYCAnTbL0RZJjxofIP1vnDOW/xukAzh8stDjc199Gr2uqVox3xH6LplK75Ouc8QpEhYKg4r3y58m+9cp0H10OBNsUV3pTJe52KQFfT+C1e+rA1zKk0t1QbUiBaXyRweqNLfS1K+Bfb9dXtbKE66KV8TXKS4HXrsjBU3I4OlgDOSC2JCOivPUCBwVsN8OW4MDLt8gEuK+i5JkN0hBEBR3LGSi8n8CU+32fXDpl0RVmYbIR3CbgDVx79HKZIWSYbFJ+JRDpKIio0H0bvgpy1hI92olS4K0ExI3Y2S/gToGMA+jdZdjQgobCoDor3kGaG2ZzT/iG2IzB4pnNjrwQhEzVGQMrXBxiWT8Yw1I+lanV88U57x2A8/RmTzMPMu5bK0QCFBPZ9cOUA7lmFpG2lJvYnK/kdjIE4/RX1LGfKgPs7i2dM+yj7jSUuVUQY+Y0Ja5I11GsAzMpKtH1HnN9dQ0n0rfE+Le4ATdVA9lj2te4v/csrC/wiC5n4mg1YIGxDU0obEvtiNepK4suCsy/PDLiHx5xzIS0z7WWhHK+6XCBDC5enw+2hKs3ETJW3KbDU0Mz3q8vV64VObxZPLQxfKgT5o30OyMElsnLIZhK4R2Vsr5CzRzP2pY=
@@ -42,9 +42,7 @@ deploy:
   on:
     tags: true
     python: 3.5
-
-deploy:
-  provider: script
+- provider: script
   script: make travis-deploy-docs
   on:
     tags: true

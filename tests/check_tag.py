@@ -10,6 +10,6 @@ if git_tag:
         print('✖ "TRAVIS_TAG" environment variable does not match arq.version: "%s" vs. "%s"' % (git_tag, VERSION))
         sys.exit(1)
     else:
-        print('✓ "TRAVIS_TAG" environment variable matches arq.version: "{}" vs. "%s"'.format(git_tag, VERSION))
+        print('✓ "TRAVIS_TAG" environment variable matches arq.version: "%s" vs. "%s"' % (git_tag, VERSION))
 else:
     print('✓ "TRAVIS_TAG" not defined')
