@@ -3,9 +3,8 @@
 History
 -------
 
-v1.0.0 (TBD)
+v0.3.0 (2017-01-19)
 ...................
-* Switch to `semver <http://semver.org/>`_ versioning
 * rename settings class to ``RedisSettings`` and simplify significantly
 
 v0.2.0 (2016-12-09)
