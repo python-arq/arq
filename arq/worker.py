@@ -35,6 +35,10 @@ class BadJob(Exception):
     pass
 
 
+# special signal sent by the main process in case the worker process hasn't received a signal (eg. SIGTERM or SIGINT)
+SIG_SUPERVISOR = signal.SIGRTMIN + 7
+
+
 class BaseWorker(RedisMixin):
     """
     Base class for Workers to inherit from.
@@ -80,6 +84,7 @@ class BaseWorker(RedisMixin):
         self.job_class = None  # type: type # TODO
         signal.signal(signal.SIGINT, self.handle_sig)
         signal.signal(signal.SIGTERM, self.handle_sig)
+        signal.signal(SIG_SUPERVISOR, self.handle_supervisor_signal)
         super().__init__(**kwargs)  # type: ignore # TODO
         self._closing_lock = asyncio.Lock(loop=self.loop)
 
@@ -176,15 +181,15 @@ class BaseWorker(RedisMixin):
                 msg = await redis.blpop(*redis_queues, timeout=1)
                 if msg is None:
                     continue
-                _queue, data = msg
-                if self._burst_mode and _queue == quit_queue:
+                raw_queue, data = msg
+                if self._burst_mode and raw_queue == quit_queue:
                     work_logger.debug('got job from the quit queue, stopping')
                     break
-                queue = queue_lookup[_queue]
-                work_logger.debug('scheduling job from queue %s', queue)
-                await self.schedule_job(queue, data)
+                queue = queue_lookup[raw_queue]
+                await self.schedule_job(data, queue, raw_queue)
 
-    async def schedule_job(self, queue, data):
+    async def schedule_job(self, data, queue, raw_queue):
+        work_logger.debug('scheduling job from queue %s', queue)
         job = self.job_class(queue, data)
 
         pt_cnt = len(self._pending_tasks)
@@ -193,6 +198,11 @@ class BaseWorker(RedisMixin):
             _, self._pending_tasks = await asyncio.wait(self._pending_tasks, loop=self.loop,
                                                         return_when=asyncio.FIRST_COMPLETED)
 
+        if not self.running:
+            work_logger.warning('job popped from queue, but exit is imminent, re-queueing the job')
+            async with await self.get_redis_conn() as redis:
+                await redis.lpush(raw_queue, data)
+            return
         task = self.loop.create_task(self.run_job(job))
         task.add_done_callback(self.job_callback)
         self.loop.call_later(self.timeout_seconds, self.cancel_job, task, job)
@@ -280,9 +290,19 @@ class BaseWorker(RedisMixin):
             await super().close()
             self._closed = True
 
+    def handle_supervisor_signal(self, signum, frame):
+        self.running = False
+        work_logger.warning('pid=%d, got shutdown signal from main process, stopping...', os.getpid())
+        signal.signal(signal.SIGINT, self.handle_sig_force)
+        signal.signal(signal.SIGTERM, self.handle_sig_force)
+        signal.signal(signal.SIGALRM, self.handle_sig_force)
+        signal.alarm(self.shutdown_delay)
+        raise HandledExit()
+
     def handle_sig(self, signum, frame):
         self.running = False
         work_logger.warning('pid=%d, got signal: %s, stopping...', os.getpid(), Signals(signum).name)
+        signal.signal(SIG_SUPERVISOR, signal.SIG_IGN)
         signal.signal(signal.SIGINT, self.handle_sig_force)
         signal.signal(signal.SIGTERM, self.handle_sig_force)
         signal.signal(signal.SIGALRM, self.handle_sig_force)
@@ -365,17 +385,18 @@ class RunWorkerProcess:
         work_logger.critical('worker process %s exited badly with exit code %s',
                              self.process.pid, self.process.exitcode)
         sys.exit(3)
-        # could restart worker here, but better to leave it up to the real manager
+        # could restart worker here, but better to leave it up to the real manager eg. docker restart: always
 
     def handle_sig(self, signum, frame):
         signal.signal(signal.SIGINT, self.handle_sig_force)
         signal.signal(signal.SIGTERM, self.handle_sig_force)
         work_logger.warning('got signal: %s, waiting for worker pid=%s to finish...', Signals(signum).name,
                             self.process and self.process.pid)
-        for i in range(100):  # pragma: no branch
-            if not self.process or not self.process.is_alive():
-                return
-            time.sleep(0.1)
+        # sleep to make sure handle_sig above has executed if it's going to and detached handle_supervisor_signal
+        time.sleep(0.01)
+        if self.process and self.process.is_alive():
+            work_logger.debug("sending custom shutdown signal to worker in case it didn't receive the signal")
+            os.kill(self.process.pid, SIG_SUPERVISOR)
 
     def handle_sig_force(self, signum, frame):
         work_logger.error('got signal: %s again, forcing exit', Signals(signum).name)

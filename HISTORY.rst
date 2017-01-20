@@ -3,6 +3,11 @@
 History
 -------
 
+v0.3.1 (2017-01-20)
+...................
+* fix main process signal handling so the worker shuts down when just the main process receives a signal
+* re-enqueue un-started jobs popped from the queue if the worker is about to exit
+
 v0.3.0 (2017-01-19)
 ...................
 * rename settings class to ``RedisSettings`` and simplify significantly

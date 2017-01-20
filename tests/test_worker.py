@@ -2,9 +2,11 @@ import asyncio
 import logging
 import re
 from multiprocessing import Process
+from unittest.mock import MagicMock
 
 import pytest
 
+import arq.worker
 from arq.testing import RaiseWorker
 from arq.worker import import_string, start_worker
 
@@ -117,12 +119,16 @@ async def test_run_quit(tmpworkdir, redis_conn, actor, caplog):
     await actor.save_slow(2, 0.1)
     await actor.save_slow(3, 0.1)
     await actor.save_slow(4, 0.1)
+    assert 4 == await redis_conn.llen(b'arq:q:dft')
 
     assert not tmpworkdir.join('save_slow').exists()
     worker = WorkerQuit(loop=actor.loop)
     await worker.run()
-    assert tmpworkdir.join('save_slow').read() == '3'
+    # the third job should be remove from the queue and readded
+    assert tmpworkdir.join('save_slow').read() == '2'
     assert '1 pending tasks, waiting for one to finish before creating task for DemoActor.save_slow(2, 0.1)' in caplog
+    assert 'job popped from queue, but exit is imminent, re-queueing the job' in caplog
+    assert 2 == await redis_conn.llen(b'arq:q:dft')
 
 
 async def test_task_exc(redis_conn, actor, caplog):
@@ -169,6 +175,25 @@ def test_run_sigint_twice(tmpworkdir, redis_conn, loop, caplog):
     assert tmpworkdir.join('foo').exists()
     assert tmpworkdir.join('foo').read() == '1'
     assert 'Worker exiting after an unhandled error: ImmediateExit' in caplog
+
+
+async def test_run_supervisor_signal(actor, monkeypatch):
+    mock_signal_signal = MagicMock()
+    monkeypatch.setattr(arq.worker.signal, 'signal', mock_signal_signal)
+    mock_signal_alarm = MagicMock()
+    monkeypatch.setattr(arq.worker.signal, 'alarm', mock_signal_alarm)
+
+    worker = Worker(burst=True, loop=actor.loop)
+    assert worker.running is True
+    assert mock_signal_signal.call_count == 3
+    assert mock_signal_alarm.call_count == 0
+
+    with pytest.raises(arq.worker.HandledExit):
+        worker.handle_supervisor_signal(arq.worker.SIG_SUPERVISOR, None)
+
+    assert worker.running is False
+    assert mock_signal_signal.call_count == 6
+    assert mock_signal_alarm.call_count == 1
 
 
 async def test_non_existent_function(redis_conn, actor, caplog):
