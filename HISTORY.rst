@@ -3,6 +3,10 @@
 History
 -------
 
+v0.3.2 (TBD)
+...................
+* improved solution for preventing new jobs starting when the worker is about to stop
+
 v0.3.1 (2017-01-20)
 ...................
 * fix main process signal handling so the worker shuts down when just the main process receives a signal

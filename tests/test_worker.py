@@ -126,8 +126,7 @@ async def test_run_quit(tmpworkdir, redis_conn, actor, caplog):
     await worker.run()
     # the third job should be remove from the queue and readded
     assert tmpworkdir.join('save_slow').read() == '2'
-    assert '1 pending tasks, waiting for one to finish before creating task for DemoActor.save_slow(2, 0.1)' in caplog
-    assert 'job popped from queue, but exit is imminent, re-queueing the job' in caplog
+    assert '1 pending tasks, waiting for one to finish' in caplog
     assert 2 == await redis_conn.llen(b'arq:q:dft')
 
 
@@ -177,7 +176,7 @@ def test_run_sigint_twice(tmpworkdir, redis_conn, loop, caplog):
     assert 'Worker exiting after an unhandled error: ImmediateExit' in caplog
 
 
-async def test_run_supervisor_signal(actor, monkeypatch):
+async def test_run_proxy_signal(actor, monkeypatch):
     mock_signal_signal = MagicMock()
     monkeypatch.setattr(arq.worker.signal, 'signal', mock_signal_signal)
     mock_signal_alarm = MagicMock()
@@ -189,7 +188,7 @@ async def test_run_supervisor_signal(actor, monkeypatch):
     assert mock_signal_alarm.call_count == 0
 
     with pytest.raises(arq.worker.HandledExit):
-        worker.handle_supervisor_signal(arq.worker.SIG_SUPERVISOR, None)
+        worker.handle_proxy_signal(arq.worker.SIG_PROXY, None)
 
     assert worker.running is False
     assert mock_signal_signal.call_count == 6

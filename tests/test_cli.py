@@ -56,7 +56,7 @@ def test_main_process_sigint(tmpworkdir, monkeypatch, caplog):
     work_runner = arq.worker.RunWorkerProcess('test.py', 'Worker')
     work_runner.handle_sig(signal.SIGINT, None)
     assert 'got signal: SIGINT, waiting for worker pid=123 to finish...' in caplog
-    os_kill.assert_called_once_with(123, arq.worker.SIG_SUPERVISOR)
+    os_kill.assert_called_once_with(123, arq.worker.SIG_PROXY)
 
 
 def test_main_process_sigint_worker_stopped(tmpworkdir, monkeypatch, caplog):

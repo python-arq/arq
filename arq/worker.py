@@ -36,7 +36,7 @@ class BadJob(Exception):
 
 
 # special signal sent by the main process in case the worker process hasn't received a signal (eg. SIGTERM or SIGINT)
-SIG_SUPERVISOR = signal.SIGRTMIN + 7
+SIG_PROXY = signal.SIGRTMIN + 7
 
 
 class BaseWorker(RedisMixin):
@@ -84,7 +84,7 @@ class BaseWorker(RedisMixin):
         self.job_class = None  # type: type # TODO
         signal.signal(signal.SIGINT, self.handle_sig)
         signal.signal(signal.SIGTERM, self.handle_sig)
-        signal.signal(SIG_SUPERVISOR, self.handle_supervisor_signal)
+        signal.signal(SIG_PROXY, self.handle_proxy_signal)
         super().__init__(**kwargs)  # type: ignore # TODO
         self._closing_lock = asyncio.Lock(loop=self.loop)
 
@@ -160,7 +160,7 @@ class BaseWorker(RedisMixin):
         finally:
             if reuse:
                 work_logger.info('waiting for %d jobs to finish', len(self._pending_tasks))
-                await asyncio.gather(*self._pending_tasks, loop=self.loop)
+                await asyncio.wait(self._pending_tasks, loop=self.loop)
             else:
                 await self.close()
             if self._task_exception:
@@ -186,27 +186,27 @@ class BaseWorker(RedisMixin):
                     work_logger.debug('got job from the quit queue, stopping')
                     break
                 queue = queue_lookup[raw_queue]
-                await self.schedule_job(data, queue, raw_queue)
+                self.schedule_job(data, queue)
+                await self.below_concurrency_limit()
 
-    async def schedule_job(self, data, queue, raw_queue):
+    def schedule_job(self, data, queue):
         work_logger.debug('scheduling job from queue %s', queue)
         job = self.job_class(queue, data)
 
-        pt_cnt = len(self._pending_tasks)
-        if pt_cnt >= self.max_concurrent_tasks:
-            work_logger.debug('%d pending tasks, waiting for one to finish before creating task for %s', pt_cnt, job)
-            _, self._pending_tasks = await asyncio.wait(self._pending_tasks, loop=self.loop,
-                                                        return_when=asyncio.FIRST_COMPLETED)
-
-        if not self.running:
-            work_logger.warning('job popped from queue, but exit is imminent, re-queueing the job')
-            async with await self.get_redis_conn() as redis:
-                await redis.lpush(raw_queue, data)
-            return
         task = self.loop.create_task(self.run_job(job))
         task.add_done_callback(self.job_callback)
         self.loop.call_later(self.timeout_seconds, self.cancel_job, task, job)
         self._pending_tasks.add(task)
+
+    async def below_concurrency_limit(self):
+        pt_cnt = len(self._pending_tasks)
+        while True:
+            if pt_cnt < self.max_concurrent_tasks:
+                return
+            work_logger.debug('%d pending tasks, waiting for one to finish', pt_cnt)
+            _, self._pending_tasks = await asyncio.wait(self._pending_tasks, loop=self.loop,
+                                                        return_when=asyncio.FIRST_COMPLETED)
+            pt_cnt = len(self._pending_tasks)
 
     def cancel_job(self, task, job):
         if not task.cancel():
@@ -290,9 +290,9 @@ class BaseWorker(RedisMixin):
             await super().close()
             self._closed = True
 
-    def handle_supervisor_signal(self, signum, frame):
+    def handle_proxy_signal(self, signum, frame):
         self.running = False
-        work_logger.warning('pid=%d, got shutdown signal from main process, stopping...', os.getpid())
+        work_logger.warning('pid=%d, got signal proxied from main process, stopping...', os.getpid())
         signal.signal(signal.SIGINT, self.handle_sig_force)
         signal.signal(signal.SIGTERM, self.handle_sig_force)
         signal.signal(signal.SIGALRM, self.handle_sig_force)
@@ -302,7 +302,7 @@ class BaseWorker(RedisMixin):
     def handle_sig(self, signum, frame):
         self.running = False
         work_logger.warning('pid=%d, got signal: %s, stopping...', os.getpid(), Signals(signum).name)
-        signal.signal(SIG_SUPERVISOR, signal.SIG_IGN)
+        signal.signal(SIG_PROXY, signal.SIG_IGN)
         signal.signal(signal.SIGINT, self.handle_sig_force)
         signal.signal(signal.SIGTERM, self.handle_sig_force)
         signal.signal(signal.SIGALRM, self.handle_sig_force)
@@ -392,11 +392,11 @@ class RunWorkerProcess:
         signal.signal(signal.SIGTERM, self.handle_sig_force)
         work_logger.warning('got signal: %s, waiting for worker pid=%s to finish...', Signals(signum).name,
                             self.process and self.process.pid)
-        # sleep to make sure handle_sig above has executed if it's going to and detached handle_supervisor_signal
+        # sleep to make sure worker.handle_sig above has executed if it's going to and detached handle_proxy_signal
         time.sleep(0.01)
         if self.process and self.process.is_alive():
             work_logger.debug("sending custom shutdown signal to worker in case it didn't receive the signal")
-            os.kill(self.process.pid, SIG_SUPERVISOR)
+            os.kill(self.process.pid, SIG_PROXY)
 
     def handle_sig_force(self, signum, frame):
         work_logger.error('got signal: %s again, forcing exit', Signals(signum).name)

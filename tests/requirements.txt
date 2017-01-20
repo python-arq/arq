@@ -11,6 +11,7 @@ pytest-cov==2.4.0
 pytest-isort==0.1.0
 pytest-mock==1.5.0
 pytest-sugar==0.8.0
+pytest-timeout==1.2.0
 pytest-toolbox==0.1
 pytz==2016.10
 Sphinx==1.5.1
