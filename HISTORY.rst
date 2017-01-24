@@ -3,9 +3,10 @@
 History
 -------
 
-v0.3.2 (TBD)
+v0.3.2 (2017-01-24)
 ...................
 * improved solution for preventing new jobs starting when the worker is about to stop
+* switch ``SIGRTMIN`` > ``SIGUSR1`` to work with mac
 
 v0.3.1 (2017-01-20)
 ...................
