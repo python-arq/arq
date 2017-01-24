@@ -36,7 +36,7 @@ class BadJob(Exception):
 
 
 # special signal sent by the main process in case the worker process hasn't received a signal (eg. SIGTERM or SIGINT)
-SIG_PROXY = signal.SIGRTMIN + 7
+SIG_PROXY = signal.SIGUSR1
 
 
 class BaseWorker(RedisMixin):
