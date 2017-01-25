@@ -46,29 +46,29 @@ def default_log_config(verbose: bool) -> dict:
         'version': 1,
         'disable_existing_loggers': False,
         'handlers': {
-            'colour': {
+            'arq.colour': {
                 'level': log_level,
                 'class': 'arq.logs.ColourHandler',
-                'formatter': 'standard'
+                'formatter': 'arq.standard'
             },
         },
         'formatters': {
-            'standard': {
+            'arq.standard': {
                 'format': '%(asctime)s %(processName)11s: %(message)s',
                 'datefmt': '%H:%M:%S',
             },
         },
         'loggers': {
             'arq.main': {
-                'handlers': ['colour'],
+                'handlers': ['arq.colour'],
                 'level': log_level,
             },
             'arq.work': {
-                'handlers': ['colour'],
+                'handlers': ['arq.colour'],
                 'level': log_level,
             },
             'arq.jobs': {
-                'handlers': ['colour'],
+                'handlers': ['arq.colour'],
                 'level': log_level,
             },
         },

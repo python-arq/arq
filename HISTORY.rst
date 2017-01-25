@@ -3,6 +3,10 @@
 History
 -------
 
+v0.3.3 (TBD)
+...................
+* improving naming of log handlers and formatters.
+
 v0.3.2 (2017-01-24)
 ...................
 * improved solution for preventing new jobs starting when the worker is about to stop
