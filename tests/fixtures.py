@@ -12,6 +12,7 @@ from arq.testing import MockRedisMixin
 class DemoActor(Actor):
     @concurrent
     async def add_numbers(self, a, b):
+        """add_number docs"""
         with open('add_numbers', 'w') as f:
             r = a + b
             f.write('{}'.format(r))

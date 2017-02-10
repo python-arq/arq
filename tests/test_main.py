@@ -102,6 +102,8 @@ async def test_handle_exception(loop, caplog):
             'Traceback (most recent call last):\n'
             '  File "/path/to/arq/worker.py", line <no>, in run_job\n'
             '    result = await func(*j.args, **j.kwargs)\n'
+            '  File "/path/to/arq/main.py", line <no>, in direct\n'
+            '    return await self._func(self._self_obj, *args, **kwargs)\n'
             '  File "/path/to/tests/fixtures.py", line <no>, in boom\n'
             '    raise RuntimeError(\'boom\')\n'
             'RuntimeError: boom\n'
@@ -122,21 +124,6 @@ async def test_repeat_queue():
         class BadActor(Actor):
             queues = ('a', 'a')
     assert excinfo.value.args[0] == "BadActor looks like it has duplicated queue names: ('a', 'a')"
-
-
-async def test_duplicate_direct_name():
-    class BadActor(Actor):
-        @concurrent
-        async def foo(self):
-            pass
-
-        def foo__direct(self):
-            pass
-    with pytest.raises(RuntimeError) as excinfo:
-        BadActor()
-    print(excinfo.value)
-    assert excinfo.value.args[0] == ('BadActor already has a method "foo__direct", '
-                                     'this breaks arq direct method binding of "foo"')
 
 
 async def test_custom_name(loop, caplog):
@@ -166,12 +153,12 @@ async def test_direct_binding(mock_actor_worker, caplog):
     caplog.set_level(logging.INFO)
     actor, worker = mock_actor_worker
     assert None is await actor.concat('a', 'b')
-    assert 'a + b' == await actor.concat__direct('a', 'b')
+    assert 'a + b' == await actor.concat.direct('a', 'b')
     await worker.run()
     assert worker.jobs_failed == 0
     assert worker.jobs_complete == 1
     assert 'MockRedisDemoActor.concat' in caplog
-    assert 'MockRedisDemoActor.concat__direct' not in caplog
+    assert 'MockRedisDemoActor.concat.direct' not in caplog
 
 
 async def test_dynamic_worker(tmpworkdir, loop, redis_conn):
@@ -226,3 +213,10 @@ async def test_mocked_actor(mocker, loop):
     actor = DemoActor(loop=loop)
     v = await actor.direct_method(1, 1)
     assert v == 123
+
+
+async def test_actor_wrapping(loop):
+    actor = DemoActor(loop=loop)
+    assert actor.add_numbers.__doc__ == 'add_number docs'
+    assert actor.add_numbers.__name__ == 'add_numbers'
+    assert repr(actor.add_numbers).startswith('<concurrent function DemoActor.add_numbers of <DemoActor(DemoActor) at')

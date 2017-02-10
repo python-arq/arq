@@ -6,7 +6,6 @@ Defines the main ``Actor`` class and ``@concurrent`` decorator for using arq fro
 """
 import inspect
 import logging
-from functools import wraps
 
 from .jobs import Job
 from .utils import RedisMixin
@@ -69,7 +68,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         self.queue_lookup = {q: self.QUEUE_PREFIX + q.encode() for q in self.queues}
         self.name = self.name or self.__class__.__name__
         self.is_shadow = is_shadow
-        self._bind_direct_methods()
+        self._bind_concurrent()
         self._concurrency_enabled = concurrency_enabled
         super().__init__(*args, **kwargs)
 
@@ -79,16 +78,11 @@ class Actor(RedisMixin, metaclass=ActorMeta):
     async def shutdown(self):
         pass
 
-    def _bind_direct_methods(self):
+    def _bind_concurrent(self):
         for attr_name in dir(self.__class__):
-            unbound_direct = getattr(getattr(self.__class__, attr_name), 'unbound_direct', None)
-            # the isfunction check guards against MagicMock messing things up.
-            if unbound_direct and inspect.isfunction(unbound_direct):
-                name = attr_name + '__direct'
-                if hasattr(self, name):
-                    msg = '{} already has a method "{}", this breaks arq direct method binding of "{}"'
-                    raise RuntimeError(msg.format(self.name, name, attr_name))
-                setattr(self, name, unbound_direct.__get__(self, self.__class__))
+            v = getattr(self.__class__, attr_name)
+            if isinstance(v, Concurrent):
+                v.bind(self)
 
     async def enqueue_job(self, func_name: str, *args, queue: str=None, **kwargs):
         """
@@ -116,8 +110,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
                 await redis.rpush(queue_list, data)
         else:
             j = self.job_class(queue, data)
-            func = getattr(self, j.func_name + '__direct')
-            await func(*j.args, **j.kwargs)
+            await getattr(self, j.func_name).direct(*j.args, **j.kwargs)
 
     async def close(self):
         await self.shutdown()
@@ -127,33 +120,56 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         return '<{self.__class__.__name__}({self.name}) at 0x{id:02x}>'.format(self=self, id=id(self))
 
 
+class Concurrent:
+    """
+    Class used to describe a concurrent function. This is what the ``@concurrent`` decorator returns.
+
+    You shouldn't have to use this directly, but instead apply the ``@concurrent`` decorator
+    """
+    __slots__ = ['_func', '_dft_queue', '_self_obj']
+
+    def __init__(self, func, dft_queue=None):
+        if not inspect.iscoroutinefunction(func):
+            raise TypeError('{} is not a coroutine function'.format(func.__qualname__))
+
+        main_logger.debug('registering concurrent function %s', func.__qualname__)
+        self._func = func
+        self._dft_queue = dft_queue
+        self._self_obj = None
+
+    def bind(self, obj):
+        self._self_obj = obj
+
+    async def __call__(self, *args, **kwargs):
+        return await self.defer(*args, **kwargs)
+
+    async def defer(self, *args, queue_name=None, **kwargs):
+        await self._self_obj.enqueue_job(self._func.__name__, *args, queue=queue_name or self._dft_queue, **kwargs)
+
+    async def direct(self, *args, **kwargs):
+        return await self._func(self._self_obj, *args, **kwargs)
+
+    @property
+    def __doc__(self):
+        return self._func.__doc__
+
+    @property
+    def __name__(self):
+        return self._func.__name__
+
+    def __repr__(self):
+        return '<concurrent function {name} of {s!r}>'.format(name=self._func.__qualname__, s=self._self_obj)
+
+
 def concurrent(func_or_queue):
     """
     Decorator which defines a functions as concurrent, eg. it should be executed on the worker.
 
-    If you wish to call the function directly you can access the original function at ``*__direct``.
+    If you wish to call the function directly you can access the original function at ``<func>.direct``.
 
     The decorator can optionally be used with one argument: the queue to use by default for the job.
     """
-    dec_queue = None
-
-    def _func_wrapper(func):
-        func_name = func.__name__
-
-        if not inspect.iscoroutinefunction(func):
-            raise TypeError('{} is not a coroutine function'.format(func.__qualname__))
-        main_logger.debug('registering concurrent function %s', func.__qualname__)
-
-        @wraps(func)
-        async def _enqueuer(obj, *args, queue_name=None, **kwargs):
-            await obj.enqueue_job(func_name, *args, queue=queue_name or dec_queue, **kwargs)
-
-        # NOTE: direct is (and has to be) unbound at this stage, it is bound by _bind_direct_methods
-        _enqueuer.unbound_direct = func
-        return _enqueuer
-
     if isinstance(func_or_queue, str):
-        dec_queue = func_or_queue
-        return _func_wrapper
+        return lambda f: Concurrent(func=f, dft_queue=func_or_queue)
     else:
-        return _func_wrapper(func_or_queue)
+        return Concurrent(func=func_or_queue)

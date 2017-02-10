@@ -3,9 +3,11 @@
 History
 -------
 
-v0.3.3 (TBD)
+v0.4.0 (TBD)
 ...................
-* improving naming of log handlers and formatters.
+* improving naming of log handlers and formatters
+* add ``startup`` and ``shutdown`` methods to actors
+* switch ``@concurrent`` to return a ``Concurrent`` instance so the direct method is accessible via ``<func>.direct``
 
 v0.3.2 (2017-01-24)
 ...................

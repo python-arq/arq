@@ -222,14 +222,16 @@ class BaseWorker(RedisMixin):
         except KeyError:
             return self.handle_prepare_exc('Job Error: unable to find shadow for {!r}'.format(j))
         try:
-            func = getattr(shadow, j.func_name + '__direct')
+            func = getattr(shadow, j.func_name)
         except AttributeError:
-            # try the method name directly for causes where enqueue_job is called manually
-            try:
-                func = getattr(shadow, j.func_name)
-            except AttributeError:
-                msg = 'Job Error: shadow class "{}" has no function "{}"'.format(shadow.name, j.func_name)
-                return self.handle_prepare_exc(msg)
+            msg = 'Job Error: shadow class "{}" has no function "{}"'.format(shadow.name, j.func_name)
+            return self.handle_prepare_exc(msg)
+
+        try:
+            func = func.direct
+        except AttributeError:
+            # allow for cases where enqueue_job is called manually
+            pass
 
         started_at = timestamp()
         self.log_job_start(started_at, j)
