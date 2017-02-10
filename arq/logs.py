@@ -59,17 +59,9 @@ def default_log_config(verbose: bool) -> dict:
             },
         },
         'loggers': {
-            'arq.main': {
+            'arq': {
                 'handlers': ['arq.colour'],
                 'level': log_level,
-            },
-            'arq.work': {
-                'handlers': ['arq.colour'],
-                'level': log_level,
-            },
-            'arq.jobs': {
-                'handlers': ['arq.colour'],
-                'level': log_level,
-            },
+            }
         },
     }

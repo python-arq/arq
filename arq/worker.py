@@ -292,7 +292,7 @@ class BaseWorker(RedisMixin):
 
     def handle_proxy_signal(self, signum, frame):
         self.running = False
-        work_logger.warning('pid=%d, got signal proxied from main process, stopping...', os.getpid())
+        work_logger.info('pid=%d, got signal proxied from main process, stopping...', os.getpid())
         signal.signal(signal.SIGINT, self.handle_sig_force)
         signal.signal(signal.SIGTERM, self.handle_sig_force)
         signal.signal(signal.SIGALRM, self.handle_sig_force)
@@ -301,7 +301,7 @@ class BaseWorker(RedisMixin):
 
     def handle_sig(self, signum, frame):
         self.running = False
-        work_logger.warning('pid=%d, got signal: %s, stopping...', os.getpid(), Signals(signum).name)
+        work_logger.info('pid=%d, got signal: %s, stopping...', os.getpid(), Signals(signum).name)
         signal.signal(SIG_PROXY, signal.SIG_IGN)
         signal.signal(signal.SIGINT, self.handle_sig_force)
         signal.signal(signal.SIGTERM, self.handle_sig_force)
@@ -310,7 +310,7 @@ class BaseWorker(RedisMixin):
         raise HandledExit()
 
     def handle_sig_force(self, signum, frame):
-        work_logger.error('pid=%d, got signal: %s again, forcing exit', os.getpid(), Signals(signum).name)
+        work_logger.warning('pid=%d, got signal: %s again, forcing exit', os.getpid(), Signals(signum).name)
         raise ImmediateExit('force exit')
 
 
@@ -390,8 +390,8 @@ class RunWorkerProcess:
     def handle_sig(self, signum, frame):
         signal.signal(signal.SIGINT, self.handle_sig_force)
         signal.signal(signal.SIGTERM, self.handle_sig_force)
-        work_logger.warning('got signal: %s, waiting for worker pid=%s to finish...', Signals(signum).name,
-                            self.process and self.process.pid)
+        work_logger.info('got signal: %s, waiting for worker pid=%s to finish...', Signals(signum).name,
+                         self.process and self.process.pid)
         # sleep to make sure worker.handle_sig above has executed if it's going to and detached handle_proxy_signal
         time.sleep(0.01)
         if self.process and self.process.is_alive():
@@ -399,7 +399,7 @@ class RunWorkerProcess:
             os.kill(self.process.pid, SIG_PROXY)
 
     def handle_sig_force(self, signum, frame):
-        work_logger.error('got signal: %s again, forcing exit', Signals(signum).name)
+        work_logger.warning('got signal: %s again, forcing exit', Signals(signum).name)
         if self.process and self.process.is_alive():
             work_logger.error('sending worker %d SIGTERM', self.process.pid)
             os.kill(self.process.pid, signal.SIGTERM)
