@@ -30,7 +30,7 @@ after_success:
 - bash <(curl -s https://codecov.io/bash)
 
 env:
-- secure: "CT1j0VZeLoqBBiMXLOImIBGiPDgPeNZ9xHBf+7bhvurCjcXnFwfhwKFk59o6O1PNLiLB21zeKP9QBLwHaAnQfeahP4+I/FkqowN1NjeKzm95wqFnQvZap3ww33/NYt8Wbs+LBK6SF6GjBJpcV7MMwpDjrxXW4+rN4zVcZNQEcE4t5Gcs49twVqU+nTUwNMuYO1GORhNvM4FNIJ2GI578GFA16WVoiRyfu2wij0mgp0WMddQFJUwxvG37Ehu3DxVkj5pxH9UPouH4j6MVnnx+8Uv36Ux+4j7lOavhqWgbSZkPAFTS7gq3STlPbLWzAwJMkI0fWCW67wPvNCGp6d7HJbRq/g3tld02adg/herdtDbwbqkaR/Ahltbjkl/pshX6u/HA7UnPtp1q9g5qnWJOd+ip/ngSKoIcJb9aYeqqrHMB2wIKJZit1hlwgFwRGgW3HNMWAuoTpdMuFGUSrGWg2oKAUFiwMhhOww7DIHsj1S3uOc6JfGEo9K5IODZdjSge3FeeDQwpU0vZWlCD9bXJoWHVIbtckPRQhlrD/9cojEIhpU1wV+xO/yp5qdtEJGoTaAyn7xdN+pfsujeMElgbU5oUZjtI5rbglHQM3N1ZQOwaK514vMHguBoW8f3kvSx0Bpub/aCgWDQDvnSuX+nzZbkoCAs2igvsQtefqAWnrE4="
+- secure: "FlvWpK0GHTDeSxm6FHIIVmn7k75blN1rvjRR9vFlJcgsvz9ay+NZX4DKQCftNkA5bwMDS05Dlr3BTVROAojwv/qfBPKPFRtDEvTiYN8uQWPTqPw4pVu9OuXQKV+JwRFTsg4wsCe4wi7Gb82Z6ho3N5AJpwk8sasZtBR62GuQY+utSUXBRldCqmBA5NuApa3DTpS1+6jKWOU4jtM8mrssDTPmTEk3vcfqGWr/6QdIPTYZRIJHI7NZ+FYVM0s/KOn7T4gqNuB7CLnHdf9836lyCKobfLFiO5HSSig+qwUfXKRbN7/FP/kwtur4N7qUDPolROFWtCo7l6dTEPV7yNAzt+Jk49HnxxyAEVubnsh2EJGBPbWRX41Pzmld+ld5/JqvONgvSBQDTXpOgRfYSkxRn29SQ7P+ofGVRm2KglbUTzbal3tAZTODsLpaDFrzkNfp7sQJiR33wzNbFaF7pzJZqg9MxD7SY1QiCSc5WkdPavyTKgVUQwCxdywQ0d+/gEBVxQL9bYno2zO4zcWxV93ChxQIZCE3LR9wFRn3u/DvLlHjJ2m1IRoyv6AzeF/D1c9uOsdDcRJCJhuJcoL6EuLlsbKQVHcQga6+E85zkSacsRmCwVFWtFbOovm1Y5hBZtZxm84wkOTSHVYNxIge1hbpKvg+D6dmUjo5yrjnYVEA/II="
 
 deploy:
 - provider: pypi
@@ -43,7 +43,7 @@ deploy:
     tags: true
     python: 3.5
 - provider: script
-  script: make travis-deploy-docs
+  script: make deploy-docs
   on:
     tags: true
     python: 3.5

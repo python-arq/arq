@@ -49,9 +49,6 @@ docs:
 
 .PHONY: deploy-docs
 deploy-docs: docs
-	ghp-import -n -m "update docs" -p docs/_build/html/
-
-.PHONY: travis-deploy-docs
-travis-deploy-docs: docs
-	ghp-import -n -m "update docs" docs/_build/html/
-	@git push -fq https://${GH_TOKEN}@github.com/$(TRAVIS_REPO_SLUG).git gh-pages > /dev/null
+	cd docs/_build/ && cp -r html site && zip -r site.zip site
+	@curl -H "Content-Type: application/zip" -H "Authorization: Bearer ${NETLIFY}" \
+			--data-binary "@docs/_build/site.zip" https://api.netlify.com/api/v1/sites/arq-docs.netlify.com/deploys
