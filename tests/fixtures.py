@@ -85,6 +85,25 @@ class Worker(BaseWorker):
     shadows = [DemoActor]
 
 
+class StartupActor(Actor):
+    async def startup(self):
+        with open('events', 'a') as f:
+            f.write('startup[{}],'.format(self.is_shadow))
+
+    @concurrent
+    async def concurrent_func(self, v):
+        with open('events', 'a') as f:
+            f.write('concurrent_func[{}],'.format(v))
+
+    async def shutdown(self):
+        with open('events', 'a') as f:
+            f.write('shutdown[{}],'.format(self.is_shadow))
+
+
+class StartupWorker(BaseWorker):
+    shadows = [DemoActor, StartupActor]
+
+
 class WorkerQuit(Worker):
     """
     worker which stops taking new jobs after 2 jobs

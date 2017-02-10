@@ -12,7 +12,7 @@ from arq.worker import import_string, start_worker
 
 from .example import ActorTest
 from .fixtures import (EXAMPLE_FILE, DemoActor, FoobarActor, MockRedisDemoActor, MockRedisWorker, MockRedisWorkerQuit,
-                       Worker, WorkerFail, WorkerQuit, kill_parent)
+                       StartupActor, StartupWorker, Worker, WorkerFail, WorkerQuit, kill_parent)
 
 
 async def test_run_job_burst(tmpworkdir, redis_conn, actor):
@@ -37,7 +37,7 @@ async def test_long_args(mock_actor_worker, caplog):
             "'0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19 + 0,1,2,3,4,5,6,7,8,9,10,11,…\n") in log
 
 
-async def test_seperate_log_levels(mock_actor_worker, caplog):
+async def test_separate_log_levels(mock_actor_worker, caplog):
     caplog.set_different_level(**{'arq.work': logging.INFO, 'arq.jobs': logging.WARNING})
     actor, worker = mock_actor_worker
     await actor.concat(a='1', b='2')
@@ -297,3 +297,19 @@ async def test_rerun_worker(tmpworkdir, redis_conn, actor):
     await worker.run()
     assert tmpworkdir.join('add_numbers').read() == '7'
     assert worker.jobs_failed == 0
+
+
+async def test_startup_shutdown(tmpworkdir, redis_conn, loop):
+    worker = StartupWorker(burst=True, loop=loop)
+
+    actor = StartupActor(loop=loop)
+    try:
+        await actor.concurrent_func('foobar')
+        assert not tmpworkdir.join('events').exists()
+        await worker.run()
+        assert tmpworkdir.join('events').read() == 'startup[True],concurrent_func[foobar],shutdown[True],'
+        assert worker.jobs_failed == 0
+    finally:
+        await actor.close()
+        assert tmpworkdir.join('events').read() == ('startup[True],concurrent_func[foobar],'
+                                                    'shutdown[True],shutdown[False],')

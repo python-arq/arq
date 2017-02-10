@@ -97,8 +97,10 @@ class BaseWorker(RedisMixin):
         if self.shadows is None:
             raise TypeError('shadows not defined on worker')
         rp = await self.get_redis_pool()
-        return [s(redis_settings=self.redis_settings, is_shadow=True, loop=self.loop, existing_pool=rp)
-                for s in self.shadows]
+        shadows = [s(redis_settings=self.redis_settings, is_shadow=True, loop=self.loop, existing_pool=rp)
+                   for s in self.shadows]
+        await asyncio.wait([s.startup() for s in shadows], loop=self.loop)
+        return shadows
 
     @classmethod
     def logging_config(cls, verbose) -> dict:

@@ -73,6 +73,12 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         self._concurrency_enabled = concurrency_enabled
         super().__init__(*args, **kwargs)
 
+    async def startup(self):
+        pass
+
+    async def shutdown(self):
+        pass
+
     def _bind_direct_methods(self):
         for attr_name in dir(self.__class__):
             unbound_direct = getattr(getattr(self.__class__, attr_name), 'unbound_direct', None)
@@ -112,6 +118,10 @@ class Actor(RedisMixin, metaclass=ActorMeta):
             j = self.job_class(queue, data)
             func = getattr(self, j.func_name + '__direct')
             await func(*j.args, **j.kwargs)
+
+    async def close(self):
+        await self.shutdown()
+        await super().close()
 
     def __repr__(self):
         return '<{self.__class__.__name__}({self.name}) at 0x{id:02x}>'.format(self=self, id=id(self))
