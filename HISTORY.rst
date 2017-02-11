@@ -3,6 +3,10 @@
 History
 -------
 
+v0.4.1 (2017-02-11)
+...................
+* fix issue with ``Concurrent`` class binding with multiple actor instances
+
 v0.4.0 (2017-02-10)
 ...................
 * improving naming of log handlers and formatters

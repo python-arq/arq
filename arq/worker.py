@@ -90,7 +90,7 @@ class BaseWorker(RedisMixin):
 
     async def shadow_factory(self) -> list:
         """
-        Initialise list of shadows and return them unless existing_shadows is set in which case they're returned.
+        Initialise list of shadows and return them.
 
         Override to customise the way shadows are initialised.
         """

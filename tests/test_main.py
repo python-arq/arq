@@ -8,7 +8,8 @@ import pytest
 from arq import Actor, BaseWorker, concurrent
 from arq.testing import MockRedisWorker as MockRedisBaseWorker
 
-from .fixtures import DemoActor, FoobarActor, MockRedisDemoActor, MockRedisWorker
+from .fixtures import (ChildActor, DemoActor, FoobarActor, MockRedisDemoActor, MockRedisWorker, ParentActor,
+                       ParentChildActorWorker)
 
 
 async def test_simple_job_dispatch(tmpworkdir, loop, debug):
@@ -220,3 +221,18 @@ async def test_actor_wrapping(loop):
     assert actor.add_numbers.__doc__ == 'add_number docs'
     assert actor.add_numbers.__name__ == 'add_numbers'
     assert repr(actor.add_numbers).startswith('<concurrent function DemoActor.add_numbers of <DemoActor(DemoActor) at')
+
+
+async def test_bind_replication(tmpdir, loop):
+    parent_actor = ParentActor(loop=loop)
+    child_actor = ChildActor(loop=loop)
+    child_actor.mock_data = parent_actor.mock_data
+    file1 = tmpdir.join('test1')
+    await parent_actor.save_value(str(file1))
+    file2 = tmpdir.join('test2')
+    await child_actor.save_value(str(file2))
+    worker = ParentChildActorWorker(burst=True, loop=loop)
+    worker.mock_data = parent_actor.mock_data
+    await worker.run()
+    assert file1.read() == 'Parent'
+    assert file2.read() == 'Child'

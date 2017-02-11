@@ -143,3 +143,20 @@ def kill_parent():
 
 with Path(__file__).resolve().parent.joinpath('example.py').open() as f:
     EXAMPLE_FILE = f.read()
+
+
+class ParentActor(MockRedisMixin, Actor):
+    v = 'Parent'
+
+    @concurrent
+    async def save_value(self, file_name):
+        with open(file_name, 'w') as f:
+            f.write(self.v)
+
+
+class ChildActor(ParentActor):
+    v = 'Child'
+
+
+class ParentChildActorWorker(MockRedisMixin, BaseWorker):
+    shadows = [ParentActor, ChildActor]
