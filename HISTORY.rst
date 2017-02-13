@@ -3,6 +3,10 @@
 History
 -------
 
+v0.4.2 (RBD)
+...................
+* use ``gather`` rather than ``wait`` for startup and shutdown so exceptions propagate.
+
 v0.4.1 (2017-02-11)
 ...................
 * fix issue with ``Concurrent`` class binding with multiple actor instances

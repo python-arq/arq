@@ -99,7 +99,7 @@ class BaseWorker(RedisMixin):
         rp = await self.get_redis_pool()
         shadows = [s(redis_settings=self.redis_settings, is_shadow=True, loop=self.loop, existing_pool=rp)
                    for s in self.shadows]
-        await asyncio.wait([s.startup() for s in shadows], loop=self.loop)
+        await asyncio.gather(*[s.startup() for s in shadows], loop=self.loop)
         return shadows
 
     @classmethod
@@ -131,7 +131,7 @@ class BaseWorker(RedisMixin):
     def run_until_complete(self):
         self.loop.run_until_complete(self.run())
 
-    async def run(self, reuse=False):
+    async def run(self):
         work_logger.info('Initialising work manager, burst mode: %s', self._burst_mode)
 
         shadows = await self.shadow_factory()
@@ -160,11 +160,7 @@ class BaseWorker(RedisMixin):
         try:
             await self.work()
         finally:
-            if reuse:
-                work_logger.info('waiting for %d jobs to finish', len(self._pending_tasks))
-                await asyncio.wait(self._pending_tasks, loop=self.loop)
-            else:
-                await self.close()
+            await self.close()
             if self._task_exception:
                 work_logger.error('Found task exception "%s"', self._task_exception)
                 raise self._task_exception
@@ -290,7 +286,7 @@ class BaseWorker(RedisMixin):
                              t, self.jobs_complete, self.jobs_failed, self.jobs_timed_out)
 
             if self._shadow_lookup:
-                await asyncio.wait([s.close() for s in self._shadow_lookup.values()], loop=self.loop)
+                await asyncio.gather(*[s.close() for s in self._shadow_lookup.values()], loop=self.loop)
             await super().close()
             self._closed = True
 
