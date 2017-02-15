@@ -8,6 +8,7 @@ See arq's own tests for examples of usage.
 """
 import asyncio
 import logging
+from datetime import datetime, timedelta
 
 from .utils import RedisMixin, timestamp
 from .worker import BaseWorker
@@ -35,11 +36,12 @@ class MockRedis:
     def __init__(self, *, loop=None, data=None):
         self.loop = loop or asyncio.get_event_loop()
         self.data = {} if data is None else data
+        self._expiry = {}
         logger.info('initialising MockRedis, data id: %s', None if data is None else id(data))
 
     async def rpush(self, list_name, data):
         logger.info('rpushing %s to %s', data, list_name)
-        self.data[list_name] = self.data.get(list_name, []) + [data]
+        self.data[list_name] = self._get(list_name, []) + [data]
 
     async def blpop(self, *list_names, timeout=0):
         assert isinstance(timeout, int)
@@ -58,7 +60,7 @@ class MockRedis:
 
     async def lpop(self, *list_names):
         for list_name in list_names:
-            data_list = self.data.get(list_name)
+            data_list = self._get(list_name)
             if data_list is None:
                 continue
             assert isinstance(data_list, list)
@@ -67,6 +69,22 @@ class MockRedis:
                 logger.info('lpop %s from %s', d, list_name)
                 return list_name, d
         logger.info('lpop nothing found in lists %s', list_names)
+
+    def _get(self, key, default=None):
+        expires = self._expiry.get(key, None)
+        if expires and expires < datetime.now():
+            return default
+        return self.data.get(key, default)
+
+    async def llen(self, list_name):
+        return len(self._get(list_name, []))
+
+    async def setex(self, key, expires, value):
+        self.data[key] = value
+        self._expiry[key] = datetime.now() + timedelta(seconds=expires)
+
+    async def get(self, key):
+        return self._get(key)
 
 
 class MockRedisPoolContextManager:

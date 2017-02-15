@@ -3,7 +3,7 @@
 History
 -------
 
-v0.4.2 (RBD)
+v0.4.2 (TBD)
 ...................
 * use ``gather`` rather than ``wait`` for startup and shutdown so exceptions propagate.
 

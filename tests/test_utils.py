@@ -4,6 +4,7 @@ from datetime import datetime
 
 from arq import RedisSettings
 from arq.logs import ColourHandler
+from arq.testing import MockRedis
 from arq.utils import timestamp
 
 
@@ -28,3 +29,15 @@ def test_arbitrary_logger(capsys):
     out, err = capsys.readouterr()
     # click cleverly removes ANSI colours as the output is not a terminal
     assert [out, err] == ['this is a test\n', '']
+
+
+async def test_mock_redis_expiry_ok(loop):
+    r = MockRedis(loop=loop)
+    await r.setex('foo', 10, 'bar')
+    assert 'bar' == await r.get('foo')
+
+
+async def test_mock_redis_expiry_expired(loop):
+    r = MockRedis(loop=loop)
+    await r.setex('foo', -10, 'bar')
+    assert None is await r.get('foo')

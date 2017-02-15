@@ -62,6 +62,7 @@ async def test_dispatch_work(tmpworkdir, loop, caplog, redis_conn):
     assert tmpworkdir.join('add_numbers').read() == '3'
     log = re.sub('0.0\d\ds', '0.0XXs', caplog.log)
     log = re.sub("QUIT-.*", "QUIT-<random>", log)
+    log = re.sub(r'\d{4}-\d+-\d+ \d+:\d+:\d+', '<date time>', log)
     assert ('MockRedisDemoActor.add_numbers ▶ dft\n'
             'MockRedisDemoActor.high_add_numbers ▶ high\n'
             'Initialising work manager, burst mode: True\n'
@@ -70,6 +71,11 @@ async def test_dispatch_work(tmpworkdir, loop, caplog, redis_conn):
             'shadows: MockRedisDemoActor | queues: high, dft, low\n'
             'populating quit queue to prompt exit: QUIT-<random>\n'
             'starting main blpop loop\n'
+            'health check:\n'
+            'timestamp: <date time>\n'
+            'jobs complete, failed, timed out: 0, 0, 0\n'
+            'pending tasks: 0\n'
+            'queue sizes high, dft, low: 1, 1, 0\n'
             'scheduling job from queue high\n'
             'scheduling job from queue dft\n'
             'got job from the quit queue, stopping\n'
@@ -94,9 +100,15 @@ async def test_handle_exception(loop, caplog):
     log = re.sub('0.0\d\ds', '0.0XXs', caplog.log)
     log = re.sub(', line \d+,', ', line <no>,', log)
     log = re.sub('"/.*?/(\w+/\w+)\.py"', r'"/path/to/\1.py"', log)
+    log = re.sub(r'\d{4}-\d+-\d+ \d+:\d+:\d+', '<date time>', log)
     assert ('Initialising work manager, burst mode: True\n'
             'Running worker with 1 shadow listening to 3 queues\n'
             'shadows: MockRedisDemoActor | queues: high, dft, low\n'
+            'health check:\n'
+            'timestamp: <date time>\n'
+            'jobs complete, failed, timed out: 0, 0, 0\n'
+            'pending tasks: 0\n'
+            'queue sizes high, dft, low: 0, 1, 0\n'
             'shutting down worker, waiting for 1 jobs to finish\n'
             'dft  queued  0.0XXs → MockRedisDemoActor.boom()\n'
             'dft  ran in  0.0XXs ! MockRedisDemoActor.boom(): RuntimeError\n'

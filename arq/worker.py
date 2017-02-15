@@ -10,6 +10,7 @@ import os
 import signal
 import sys
 import time
+from datetime import datetime
 from importlib import import_module, reload
 from multiprocessing import Process
 from signal import Signals  # type: ignore
@@ -55,6 +56,10 @@ class BaseWorker(RedisMixin):
     #: shadow classes, a list of Actor classes for the Worker to run
     shadows = None
 
+    #: number of seconds between calls to health_check
+    health_check_interval = 60
+    health_check_key = b'arq-health-check'
+
     def __init__(self, *,
                  burst: bool=False,
                  shadows: list=None,
@@ -79,6 +84,7 @@ class BaseWorker(RedisMixin):
         self._task_exception = None  # type: Exception
         self._shadow_lookup = {}  # type: Dict[str, object] # TODO
         self.start = None  # type: float
+        self.last_health_check = 0
         self.running = True
         self._closed = False
         self.job_class = None  # type: type # TODO
@@ -167,6 +173,7 @@ class BaseWorker(RedisMixin):
 
     async def work(self):
         redis_queues, queue_lookup = self.get_redis_queues()
+        original_redis_queues = list(redis_queues)
         quit_queue = None
         async with await self.get_redis_conn() as redis:
             if self._burst_mode:
@@ -176,6 +183,7 @@ class BaseWorker(RedisMixin):
                 redis_queues.append(quit_queue)
             work_logger.debug('starting main blpop loop')
             while self.running:
+                await self.health_check(redis, original_redis_queues, queue_lookup)
                 msg = await redis.blpop(*redis_queues, timeout=1)
                 if msg is None:
                     continue
@@ -186,6 +194,30 @@ class BaseWorker(RedisMixin):
                 queue = queue_lookup[raw_queue]
                 self.schedule_job(data, queue)
                 await self.below_concurrency_limit()
+
+    async def health_check(self, redis, redis_queues, queue_lookup):
+        now_ts = timestamp()
+        if (now_ts - self.last_health_check) < self.health_check_interval:
+            return
+        self.last_health_check = now_ts
+        info = """\
+timestamp: {now:%Y-%m-%d %H:%M:%S}
+jobs complete, failed, timed out: {jobs_complete}, {jobs_failed}, {jobs_timed_out}
+pending tasks: {pending_tasks}""".format(
+            now=datetime.now(),
+            jobs_complete=self.jobs_complete,
+            jobs_failed=self.jobs_failed,
+            jobs_timed_out=self.jobs_timed_out,
+            pending_tasks=len(self._pending_tasks),
+        )
+        queue_names, queue_counts = [], []
+        for redis_queue in redis_queues:
+            queue_names.append(queue_lookup[redis_queue])
+            queue_counts.append(await redis.llen(redis_queue))
+        info += '\nqueue sizes {}: {}'.format(', '.join(queue_names), ', '.join(map(str, queue_counts)))
+        await redis.setex(self.health_check_key, self.health_check_interval + 1, info.encode())
+
+        jobs_logger.info('health check:\n%s', info)
 
     def schedule_job(self, data, queue):
         work_logger.debug('scheduling job from queue %s', queue)
