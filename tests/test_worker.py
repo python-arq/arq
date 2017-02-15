@@ -298,3 +298,21 @@ async def test_startup_shutdown(tmpworkdir, redis_conn, loop):
         await actor.close()
         assert tmpworkdir.join('events').read() == ('startup[True],concurrent_func[foobar],'
                                                     'shutdown[True],shutdown[False],')
+
+
+def test_check_successful(redis_conn, loop):
+    loop.run_until_complete(redis_conn.set(b'arq:health-check', b'X'))
+    assert 0 == Worker.check_health(loop=loop)
+
+
+def test_check_fails(redis_conn, loop):
+    assert 0 == loop.run_until_complete(redis_conn.exists(b'arq:health-check'))
+    assert 1 == Worker.check_health(loop=loop)
+
+
+async def test_check_successful_real_value(redis_conn, loop):
+    assert 0 == await redis_conn.exists(b'arq:health-check')
+    worker = Worker(burst=True, loop=loop)
+    await worker.run()
+    assert 1 == await redis_conn.exists(b'arq:health-check')
+    assert 0 == await Worker(loop=loop)._check_health()

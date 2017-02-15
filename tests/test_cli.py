@@ -109,3 +109,11 @@ def test_main_process_sigint_twice_worker_running(tmpworkdir, monkeypatch, caplo
     assert is_alive.call_count == 1
     os_kill.assert_called_once_with(123, signal.SIGTERM)
     assert 'got signal: SIGINT again, forcing exit' in caplog
+
+
+def test_check_successful(tmpworkdir, monkeypatch):
+    monkeypatch.setattr(arq.worker.BaseWorker, 'check_health', MagicMock(return_value=0))
+    tmpworkdir.join('test.py').write(EXAMPLE_FILE)
+    runner = CliRunner()
+    result = runner.invoke(cli, ['--check', 'test.py'])
+    assert result.exit_code == 0, result.output

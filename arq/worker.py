@@ -58,7 +58,7 @@ class BaseWorker(RedisMixin):
 
     #: number of seconds between calls to health_check
     health_check_interval = 60
-    health_check_key = b'arq-health-check'
+    health_check_key = b'arq:health-check'
 
     def __init__(self, *,
                  burst: bool=False,
@@ -138,6 +138,10 @@ class BaseWorker(RedisMixin):
         self.loop.run_until_complete(self.run())
 
     async def run(self):
+        """
+        Main entry point for the the worker which initialises shadows, checks they look ok then runs ``work`` to
+        perform jobs.
+        """
         work_logger.info('Initialising work manager, burst mode: %s', self._burst_mode)
 
         shadows = await self.shadow_factory()
@@ -172,6 +176,11 @@ class BaseWorker(RedisMixin):
                 raise self._task_exception
 
     async def work(self):
+        """
+        Pop job definitions from the lists associated with the queues and perform the jobs.
+
+        Also regularly runs ``record_health``.
+        """
         redis_queues, queue_lookup = self.get_redis_queues()
         original_redis_queues = list(redis_queues)
         quit_queue = None
@@ -183,7 +192,7 @@ class BaseWorker(RedisMixin):
                 redis_queues.append(quit_queue)
             work_logger.debug('starting main blpop loop')
             while self.running:
-                await self.health_check(redis, original_redis_queues, queue_lookup)
+                await self.record_health(redis, original_redis_queues, queue_lookup)
                 msg = await redis.blpop(*redis_queues, timeout=1)
                 if msg is None:
                     continue
@@ -195,7 +204,7 @@ class BaseWorker(RedisMixin):
                 self.schedule_job(data, queue)
                 await self.below_concurrency_limit()
 
-    async def health_check(self, redis, redis_queues, queue_lookup):
+    async def record_health(self, redis, redis_queues, queue_lookup):
         now_ts = timestamp()
         if (now_ts - self.last_health_check) < self.health_check_interval:
             return
@@ -218,6 +227,28 @@ pending tasks: {pending_tasks}""".format(
         await redis.setex(self.health_check_key, self.health_check_interval + 1, info.encode())
 
         jobs_logger.info('health check:\n%s', info)
+
+    async def _check_health(self):
+        r = 1
+        async with await self.get_redis_conn() as redis:
+            data = await redis.get(self.health_check_key)
+            if not data:
+                work_logger.warning('Health check failed: no health check sentinel value found')
+            else:
+                work_logger.info('Health check successful:\n%s', data.decode())
+                r = 0
+        # only need to close redis not deal with queues etc., hence super close
+        await super().close()
+        return r
+
+    @classmethod
+    def check_health(cls, **kwargs):
+        """
+        Run a health check on the worker return the appropriate exit code.
+        :return: 0 if successful, 1 if not
+        """
+        self = cls(**kwargs)
+        return self.loop.run_until_complete(self._check_health())
 
     def schedule_job(self, data, queue):
         work_logger.debug('scheduling job from queue %s', queue)

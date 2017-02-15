@@ -3,9 +3,10 @@
 History
 -------
 
-v0.4.2 (TBD)
+v0.5.0 (TBD)
 ...................
 * use ``gather`` rather than ``wait`` for startup and shutdown so exceptions propagate.
+* add ``--check`` option to confirm arq worker is running.
 
 v0.4.1 (2017-02-11)
 ...................
