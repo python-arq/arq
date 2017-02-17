@@ -14,4 +14,3 @@ pytest-timeout==1.2.0
 pytest-toolbox==0.2
 pytz==2016.10
 Sphinx==1.5.2
-typed-ast==1.0.1
