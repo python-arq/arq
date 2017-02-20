@@ -111,8 +111,9 @@ class Actor(RedisMixin, metaclass=ActorMeta):
             j = self.job_class(queue, data)
             await getattr(self, j.func_name).direct(*j.args, **j.kwargs)
 
-    async def close(self):
-        await self.shutdown()
+    async def close(self, shutdown=False):
+        if shutdown:
+            await self.shutdown()
         await super().close()
 
     def __repr__(self):

@@ -210,14 +210,14 @@ class BaseWorker(RedisMixin):
             return
         self.last_health_check = now_ts
         info = (
-            '{now:%Y-%m-%d %H:%M:%S} j_complete={jobs_complete} j_failed={jobs_failed} '
+            '{now:%b-%d %H:%M:%S} j_complete={jobs_complete} j_failed={jobs_failed} '
             'j_timedout={jobs_timed_out} j_ongoing={pending_tasks}'
         ).format(
             now=datetime.now(),
             jobs_complete=self.jobs_complete,
             jobs_failed=self.jobs_failed,
             jobs_timed_out=self.jobs_timed_out,
-            pending_tasks=len(self._pending_tasks),
+            pending_tasks=sum(not t.done() for t in self._pending_tasks),
         )
         for redis_queue in redis_queues:
             info += ' q_{}={}'.format(queue_lookup[redis_queue], await redis.llen(redis_queue))
@@ -231,7 +231,7 @@ class BaseWorker(RedisMixin):
             if not data:
                 work_logger.warning('Health check failed: no health check sentinel value found')
             else:
-                work_logger.info('Health check successful:\n%s', data.decode())
+                work_logger.info('Health check successful: %s', data.decode())
                 r = 0
         # only need to close redis not deal with queues etc., hence super close
         await super().close()
@@ -345,7 +345,7 @@ class BaseWorker(RedisMixin):
                              t, self.jobs_complete, self.jobs_failed, self.jobs_timed_out)
 
             if self._shadow_lookup:
-                await asyncio.gather(*[s.close() for s in self._shadow_lookup.values()], loop=self.loop)
+                await asyncio.gather(*[s.close(True) for s in self._shadow_lookup.values()], loop=self.loop)
             await super().close()
             self._closed = True
 

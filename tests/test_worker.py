@@ -295,7 +295,7 @@ async def test_startup_shutdown(tmpworkdir, redis_conn, loop):
         assert tmpworkdir.join('events').read() == 'startup[True],concurrent_func[foobar],shutdown[True],'
         assert worker.jobs_failed == 0
     finally:
-        await actor.close()
+        await actor.close(True)
         assert tmpworkdir.join('events').read() == ('startup[True],concurrent_func[foobar],'
                                                     'shutdown[True],shutdown[False],')
 
