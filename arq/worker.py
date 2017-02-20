@@ -209,24 +209,20 @@ class BaseWorker(RedisMixin):
         if (now_ts - self.last_health_check) < self.health_check_interval:
             return
         self.last_health_check = now_ts
-        info = """\
-timestamp: {now:%Y-%m-%d %H:%M:%S}
-jobs complete, failed, timed out: {jobs_complete}, {jobs_failed}, {jobs_timed_out}
-pending tasks: {pending_tasks}""".format(
+        info = (
+            '{now:%Y-%m-%d %H:%M:%S} j_complete={jobs_complete} j_failed={jobs_failed} '
+            'j_timedout={jobs_timed_out} j_ongoing={pending_tasks}'
+        ).format(
             now=datetime.now(),
             jobs_complete=self.jobs_complete,
             jobs_failed=self.jobs_failed,
             jobs_timed_out=self.jobs_timed_out,
             pending_tasks=len(self._pending_tasks),
         )
-        queue_names, queue_counts = [], []
         for redis_queue in redis_queues:
-            queue_names.append(queue_lookup[redis_queue])
-            queue_counts.append(await redis.llen(redis_queue))
-        info += '\nqueue sizes {}: {}'.format(', '.join(queue_names), ', '.join(map(str, queue_counts)))
+            info += ' q_{}={}'.format(queue_lookup[redis_queue], await redis.llen(redis_queue))
         await redis.setex(self.health_check_key, self.health_check_interval + 1, info.encode())
-
-        jobs_logger.info('health check:\n%s', info)
+        jobs_logger.info('recording health: %s', info)
 
     async def _check_health(self):
         r = 1
