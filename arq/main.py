@@ -73,9 +73,15 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         super().__init__(*args, **kwargs)
 
     async def startup(self):
+        """
+        Override to setup objects you'll need while running the worker, eg. sessions and database connections
+        """
         pass
 
     async def shutdown(self):
+        """
+        Override to gracefully close or delete any objects you setup in ``startup``
+        """
         pass
 
     def _bind_concurrent(self):
@@ -112,6 +118,12 @@ class Actor(RedisMixin, metaclass=ActorMeta):
             await getattr(self, j.func_name).direct(*j.args, **j.kwargs)
 
     async def close(self, shutdown=False):
+        """
+        Close down the actor, eg. close the associated redis pool, optionally also calling shutdown.
+
+        :param shutdown: whether or not to also call the shutdown coroutine, you probably only want to set this
+          to ``True`` it you called startup previously
+        """
         if shutdown:
             await self.shutdown()
         await super().close()

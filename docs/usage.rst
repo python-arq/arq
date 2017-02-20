@@ -6,40 +6,7 @@ Usage is best described by example.
 Simple Usage
 ............
 
-.. code:: python
-
-    import asyncio
-    from aiohttp import ClientSession
-    from arq import Actor, BaseWorker, concurrent
-
-    class Downloader(Actor):
-        def __init__(self, **kwargs):
-            super().__init__(**kwargs)
-            self.session = ClientSession(loop=self.loop)
-
-        @concurrent
-        async def download_content(self, url):
-            async with self.session.get(url) as response:
-                content = await response.read()
-                print('{}: {:.80}...'.format(url, content.decode()))
-            return len(content)
-
-        async def close(self):
-            await super().close()
-            self.session.close()
-
-    class Worker(BaseWorker):
-        shadows = [Downloader]
-
-    async def download_lots():
-        d = Downloader()
-        for url in ('https://facebook.com', 'https://microsoft.com', 'https://github.com'):
-            await d.download_content(url)
-        await d.close()
-
-    if __name__ == '__main__':
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(download_lots())
+.. literalinclude:: demo.py
 
 (This script is complete, it should run "as is" both to enqueue jobs and run them)
 
@@ -54,6 +21,45 @@ To execute the jobs, either after running ``demo.py`` or before/during::
 For details on the *arq* CLI::
 
     arq --help
+
+Startup & Shutdown coroutines
+.............................
+
+The ``startup`` and ``shutdown`` are provided as a convenient way to run logic as actors start and finish,
+however it's important to not that these methods **are not called by default when actors are initialised or closed**.
+They are however called when the actor started and closed on the worker, eg. in "shadow" mode, see above.
+In other words: if you need these coroutines to be called when using an actor in your code, that's your responsibility.
+
+For example, in the above code there's no need for ``self.session`` when using the actor in "default" mode, eg. called
+with ``python demo.py``, so neither ``startup`` or ``shutdown`` are called.
+
+Health checks
+.............
+
+*arq* will automatically record some info about it's current state in redis every ``health_check_interval`` seconds,
+see :attr:`arq.worker.BaseWorker.health_check_interval`. That key/value will expire after ``health_check_interval + 1``
+so you can be sure if the variable exists you can be sure *arq* is alive and kicking (technically you can be sure it
+was alive and kicking ``health_check_interval`` seconds ago).
+
+You can run a health check with the CLI using (assuming you're using the above example)::
+
+    arq --check demo.py
+
+The command will output the value of the health check if found,
+then exit ``0`` if the key was found and ``1`` if it was not.
+
+A health check value takes the following form::
+
+    Feb-20_11:02:40 j_complete=0 j_failed=0 j_timedout=0 j_ongoing=0 q_high=0 q_dft=0 q_low=0
+
+Where the values have the following meaning:
+
+* ``j_complete`` the number of jobs completed
+* ``j_failed`` the number of jobs which have failed eg. raised an exception
+* ``j_timedout`` the number of jobs which have timed out, eg. exceeded :attr:`arq.worker.BaseWorker.timeout_seconds`
+  and been cancelled
+* ``j_ongoing`` the number of jobs currently being performed.
+* ``q_*`` the number of pending jobs in each queue.
 
 Multiple Queues
 ...............
@@ -122,6 +128,9 @@ document and record.
 
         # jobs may not take more than 10 seconds, default 60
         timeout_seconds = 10
+
+        # number of seconds between health checks, default 60
+        health_check_interval = 30
 
         def logging_config(self, verbose):
             conf = super().logging_config(verbose)

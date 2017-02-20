@@ -36,7 +36,7 @@ Why use *arq*?
     to the request? or thread local? or truly global? where am I, hell, what does global even mean?).
 
 **small**
-    and easy to reason with - currently *arq* is only about 600 lines, that won't change significantly.
+    and easy to reason with - currently *arq* is only about 700 lines, that won't change significantly.
 
 Dependencies
 ------------
@@ -59,6 +59,31 @@ Install
 Just::
 
     pip install arq
+
+Terminology
+-----------
+
+The old computer science proverb/joke goes:
+
+    There are only two challenges in computer science: cache invalidation, naming things and the n + 1 problem.
+
+*arq* tries to use generally accepted terminology for as much as possible, however "actors" and "shadows" are not so
+standard and bear describing:
+
+An **Actor** is a class with some concurrent methods, you can define and use multiple actors. Actors hold a
+reference to a redis pool for enqueuing are generally singletons.
+
+The **Worker** is the class which is responsible for running jobs for one or more actors. Workers should inherit
+from ``BaseWorker``, your application will generally only have one worker.
+
+Actors are therefore used in two distinctly different modes:
+
+* **default** mode where you initialise, then use and abuse the actor including calling concurrent methods and
+  thereby enqueuing jobs
+* **shadow** mode where the actor was initialised by the worker in order to perform jobs enqueued by the actor in
+  default (or even shadow) mode.
+
+It's possible to check what mode an actor is in by checking the ``is_shadow`` variable.
 
 .. include:: usage.rst
 
