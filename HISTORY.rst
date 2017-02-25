@@ -3,6 +3,10 @@
 History
 -------
 
+v0.5.2 (2017-02-25)
+...................
+* add ``shadow_kwargs`` method to ``BaseWorker`` to make customising actors easier.
+
 v0.5.1 (2017-02-25)
 ...................
 * reimplement worker reuse as it turned out to be useful in tests.
@@ -14,7 +18,7 @@ v0.5.0 (2017-02-20)
 
 v0.4.1 (2017-02-11)
 ...................
-* fix issue with ``Concurrent`` class binding with multiple actor instances
+* fix issue with ``Concurrent`` class binding with multiple actor instances.
 
 v0.4.0 (2017-02-10)
 ...................

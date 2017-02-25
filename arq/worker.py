@@ -106,11 +106,23 @@ class BaseWorker(RedisMixin):
         """
         if self.shadows is None:
             raise TypeError('shadows not defined on worker')
-        rp = await self.get_redis_pool()
-        shadows = [s(redis_settings=self.redis_settings, is_shadow=True, loop=self.loop, existing_pool=rp)
-                   for s in self.shadows]
+        kwargs = await self.shadow_kwargs()
+        shadows = [s(**kwargs) for s in self.shadows]
         await asyncio.gather(*[s.startup() for s in shadows], loop=self.loop)
         return shadows
+
+    async def shadow_kwargs(self):
+        """
+        Prepare the keyword arguments for initialising all shadows.
+
+        Override to customise the kwargs used to initialise shadows.
+        """
+        return dict(
+            redis_settings=self.redis_settings,
+            is_shadow=True,
+            loop=self.loop,
+            existing_pool=await self.get_redis_pool(),
+        )
 
     @classmethod
     def logging_config(cls, verbose) -> dict:
@@ -415,7 +427,7 @@ def start_worker(worker_path: str, worker_class: str, burst: bool, loop: asyncio
     """
     worker_cls = import_string(worker_path, worker_class)
     worker = worker_cls(burst=burst, loop=loop)
-    work_logger.info('Starting %s on worker process pid=%d', worker_cls.__name__, os.getpid())
+    work_logger.info('Starting "%s" on pid=%d', worker_cls.__name__, os.getpid())
     try:
         worker.run_until_complete()
     except HandledExit:
