@@ -3,6 +3,10 @@
 History
 -------
 
+v0.5.1 (2017-02-25)
+...................
+* reimplement worker reuse as it turned out to be useful in tests.
+
 v0.5.0 (2017-02-20)
 ...................
 * use ``gather`` rather than ``wait`` for startup and shutdown so exceptions propagate.
