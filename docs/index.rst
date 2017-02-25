@@ -67,14 +67,14 @@ The old computer science proverb/joke goes:
 
     There are only two challenges in computer science: cache invalidation, naming things and the n + 1 problem.
 
-*arq* tries to use generally accepted terminology for as much as possible, however "actors" and "shadows" are not so
-standard and bear describing:
+*arq* tries to avoid confusion over what's named what by using generally accepted terminology as much as possible,
+however a few terms (like "actors" and "shadows") are not so standard and bear describing:
 
 An **Actor** is a class with some concurrent methods, you can define and use multiple actors. Actors hold a
-reference to a redis pool for enqueuing are generally singletons.
+reference to a redis pool for enqueuing jobs and are generally singletons.
 
 The **Worker** is the class which is responsible for running jobs for one or more actors. Workers should inherit
-from ``BaseWorker``, your application will generally only have one worker.
+from ``BaseWorker``, your application will generally have just one worker.
 
 Actors are therefore used in two distinctly different modes:
 

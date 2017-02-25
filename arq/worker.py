@@ -60,6 +60,10 @@ class BaseWorker(RedisMixin):
     health_check_interval = 60
     health_check_key = b'arq:health-check'
 
+    #: Mostly used in tests; if true actors and the redis pool will not be closed at the end of run()
+    # allowing reuse of the worker, eg. ``worker.run()`` can be called multiple times.
+    reusable = False
+
     def __init__(self, *,
                  burst: bool=False,
                  shadows: list=None,
@@ -92,7 +96,7 @@ class BaseWorker(RedisMixin):
         signal.signal(signal.SIGTERM, self.handle_sig)
         signal.signal(SIG_PROXY, self.handle_proxy_signal)
         super().__init__(**kwargs)  # type: ignore # TODO
-        self._closing_lock = asyncio.Lock(loop=self.loop)
+        self._shutdown_lock = asyncio.Lock(loop=self.loop)
 
     async def shadow_factory(self) -> list:
         """
@@ -142,6 +146,7 @@ class BaseWorker(RedisMixin):
         Main entry point for the the worker which initialises shadows, checks they look ok then runs ``work`` to
         perform jobs.
         """
+        self._stopped = False
         work_logger.info('Initialising work manager, burst mode: %s', self._burst_mode)
 
         shadows = await self.shadow_factory()
@@ -170,7 +175,7 @@ class BaseWorker(RedisMixin):
         try:
             await self.work()
         finally:
-            await self.close()
+            await self.shutdown()
             if self._task_exception:
                 work_logger.error('Found task exception "%s"', self._task_exception)
                 raise self._task_exception
@@ -241,6 +246,7 @@ class BaseWorker(RedisMixin):
     def check_health(cls, **kwargs):
         """
         Run a health check on the worker return the appropriate exit code.
+
         :return: 0 if successful, 1 if not
         """
         self = cls(**kwargs)
@@ -333,17 +339,19 @@ class BaseWorker(RedisMixin):
         exc_type = exc.__class__.__name__
         jobs_logger.exception('%-4s ran in%7.3fs ! %s: %s', j.queue, timestamp() - started_at, j, exc_type)
 
-    async def close(self):
-        with await self._closing_lock:
-            if self._closed:
-                return
+    async def shutdown(self):
+        with await self._shutdown_lock:
             if self._pending_tasks:
                 work_logger.info('shutting down worker, waiting for %d jobs to finish', len(self._pending_tasks))
                 await asyncio.wait(self._pending_tasks, loop=self.loop)
             t = (timestamp() - self.start) if self.start else 0
             work_logger.info('shutting down worker after %0.3fs ◆ %d jobs done ◆ %d failed ◆ %d timed out',
                              t, self.jobs_complete, self.jobs_failed, self.jobs_timed_out)
+            if not self.reusable:
+                await self.close()
 
+    async def close(self):
+        if not self._closed:
             if self._shadow_lookup:
                 await asyncio.gather(*[s.close(True) for s in self._shadow_lookup.values()], loop=self.loop)
             await super().close()
