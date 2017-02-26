@@ -13,4 +13,4 @@ pytest-sugar==0.8.0
 pytest-timeout==1.2.0
 pytest-toolbox==0.2
 pytz==2016.10
-Sphinx==1.5.2
+Sphinx==1.5.3
