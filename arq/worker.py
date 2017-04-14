@@ -15,8 +15,9 @@ from importlib import import_module, reload
 from multiprocessing import Process
 from signal import Signals  # type: ignore
 
-from .logs import default_log_config
 from .jobs import Job
+from .logs import default_log_config
+from .main import Actor  # noqa
 from .utils import RedisMixin, ellipsis, gen_random, timestamp
 
 __all__ = ['BaseWorker', 'RunWorkerProcess', 'StopJob', 'import_string']
@@ -42,7 +43,7 @@ class BadJob(ArqError):
 
 
 class StopJob(ArqError):
-    def __init__(self, reason: str='-', warning: bool=False):
+    def __init__(self, reason: str='', warning: bool=False) -> None:
         self.warning = warning
         super().__init__(reason)
 
@@ -97,7 +98,7 @@ class BaseWorker(RedisMixin):
 
         self.jobs_complete, self.jobs_failed, self.jobs_timed_out = 0, 0, 0
         self._task_exception = None  # type: Exception
-        self._shadow_lookup = {}  # type: Dict[str, object] # TODO
+        self._shadow_lookup = {}  # type: Dict[str, Actor]
         self.start = None  # type: float
         self.last_health_check = 0
         self.running = True
@@ -363,10 +364,10 @@ class BaseWorker(RedisMixin):
     @classmethod
     def handle_stop_job(cls, started_at: float, exc: StopJob, j: Job):
         if exc.warning:
-            msg, logger = '%-4s ran in%7.3fs . %s: Stopped Warning, %s', jobs_logger.warning
+            msg, logger = '%-4s ran in%7.3fs ■ %s.%s ● Stopped Warning %s', jobs_logger.warning
         else:
-            msg, logger = '%-4s ran in%7.3fs . %s: Stopped, %s', jobs_logger.info
-        logger(msg, j.queue, timestamp() - started_at, j, exc)
+            msg, logger = '%-4s ran in%7.3fs ■ %s.%s ● Stopped %s', jobs_logger.info
+        logger(msg, j.queue, timestamp() - started_at, j.class_name, j.func_name, exc)
 
     @classmethod
     def handle_execute_exc(cls, started_at: float, exc: BaseException, j: Job):

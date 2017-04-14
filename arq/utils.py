@@ -149,7 +149,10 @@ def gen_random(length: int=20) -> bytes:
     return base64.urlsafe_b64encode(os.urandom(length))[:length]
 
 
-def ellipsis(s: str, length: int=80) -> str:
+DEFAULT_CURTAIL = 80
+
+
+def ellipsis(s: str, length: int=DEFAULT_CURTAIL) -> str:
     """
     Truncate a string and add an ellipsis (three dots) to the end if it was too long
 

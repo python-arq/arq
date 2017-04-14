@@ -41,7 +41,7 @@ async def test_stop_job_normal(mock_actor_worker, caplog):
     actor, worker = mock_actor_worker
     await actor.stop_job_normal()
     await worker.run()
-    assert ('arq.jobs INFO: dft  ran in  0.0XXs . MockRedisDemoActor.stop_job_normal(): Stopped, '
+    assert ('arq.jobs INFO: dft  ran in  0.0XXs ■ MockRedisDemoActor.stop_job_normal ● Stopped '
             'stopping job normally') in caplog(('0.0\d\ds', '0.0XXs'))
 
 
@@ -50,7 +50,7 @@ async def test_stop_job_warning(mock_actor_worker, caplog):
     actor, worker = mock_actor_worker
     await actor.stop_job_warning()
     await worker.run()
-    assert ('arq.jobs WARNING: dft  ran in  0.0XXs . MockRedisDemoActor.stop_job_warning(): Stopped Warning, '
+    assert ('arq.jobs WARNING: dft  ran in  0.0XXs ■ MockRedisDemoActor.stop_job_warning ● Stopped Warning '
             'stopping job with warning') in caplog(('0.0\d\ds', '0.0XXs'))
 
 

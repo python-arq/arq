@@ -8,7 +8,7 @@ from datetime import datetime
 
 import msgpack
 
-from .utils import ellipsis, from_unix_ms, timestamp, to_unix_ms
+from .utils import DEFAULT_CURTAIL, ellipsis, from_unix_ms, timestamp, to_unix_ms
 
 __all__ = ['JobSerialisationError', 'Job', 'DatetimeJob']
 
@@ -68,7 +68,7 @@ class Job:
     def _decode(cls, data: bytes):
         return msgpack.unpackb(data, object_hook=cls.msgpack_object_hook, encoding='utf8')
 
-    def __str__(self):
+    def to_string(self, args_curtail=DEFAULT_CURTAIL):
         arguments = ''
         if self.args:
             arguments = ', '.join(map(str, self.args))
@@ -77,7 +77,10 @@ class Job:
                 arguments += ', '
             arguments += ', '.join('{}={!r}'.format(*kv) for kv in sorted(self.kwargs.items()))
 
-        return '{s.class_name}.{s.func_name}({args})'.format(s=self, args=ellipsis(arguments))
+        return '{s.class_name}.{s.func_name}({args})'.format(s=self, args=ellipsis(arguments, args_curtail))
+
+    def __str__(self):
+        return self.to_string()
 
     def __repr__(self):
         return '<Job {} on {}>'.format(self, self.queue)
