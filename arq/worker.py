@@ -76,6 +76,10 @@ class BaseWorker(RedisMixin):
     # allowing reuse of the worker, eg. ``worker.run()`` can be called multiple times.
     reusable = False
 
+    #: Adjust the length at which arguments of concurrent functions and job results are curtailed
+    # when logging job execution
+    log_curtail = 80
+
     def __init__(self, *,
                  burst: bool=False,
                  shadows: list=None,
@@ -342,17 +346,16 @@ class BaseWorker(RedisMixin):
             self.jobs_failed += 1
         jobs_logger.debug('task complete, %d jobs done, %d failed', self.jobs_complete, self.jobs_failed)
 
-    @classmethod
-    def log_job_start(cls, started_at: float, j: Job):
+    def log_job_start(self, started_at: float, j: Job):
         if jobs_logger.isEnabledFor(logging.INFO):
-            jobs_logger.info('%-4s queued%7.3fs → %s', j.queue, started_at - j.queued_at, j)
+            job_str = j.to_string(self.log_curtail)
+            jobs_logger.info('%-4s queued%7.3fs → %s', j.queue, started_at - j.queued_at, job_str)
 
-    @classmethod
-    def log_job_result(cls, started_at: float, result, j: Job):
+    def log_job_result(self, started_at: float, result, j: Job):
         if not jobs_logger.isEnabledFor(logging.INFO):
             return
         job_time = timestamp() - started_at
-        sr = '' if result is None else ellipsis(repr(result))
+        sr = '' if result is None else ellipsis(repr(result), self.log_curtail)
         jobs_logger.info('%-4s ran in%7.3fs ← %s.%s ● %s', j.queue, job_time, j.class_name, j.func_name, sr)
 
     def handle_prepare_exc(self, msg: str):

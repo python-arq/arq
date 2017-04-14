@@ -36,6 +36,19 @@ async def test_long_args(mock_actor_worker, caplog):
             "'0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19 + 0,1,2,3,4,5,6,7,8,9,10,11,…\n") in log
 
 
+async def test_longer_args(mock_actor_worker, caplog):
+    actor, worker = mock_actor_worker
+    worker.log_curtail = 90
+    v = ','.join(map(str, range(20)))
+    await actor.concat(a=v, b=v)
+    await worker.run()
+    log = caplog(('0.0\d\ds', '0.0XXs'))
+    assert ("dft  queued  0.0XXs → MockRedisDemoActor.concat"
+            "(a='0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19', b='0,1,2,3,4,5,6,7,8,9,10,11,12,13…)\n") in log
+    assert ("dft  ran in  0.0XXs ← MockRedisDemoActor.concat ● "
+            "'0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19 + 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,1…\n") in log
+
+
 async def test_stop_job_normal(mock_actor_worker, caplog):
     caplog.set_loggers(fmt='%(name)s %(levelname)s: %(message)s')
     actor, worker = mock_actor_worker
