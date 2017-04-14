@@ -16,24 +16,35 @@ from multiprocessing import Process
 from signal import Signals  # type: ignore
 
 from .logs import default_log_config
+from .jobs import Job
 from .utils import RedisMixin, ellipsis, gen_random, timestamp
 
-__all__ = ['BaseWorker', 'import_string', 'RunWorkerProcess']
+__all__ = ['BaseWorker', 'RunWorkerProcess', 'StopJob', 'import_string']
 
 work_logger = logging.getLogger('arq.work')
 jobs_logger = logging.getLogger('arq.jobs')
 
 
-class HandledExit(Exception):
+class ArqError(Exception):
     pass
 
 
-class ImmediateExit(Exception):
+class HandledExit(ArqError):
     pass
 
 
-class BadJob(Exception):
+class ImmediateExit(ArqError):
     pass
+
+
+class BadJob(ArqError):
+    pass
+
+
+class StopJob(ArqError):
+    def __init__(self, reason: str='-', warning: bool=False):
+        self.warning = warning
+        super().__init__(reason)
 
 
 # special signal sent by the main process in case the worker process hasn't received a signal (eg. SIGTERM or SIGINT)
@@ -289,7 +300,7 @@ class BaseWorker(RedisMixin):
         self.jobs_timed_out += 1
         jobs_logger.error('job timed out %r', job)
 
-    async def run_job(self, j):
+    async def run_job(self, j: Job):
         try:
             shadow = self._shadow_lookup[j.class_name]
         except KeyError:
@@ -310,7 +321,10 @@ class BaseWorker(RedisMixin):
         self.log_job_start(started_at, j)
         try:
             result = await func(*j.args, **j.kwargs)
-        except Exception as e:
+        except StopJob as e:
+            self.handle_stop_job(started_at, e, j)
+            return 0
+        except BaseException as e:
             self.handle_execute_exc(started_at, e, j)
             return 1
         else:
@@ -328,26 +342,34 @@ class BaseWorker(RedisMixin):
         jobs_logger.debug('task complete, %d jobs done, %d failed', self.jobs_complete, self.jobs_failed)
 
     @classmethod
-    def log_job_start(cls, started_at, j):
+    def log_job_start(cls, started_at: float, j: Job):
         if jobs_logger.isEnabledFor(logging.INFO):
             jobs_logger.info('%-4s queued%7.3fs → %s', j.queue, started_at - j.queued_at, j)
 
     @classmethod
-    def log_job_result(cls, started_at, result, j):
+    def log_job_result(cls, started_at: float, result, j: Job):
         if not jobs_logger.isEnabledFor(logging.INFO):
             return
         job_time = timestamp() - started_at
         sr = '' if result is None else ellipsis(repr(result))
         jobs_logger.info('%-4s ran in%7.3fs ← %s.%s ● %s', j.queue, job_time, j.class_name, j.func_name, sr)
 
-    def handle_prepare_exc(self, msg):
+    def handle_prepare_exc(self, msg: str):
         self.jobs_failed += 1
         jobs_logger.error(msg)
         # exit with zero so we don't increment jobs_failed twice
         return 0
 
     @classmethod
-    def handle_execute_exc(cls, started_at, exc, j):
+    def handle_stop_job(cls, started_at: float, exc: StopJob, j: Job):
+        if exc.warning:
+            msg, logger = '%-4s ran in%7.3fs . %s: Stopped Warning, %s', jobs_logger.warning
+        else:
+            msg, logger = '%-4s ran in%7.3fs . %s: Stopped, %s', jobs_logger.info
+        logger(msg, j.queue, timestamp() - started_at, j, exc)
+
+    @classmethod
+    def handle_execute_exc(cls, started_at: float, exc: BaseException, j: Job):
         exc_type = exc.__class__.__name__
         jobs_logger.exception('%-4s ran in%7.3fs ! %s: %s', j.queue, timestamp() - started_at, j, exc_type)
 

@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import re
 from multiprocessing import Process
 from unittest.mock import MagicMock
 
@@ -30,11 +29,29 @@ async def test_long_args(mock_actor_worker, caplog):
     v = ','.join(map(str, range(20)))
     await actor.concat(a=v, b=v)
     await worker.run()
-    log = re.sub('0.0\d\ds', '0.0XXs', caplog.log)
+    log = caplog(('0.0\d\ds', '0.0XXs'))
     assert ("dft  queued  0.0XXs → MockRedisDemoActor.concat"
             "(a='0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19', b='0,1,2,3,4,5,6,7,8,9,1…)\n") in log
     assert ("dft  ran in  0.0XXs ← MockRedisDemoActor.concat ● "
             "'0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19 + 0,1,2,3,4,5,6,7,8,9,10,11,…\n") in log
+
+
+async def test_stop_job_normal(mock_actor_worker, caplog):
+    caplog.set_loggers(fmt='%(name)s %(levelname)s: %(message)s')
+    actor, worker = mock_actor_worker
+    await actor.stop_job_normal()
+    await worker.run()
+    assert ('arq.jobs INFO: dft  ran in  0.0XXs . MockRedisDemoActor.stop_job_normal(): Stopped, '
+            'stopping job normally') in caplog(('0.0\d\ds', '0.0XXs'))
+
+
+async def test_stop_job_warning(mock_actor_worker, caplog):
+    caplog.set_loggers(fmt='%(name)s %(levelname)s: %(message)s')
+    actor, worker = mock_actor_worker
+    await actor.stop_job_warning()
+    await worker.run()
+    assert ('arq.jobs WARNING: dft  ran in  0.0XXs . MockRedisDemoActor.stop_job_warning(): Stopped Warning, '
+            'stopping job with warning') in caplog(('0.0\d\ds', '0.0XXs'))
 
 
 async def test_separate_log_levels(mock_actor_worker, caplog):
@@ -42,7 +59,7 @@ async def test_separate_log_levels(mock_actor_worker, caplog):
     actor, worker = mock_actor_worker
     await actor.concat(a='1', b='2')
     await worker.run()
-    log = re.sub('0.0\d\ds', '0.0XXs', caplog.log)
+    log = caplog(('0.0\d\ds', '0.0XXs'))
     assert ('arq.work: Initialising work manager, burst mode: True\n'
             'arq.work: Running worker with 1 shadow listening to 3 queues\n'
             'arq.work: shadows: MockRedisDemoActor | queues: high, dft, low\n'
@@ -232,9 +249,11 @@ async def test_job_timeout(loop, caplog):
     worker = MockRedisWorker(burst=True, loop=loop, timeout_seconds=0.1)
     worker.mock_data = actor.mock_data
     await worker.run()
-    log = re.sub('(\d.\d\d)\d', r'\1X', caplog.log)
-    log = re.sub(', line \d+,', ', line <no>,', log)
-    log = re.sub('"/.*?/(\w+/\w+)\.py"', r'"/path/to/\1.py"', log)
+    log = caplog(
+        ('(\d.\d\d)\d', r'\1X'),
+        (', line \d+,', ', line <no>,'),
+        ('"/.*?/(\w+/\w+)\.py"', r'"/path/to/\1.py"'),
+    )
     print(log)
     assert ('arq.jobs: dft  queued  0.00Xs → MockRedisDemoActor.sleeper(0.2)\n'
             'arq.jobs: dft  queued  0.00Xs → MockRedisDemoActor.sleeper(0.05)\n'

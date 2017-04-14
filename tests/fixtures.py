@@ -5,7 +5,7 @@ import signal
 import time
 from pathlib import Path
 
-from arq import Actor, BaseWorker, concurrent
+from arq import Actor, BaseWorker, StopJob, concurrent
 from arq.testing import MockRedisMixin
 
 
@@ -76,6 +76,14 @@ class DemoActor(Actor):
         async with await self.get_redis_conn() as redis:
             await redis.set('actor_info' + key_suffix, json.dumps(data, indent=2))
         return data
+
+    @concurrent
+    async def stop_job_normal(self):
+        raise StopJob('stopping job normally')
+
+    @concurrent
+    async def stop_job_warning(self):
+        raise StopJob('stopping job with warning', warning=True)
 
 
 class MockRedisDemoActor(MockRedisMixin, DemoActor):
