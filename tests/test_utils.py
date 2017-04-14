@@ -41,3 +41,11 @@ async def test_mock_redis_expiry_expired(loop):
     r = MockRedis(loop=loop)
     await r.setex('foo', -10, 'bar')
     assert None is await r.get('foo')
+
+
+async def test_mock_redis_flushdb(loop):
+    r = MockRedis(loop=loop)
+    await r.set('foo', 'bar')
+    assert 'bar' == await r.get('foo')
+    await r.flushdb()
+    assert None is await r.get('foo')

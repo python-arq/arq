@@ -79,6 +79,12 @@ class MockRedis:
     async def llen(self, list_name):
         return len(self._get(list_name, []))
 
+    async def flushdb(self):
+        self.data = {}
+
+    async def set(self, key, value):
+        self.data[key] = value
+
     async def setex(self, key, expires, value):
         self.data[key] = value
         self._expiry[key] = datetime.now() + timedelta(seconds=expires)
