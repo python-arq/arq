@@ -3,6 +3,12 @@
 History
 -------
 
+v0.6.0 (2017-04-14)
+...................
+* add ``StopJob`` exception for cleaning ending jobs, #21
+* add ``flushdb`` to ``MockRedis``, #23
+* allow configurable length job logging via ``log_curtail`` on ``Worker``, #28
+
 v0.5.2 (2017-02-25)
 ...................
 * add ``shadow_kwargs`` method to ``BaseWorker`` to make customising actors easier.
