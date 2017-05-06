@@ -12,3 +12,4 @@ htmlcov/
 test.py
 *.egg-info
 docs/_build/
+.mypy_cache/

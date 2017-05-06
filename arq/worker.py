@@ -13,7 +13,8 @@ import time
 from datetime import datetime
 from importlib import import_module, reload
 from multiprocessing import Process
-from signal import Signals  # type: ignore
+from signal import Signals
+from typing import Dict, Set  # noqa
 
 from .jobs import Job
 from .logs import default_log_config
