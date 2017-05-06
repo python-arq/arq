@@ -33,6 +33,7 @@ setup(
         'Topic :: System :: Distributed Computing',
         'Topic :: System :: Systems Administration',
         'Topic :: System :: Monitoring',
+        'Framework :: AsyncIO',
     ],
     author='Samuel Colvin',
     author_email='s@muelcolvin.com',
