@@ -3,6 +3,11 @@
 History
 -------
 
+v0.6.1 (2017-05-06)
+...................
+* mypy at last passing, #30
+* adding trove classifiers, #29
+
 v0.6.0 (2017-04-14)
 ...................
 * add ``StopJob`` exception for cleaning ending jobs, #21
