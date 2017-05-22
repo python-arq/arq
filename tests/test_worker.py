@@ -76,7 +76,7 @@ async def test_separate_log_levels(mock_actor_worker, caplog):
     assert ('arq.work: Initialising work manager, burst mode: True\n'
             'arq.work: Running worker with 1 shadow listening to 3 queues\n'
             'arq.work: shadows: MockRedisDemoActor | queues: high, dft, low\n'
-            'arq.work: shutting down worker, waiting for 1 jobs to finish\n'
+            'arq.work: processor waiting 5.0s for 1 tasks to finish\n'
             'arq.work: shutting down worker after 0.0XXs ◆ 1 jobs done ◆ 0 failed ◆ 0 timed out\n') == log
 
 
@@ -213,14 +213,14 @@ async def test_run_proxy_signal(actor, monkeypatch):
     monkeypatch.setattr(arq.worker.signal, 'alarm', mock_signal_alarm)
 
     worker = Worker(burst=True, loop=actor.loop)
-    assert worker.running is True
+    assert worker.running is None
     assert mock_signal_signal.call_count == 3
     assert mock_signal_alarm.call_count == 0
 
     with pytest.raises(arq.worker.HandledExit):
         worker.handle_proxy_signal(arq.worker.SIG_PROXY, None)
 
-    assert worker.running is False
+    assert worker.running is None
     assert mock_signal_signal.call_count == 6
     assert mock_signal_alarm.call_count == 1
 
@@ -271,7 +271,7 @@ async def test_job_timeout(loop, caplog):
     assert ('arq.jobs: dft  queued  0.00Xs → MockRedisDemoActor.sleeper(0.2)\n'
             'arq.jobs: dft  queued  0.00Xs → MockRedisDemoActor.sleeper(0.05)\n'
             'arq.jobs: dft  ran in  0.05Xs ← MockRedisDemoActor.sleeper ● 0.05\n'
-            'arq.jobs: job timed out <Job MockRedisDemoActor.sleeper(0.2) on dft>\n'
+            'arq.jobs: task timed out <Job MockRedisDemoActor.sleeper(0.2) on dft>\n'
             'arq.jobs: dft  ran in  0.10Xs ! MockRedisDemoActor.sleeper(0.2): CancelledError\n') in log
     assert ('concurrent.futures._base.CancelledError\n'
             'arq.work: shutting down worker after 0.10Xs ◆ 2 jobs done ◆ 1 failed ◆ 1 timed out\n') in log

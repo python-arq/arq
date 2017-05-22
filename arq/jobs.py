@@ -13,7 +13,11 @@ from .utils import DEFAULT_CURTAIL, ellipsis, from_unix_ms, timestamp, to_unix_m
 __all__ = ['JobSerialisationError', 'Job', 'DatetimeJob']
 
 
-class JobSerialisationError(Exception):
+class ArqError(Exception):
+    pass
+
+
+class JobSerialisationError(ArqError):
     pass
 
 
@@ -22,7 +26,7 @@ class Job:
     Main Job class responsible for encoding and decoding jobs as they go
     into and come out of redis.
     """
-    __slots__ = ('queue', 'queued_at', 'class_name', 'func_name', 'args', 'kwargs')
+    __slots__ = ('queue', 'queued_at', 'class_name', 'func_name', 'args', 'kwargs', 'raw_queue', 'raw_data')
 
     #: custom encoder for msgpack, see :class:`arq.jobs.DatetimeJob` for an example of usage
     msgpack_encoder = None  # type: function
@@ -30,15 +34,25 @@ class Job:
     #: custom object hook for msgpack, see :class:`arq.jobs.DatetimeJob` for an example of usage
     msgpack_object_hook = None  # type: function
 
-    def __init__(self, queue: str, data: bytes) -> None:
+    def __init__(self, raw_data: bytes, *, queue_name: str=None, raw_queue: bytes=None, decode=True) -> None:
         """
         Create a job instance be decoding a job definition eg. from redis.
 
-        :param queue: name of the queue the job was dequeued from
-        :param data: data to decode, as created by :meth:`arq.jobs.Job.encode`
+        :param raw_data: data to decode, as created by :meth:`arq.jobs.Job.encode`
+        :param raw_queue: raw name of the queue the job was taken from
+        :param queue_name: name of the queue the job was dequeued from
         """
-        self.queue = queue
-        self.queued_at, self.class_name, self.func_name, self.args, self.kwargs = self._decode(data)
+        self.raw_data = raw_data
+        if queue_name is None and raw_queue is None:
+            raise ArqError('either queue_name or raw_queue are required')
+        self.queue = queue_name or raw_queue.decode()
+        self.raw_queue = raw_queue or queue_name.encode()
+        self.queued_at = self.class_name = self.func_name = self.args = self.kwargs = None
+        if decode:
+            self.decode()
+
+    def decode(self):
+        self.queued_at, self.class_name, self.func_name, self.args, self.kwargs = self._decode(self.raw_data)
         self.queued_at /= 1000
 
     @classmethod

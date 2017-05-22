@@ -114,7 +114,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
             async with pool.get() as redis:
                 await redis.rpush(queue_list, data)
         else:
-            j = self.job_class(queue, data)
+            j = self.job_class(data, queue_name=queue)
             await getattr(self, j.func_name).direct(*j.args, **j.kwargs)
 
     async def close(self, shutdown=False):

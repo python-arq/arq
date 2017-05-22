@@ -20,8 +20,8 @@ class WorkerSignalQuit(Worker):
     """
     max_concurrent_tasks = 1
 
-    def schedule_job(self, *args):
-        super().schedule_job(*args)
+    async def run_job(self, *args):
+        await super().run_job(*args)
         if self.jobs_complete >= 2:
             self.handle_sig(2, None)
 
@@ -30,7 +30,7 @@ class WorkerSignalTwiceQuit(Worker):
     """
     worker which simulates receiving sigint twice after 2 jobs
     """
-    def schedule_job(self, *args):
-        super().schedule_job(*args)
+    async def run_job(self, *args):
+        await super().run_job(*args)
         if self.jobs_complete >= 2:
             self.handle_sig_force(2, None)

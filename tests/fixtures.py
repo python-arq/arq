@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from arq import Actor, BaseWorker, StopJob, concurrent
+from arq.drain import Drain
 from arq.testing import MockRedisMixin
 
 
@@ -113,16 +114,19 @@ class StartupWorker(BaseWorker):
     shadows = [DemoActor, StartupActor]
 
 
+class DrainQuit2(Drain):
+    def _job_callback(self, task):
+        super()._job_callback(task)
+        if self.jobs_complete >= 2:
+            self.running = False
+
+
 class WorkerQuit(Worker):
     """
     worker which stops taking new jobs after 2 jobs
     """
     max_concurrent_tasks = 1
-
-    def job_callback(self, task):
-        super().job_callback(task)
-        if self.jobs_complete >= 2:
-            self.running = False
+    drain_class = DrainQuit2
 
 
 class WorkerFail(Worker):
@@ -134,10 +138,14 @@ class MockRedisWorker(MockRedisMixin, BaseWorker):
     shadows = [MockRedisDemoActor]
 
 
-class MockRedisWorkerQuit(MockRedisWorker):
-    def job_callback(self, task):
-        super().job_callback(task)
+class DrainQuitImmediate(Drain):
+    def _job_callback(self, task):
+        super()._job_callback(task)
         self.running = False
+
+
+class MockRedisWorkerQuit(MockRedisWorker):
+    drain_class = DrainQuitImmediate
 
 
 class FoobarActor(MockRedisDemoActor):
