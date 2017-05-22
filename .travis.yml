@@ -6,7 +6,6 @@ services:
 - redis-server
 
 python:
-- '3.5'
 - '3.6'
 - '3.6-dev'
 - 'nightly'
@@ -41,9 +40,9 @@ deploy:
   skip_upload_docs: true
   on:
     tags: true
-    python: 3.5
+    python: 3.6
 - provider: script
   script: make deploy-docs
   on:
     tags: true
-    python: 3.5
+    python: 3.6

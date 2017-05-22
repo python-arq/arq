@@ -43,7 +43,7 @@ Dependencies
 
 Required **before pip install**:
 
-* `Python 3.5.0+`_ *asyncio* is used throughout with new style ``async/await`` syntax.
+* `Python 3.6.0+`_ *asyncio* is used throughout with new style ``async/await`` syntax and ``async yield``.
 * `Redis`_ Redis lists are used to communication between the front end and worker, redis can also be used to store job results.
 
 Installed as dependencies by pip:
