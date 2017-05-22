@@ -14,7 +14,7 @@ from datetime import datetime
 from importlib import import_module, reload
 from multiprocessing import Process
 from signal import Signals
-from typing import Dict, Set  # noqa
+from typing import Dict, Type  # noqa
 
 from .drain import Drain
 from .jobs import ArqError, Job
@@ -101,12 +101,12 @@ class BaseWorker(RedisMixin):
         self.timeout_seconds = timeout_seconds or self.timeout_seconds
         self.re_queue = self.re_queue if re_queue is None else re_queue
 
-        self._shadow_lookup = {}  # type: Dict[str, Actor]
-        self.start = None  # type: float
+        self._shadow_lookup:  Dict[str, Actor] = {}
+        self.start: float = None
         self.last_health_check = 0
         self._closed = False
-        self.drain = None  # type: Drain
-        self.job_class = None  # type: Job
+        self.drain: Drain = None
+        self.job_class: Type[Job] = None
         signal.signal(signal.SIGINT, self.handle_sig)
         signal.signal(signal.SIGTERM, self.handle_sig)
         signal.signal(SIG_PROXY, self.handle_proxy_signal)
@@ -204,7 +204,6 @@ class BaseWorker(RedisMixin):
             max_concurrent_tasks=self.max_concurrent_tasks,
             shutdown_delay=self.shutdown_delay - 1,
             timeout_seconds=self.timeout_seconds,
-            job_class=self.job_class,
         )
         self.start = timestamp()
         try:
@@ -236,37 +235,16 @@ class BaseWorker(RedisMixin):
                 await self.drain.redis.rpush(quit_queue, b'1')
                 redis_queues.append(quit_queue)
 
-            async for job in self.drain.iter(*redis_queues):
+            await self.record_health(self.drain.redis, original_redis_queues, queue_lookup)
+            async for raw_queue, raw_data in self.drain.iter(*redis_queues):
+                if raw_queue is not None:
+                    if self._burst_mode and raw_queue == quit_queue:
+                        work_logger.debug('got job from the quit queue, stopping')
+                        break
+
+                    job = self.job_class(raw_data, queue_name=queue_lookup[raw_queue], raw_queue=raw_queue)
+                    self.drain.add(self.run_job, job)
                 await self.record_health(self.drain.redis, original_redis_queues, queue_lookup)
-                if job is None:
-                    continue
-                if self._burst_mode and job.raw_queue == quit_queue:
-                    work_logger.debug('got job from the quit queue, stopping')
-                    break
-                job.queue = queue_lookup[job.raw_queue]
-                job.decode()
-                self.drain.add(self.run_job, job)
-
-    @property
-    def jobs_complete(self):
-        return self.drain.jobs_complete
-
-    @property
-    def jobs_failed(self):
-        return self.drain.jobs_failed
-
-    @property
-    def jobs_timed_out(self):
-        return self.drain.jobs_timed_out
-
-    @property
-    def running(self):
-        return self.drain and self.drain.running
-
-    @running.setter
-    def running(self, v):
-        if self.drain:
-            self.drain.running = v
 
     async def record_health(self, redis, redis_queues, queue_lookup):
         now_ts = timestamp()
@@ -396,6 +374,27 @@ class BaseWorker(RedisMixin):
     def handle_sig_force(self, signum, frame):
         work_logger.warning('pid=%d, got signal: %s again, forcing exit', os.getpid(), Signals(signum).name)
         raise ImmediateExit('force exit')
+
+    @property
+    def jobs_complete(self):
+        return self.drain.jobs_complete
+
+    @property
+    def jobs_failed(self):
+        return self.drain.jobs_failed
+
+    @property
+    def jobs_timed_out(self):
+        return self.drain.jobs_timed_out
+
+    @property
+    def running(self):
+        return self.drain and self.drain.running
+
+    @running.setter
+    def running(self, v):
+        if self.drain:
+            self.drain.running = v
 
 
 def import_string(file_path, attr_name):

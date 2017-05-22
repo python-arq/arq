@@ -34,7 +34,7 @@ class Job:
     #: custom object hook for msgpack, see :class:`arq.jobs.DatetimeJob` for an example of usage
     msgpack_object_hook = None  # type: function
 
-    def __init__(self, raw_data: bytes, *, queue_name: str=None, raw_queue: bytes=None, decode=True) -> None:
+    def __init__(self, raw_data: bytes, *, queue_name: str=None, raw_queue: bytes=None) -> None:
         """
         Create a job instance be decoding a job definition eg. from redis.
 
@@ -47,11 +47,6 @@ class Job:
             raise ArqError('either queue_name or raw_queue are required')
         self.queue = queue_name or raw_queue.decode()
         self.raw_queue = raw_queue or queue_name.encode()
-        self.queued_at = self.class_name = self.func_name = self.args = self.kwargs = None
-        if decode:
-            self.decode()
-
-    def decode(self):
         self.queued_at, self.class_name, self.func_name, self.args, self.kwargs = self._decode(self.raw_data)
         self.queued_at /= 1000
 

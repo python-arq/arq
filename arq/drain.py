@@ -6,11 +6,9 @@ Responsible for popping jobs from redis lists and managing a set of tasks with a
 """
 import asyncio
 import logging
-from typing import Set, Type  # noqa
+from typing import Set  # noqa
 
 from aioredis import RedisPool
-
-from .jobs import Job
 
 __all__ = ['Drain']
 
@@ -24,8 +22,7 @@ class Drain:
                  re_queue: bool=False,
                  max_concurrent_tasks: int=50,
                  shutdown_delay: float=6,
-                 timeout_seconds: int=60,
-                 job_class: Type[Job]=Job) -> None:
+                 timeout_seconds: int=60) -> None:
         """
         :param max_concurrent_tasks; maximum number of jobs which can be execute at the same time by the event loop
         :param shutdown_delay: number of seconds to wait for tasks to finish
@@ -37,9 +34,8 @@ class Drain:
         self.max_concurrent_tasks = max_concurrent_tasks
         self.shutdown_delay = max(shutdown_delay, 0.1)
         self.timeout_seconds = timeout_seconds
-        self.job_class = job_class
-        self.pending_tasks = set()  # type: Set[asyncio.futures.Future]
-        self.task_exception = None  # type: Exception
+        self.pending_tasks: Set[asyncio.futures.Future] = set()
+        self.task_exception: Exception = None
 
         self.jobs_complete, self.jobs_failed, self.jobs_timed_out = 0, 0, 0
         self.running = False
@@ -72,10 +68,9 @@ class Drain:
         while self.running:
             msg = await self.redis.blpop(*raw_queues, timeout=pop_timeout)
             if msg is None:
-                yield None
+                yield None, None
             else:
-                raw_queue, raw_data = msg
-                yield self.job_class(raw_data, raw_queue=raw_queue, decode=False)
+                yield msg
                 await self.wait()
 
     def add(self, coro, job):

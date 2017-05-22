@@ -3,8 +3,8 @@
 History
 -------
 
-v0.7.0 (2017-05-22)
-...................
+v0.7.0 (TBD)
+............
 * implementing reusable ``Drain`` which takes tasks from a redis list and allows them to be execute asynchronously.
 * Drain uses python 3.6 ``async yield``, therefore **python 3.5 is no longer supported**.
 
