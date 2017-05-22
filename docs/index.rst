@@ -126,7 +126,7 @@ Indices and tables
 .. _msgpack: http://msgpack.org/index.html
 .. _benchmarks: https://github.com/samuelcolvin/arq/tree/master/performance_benchmarks
 .. _aiohttp: http://aiohttp.readthedocs.io/en/stable/
-.. _Python 3.5.0+: https://docs.python.org/3/whatsnew/3.5.html
+.. _Python 3.6.0+: https://docs.python.org/3/whatsnew/3.6.html
 .. _Redis: http://redis.io/
 .. _aioredis: http://aioredis.readthedocs.io/
 .. _click: http://click.pocoo.org/6/

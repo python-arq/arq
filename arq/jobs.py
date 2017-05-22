@@ -89,7 +89,7 @@ class Job:
         if self.kwargs:
             if arguments:
                 arguments += ', '
-            arguments += ', '.join('{}={!r}'.format(*kv) for kv in sorted(self.kwargs.items()))
+            arguments += ', '.join(f'{k}={v!r}' for k, v in sorted(self.kwargs.items()))
 
         return '{s.class_name}.{s.func_name}({args})'.format(s=self, args=ellipsis(arguments, args_curtail))
 
@@ -97,7 +97,7 @@ class Job:
         return self.to_string()
 
     def __repr__(self):
-        return '<Job {} on {}>'.format(self, self.queue)
+        return f'<Job {self} on {self.queue}>'
 
 
 # unicode clock is small to encode and should be fairly unlikely to clash with another dict key

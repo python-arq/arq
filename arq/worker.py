@@ -161,8 +161,8 @@ class BaseWorker(RedisMixin):
         try:
             queues = [(q_lookup[q], q) for q in self.queues]
         except KeyError as e:
-            raise KeyError('queue not found in queue lookups from shadows, '
-                           'queues: {}, combined shadow queue lookups: {}'.format(self.queues, q_lookup)) from e
+            raise KeyError(f'queue not found in queue lookups from shadows, '
+                           f'queues: {self.queues}, combined shadow queue lookups: {q_lookup}') from e
         return [r for r, q in queues], dict(queues)
 
     def run_until_complete(self):
@@ -182,15 +182,15 @@ class BaseWorker(RedisMixin):
         work_logger.debug('Using first shadows job class "%s"', self.job_class.__name__)
         for shadow in shadows[1:]:
             if shadow.job_class != self.job_class:
-                raise TypeError("shadows don't match: {s} has a different job class to the first shadow, "
-                                "{s.job_class} != {self.job_class}".format(s=shadow, self=self))
+                raise TypeError(f"shadows don't match: {shadow} has a different job class to the first shadow, "
+                                f"{shadow.job_class} != {self.job_class}")
 
         if not self.queues:
             self.queues = shadows[0].queues
             for shadow in shadows[1:]:
                 if shadow.queues != self.queues:
-                    raise TypeError('{s} has a different list of queues to the first shadow: '
-                                    '{s.queues} != {self.queues}'.format(s=shadow, self=self))
+                    raise TypeError(f'{shadow} has a different list of queues to the first shadow: '
+                                    f'{shadow.queues} != {self.queues}')
 
         self._shadow_lookup = {w.name: w for w in shadows}
 
@@ -273,15 +273,10 @@ class BaseWorker(RedisMixin):
         if (now_ts - self.last_health_check) < self.health_check_interval:
             return
         self.last_health_check = now_ts
+        pending_tasks = sum(not t.done() for t in self.drain.pending_tasks)
         info = (
-            '{now:%b-%d %H:%M:%S} j_complete={jobs_complete} j_failed={jobs_failed} '
-            'j_timedout={jobs_timed_out} j_ongoing={pending_tasks}'
-        ).format(
-            now=datetime.now(),
-            jobs_complete=self.jobs_complete,
-            jobs_failed=self.jobs_failed,
-            jobs_timed_out=self.jobs_timed_out,
-            pending_tasks=sum(not t.done() for t in self.drain.pending_tasks),
+            f'{datetime.now():%b-%d %H:%M:%S} j_complete={self.jobs_complete} j_failed={self.jobs_failed} '
+            f'j_timedout={self.jobs_timed_out} j_ongoing={pending_tasks}'
         )
         for redis_queue in redis_queues:
             info += ' q_{}={}'.format(queue_lookup[redis_queue], await redis.llen(redis_queue))
@@ -315,12 +310,11 @@ class BaseWorker(RedisMixin):
         try:
             shadow = self._shadow_lookup[j.class_name]
         except KeyError:
-            return self.handle_prepare_exc('Job Error: unable to find shadow for {!r}'.format(j))
+            return self.handle_prepare_exc(f'Job Error: unable to find shadow for {j!r}')
         try:
             func = getattr(shadow, j.func_name)
         except AttributeError:
-            msg = 'Job Error: shadow class "{}" has no function "{}"'.format(shadow.name, j.func_name)
-            return self.handle_prepare_exc(msg)
+            return self.handle_prepare_exc(f'Job Error: shadow class "{shadow.name}" has no function "{j.func_name}"')
 
         try:
             func = func.direct

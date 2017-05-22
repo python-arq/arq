@@ -19,7 +19,7 @@ class ActorMeta(type):
     def __new__(mcs, cls, bases, classdict):
         queues = classdict.get('queues')
         if queues and len(queues) != len(set(queues)):
-            raise AssertionError('{} looks like it has duplicated queue names: {}'.format(cls, queues))
+            raise AssertionError(f'{cls} looks like it has duplicated queue names: {queues}')
         return super().__new__(mcs, cls, bases, classdict)
 
 
@@ -130,7 +130,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         await super().close()
 
     def __repr__(self):
-        return '<{self.__class__.__name__}({self.name}) at 0x{id:02x}>'.format(self=self, id=id(self))
+        return f'<{self.__class__.__name__}({self.name}) at 0x{id(self):02x}>'
 
 
 class Concurrent:
@@ -146,7 +146,7 @@ class Concurrent:
         # if we're already bound we assume func is of the correct type and skip repeat logging
         if not self.bound:
             if not inspect.iscoroutinefunction(func):
-                raise TypeError('{} is not a coroutine function'.format(func.__qualname__))
+                raise TypeError(f'{func.__qualname__} is not a coroutine function')
 
             main_logger.debug('registering concurrent function %s', func.__qualname__)
         self._func = func
@@ -184,7 +184,7 @@ class Concurrent:
         return self._func.__name__
 
     def __repr__(self):
-        return '<concurrent function {name} of {s!r}>'.format(name=self._func.__qualname__, s=self._self_obj)
+        return f'<concurrent function {self._func.__qualname__} of {self._self_obj!r}>'
 
 
 def concurrent(func_or_queue):
