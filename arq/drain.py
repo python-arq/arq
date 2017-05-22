@@ -35,10 +35,10 @@ class Drain:
         self.loop = redis_pool._loop
         self.re_queue = re_queue
         self.max_concurrent_tasks = max_concurrent_tasks
-        self.shutdown_delay = max(shutdown_delay, 0.5)
+        self.shutdown_delay = max(shutdown_delay, 0.1)
         self.timeout_seconds = timeout_seconds
         self.job_class = job_class
-        self._pending_tasks = set()  # type: Set[asyncio.futures.Future]
+        self.pending_tasks = set()  # type: Set[asyncio.futures.Future]
         self.task_exception = None  # type: Exception
 
         self.jobs_complete, self.jobs_failed, self.jobs_timed_out = 0, 0, 0
@@ -67,9 +67,8 @@ class Drain:
         :param pop_timeout: how long to wait on each blpop before yielding None.
         :yield: tuple: (queue_name, data) or (None, None) if all jobs are empty
         """
-        work_logger.debug('starting main blpop loop, queues: %s', raw_queues)
-        if not self.running:
-            raise RuntimeError('cannot get jobs from the queues when processor is not running')
+        work_logger.debug('starting main blpop loop')
+        assert self.running, 'cannot get jobs from the queues when processor is not running'
         while self.running:
             msg = await self.redis.blpop(*raw_queues, timeout=pop_timeout)
             if msg is None:
@@ -80,38 +79,38 @@ class Drain:
                 await self.wait()
 
     def add(self, coro, job):
-        if self.running:
-            work_logger.debug('scheduling job from queue %s', job.queue)
-            task = self.loop.create_task(coro(job))
-            task.job = job
+        work_logger.debug('scheduling job from queue %s', job.queue)
+        task = self.loop.create_task(coro(job))
+        task.job = job
 
-            task.add_done_callback(self._job_callback)
-            self.loop.call_later(self.timeout_seconds, self._cancel_job, task, job)
-            self._pending_tasks.add(task)
-        else:
-            work_logger.warning('Job added when processor is not running, no task started.')
+        task.add_done_callback(self._job_callback)
+        self.loop.call_later(self.timeout_seconds, self._cancel_job, task, job)
+        self.pending_tasks.add(task)
 
     async def wait(self):
-        pt_cnt = len(self._pending_tasks)
+        pt_cnt = len(self.pending_tasks)
         while True:
             if pt_cnt < self.max_concurrent_tasks:
                 return
             work_logger.info('%d pending tasks, waiting for one to finish', pt_cnt)
-            _, self._pending_tasks = await asyncio.wait(self._pending_tasks, loop=self.loop,
-                                                        return_when=asyncio.FIRST_COMPLETED)
-            pt_cnt = len(self._pending_tasks)
+            _, self.pending_tasks = await asyncio.wait(self.pending_tasks, loop=self.loop,
+                                                       return_when=asyncio.FIRST_COMPLETED)
+            pt_cnt = len(self.pending_tasks)
 
     async def finish(self, timeout=None):
         timeout = timeout or self.shutdown_delay
-        if self._pending_tasks:
+        if self.pending_tasks:
             with await self._finish_lock:
-                work_logger.info('processor waiting %0.1fs for %d tasks to finish', timeout, len(self._pending_tasks))
-                _, pending = await asyncio.wait(self._pending_tasks, timeout=timeout, loop=self.loop)
-                if pending and self.re_queue:
-                    pipe = self.redis.pipeline()
+                work_logger.info('processor waiting %0.1fs for %d tasks to finish', timeout, len(self.pending_tasks))
+                _, pending = await asyncio.wait(self.pending_tasks, timeout=timeout, loop=self.loop)
+                if pending:
+                    if self.re_queue:
+                        pipe = self.redis.pipeline()
+                        for task in pending:
+                            pipe.rpush(task.job.raw_queue, task.job.raw_data)
+                        await pipe.execute()
                     for task in pending:
-                        pipe.rpush(task.job.raw_queue, task.job.raw_data)
-                    await pipe.execute()
+                        task.cancel()
 
     def _job_callback(self, task):
         self.jobs_complete += 1

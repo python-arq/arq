@@ -5,7 +5,8 @@ from asyncio import Future
 import msgpack
 import pytest
 
-from arq import Actor, BaseWorker, concurrent
+from arq import Actor, BaseWorker, Job, concurrent
+from arq.jobs import ArqError
 from arq.testing import MockRedisWorker as MockRedisBaseWorker
 
 from .fixtures import (ChildActor, DemoActor, FoobarActor, MockRedisDemoActor, MockRedisWorker, ParentActor,
@@ -64,6 +65,7 @@ async def test_dispatch_work(tmpworkdir, loop, caplog, redis_conn):
     log = re.sub("QUIT-.*", "QUIT-<random>", log)
     log = re.sub(r'\d{4}-\d+-\d+ \d+:\d+:\d+', '<date time>', log)
     log = re.sub(r'\w{3}-\d+ \d+:\d+:\d+', '<date time2>', log)
+    print(log)
     assert ('MockRedisDemoActor.add_numbers ▶ dft\n'
             'MockRedisDemoActor.high_add_numbers ▶ high\n'
             'Initialising work manager, burst mode: True\n'
@@ -72,11 +74,11 @@ async def test_dispatch_work(tmpworkdir, loop, caplog, redis_conn):
             'shadows: MockRedisDemoActor | queues: high, dft, low\n'
             'populating quit queue to prompt exit: QUIT-<random>\n'
             'starting main blpop loop\n'
-            'recording health: <date time2> j_complete=0 j_failed=0 j_timedout=0 j_ongoing=0 q_high=1 q_dft=1 q_low=0\n'
+            'recording health: <date time2> j_complete=0 j_failed=0 j_timedout=0 j_ongoing=0 q_high=0 q_dft=1 q_low=0\n'
             'scheduling job from queue high\n'
             'scheduling job from queue dft\n'
             'got job from the quit queue, stopping\n'
-            'shutting down worker, waiting for 2 jobs to finish\n'
+            'processor waiting 5.0s for 2 tasks to finish\n'
             'high queued  0.0XXs → MockRedisDemoActor.high_add_numbers(3, 4, c=5)\n'
             'high ran in  0.0XXs ← MockRedisDemoActor.high_add_numbers ● 12\n'
             'dft  queued  0.0XXs → MockRedisDemoActor.add_numbers(1, 2)\n'
@@ -99,11 +101,12 @@ async def test_handle_exception(loop, caplog):
     log = re.sub('"/.*?/(\w+/\w+)\.py"', r'"/path/to/\1.py"', log)
     log = re.sub(r'\d{4}-\d+-\d+ \d+:\d+:\d+', '<date time>', log)
     log = re.sub(r'\w{3}-\d+ \d+:\d+:\d+', '<date time2>', log)
+    print(log)
     assert ('Initialising work manager, burst mode: True\n'
             'Running worker with 1 shadow listening to 3 queues\n'
             'shadows: MockRedisDemoActor | queues: high, dft, low\n'
-            'recording health: <date time2> j_complete=0 j_failed=0 j_timedout=0 j_ongoing=0 q_high=0 q_dft=1 q_low=0\n'
-            'shutting down worker, waiting for 1 jobs to finish\n'
+            'recording health: <date time2> j_complete=0 j_failed=0 j_timedout=0 j_ongoing=0 q_high=0 q_dft=0 q_low=0\n'
+            'processor waiting 5.0s for 1 tasks to finish\n'
             'dft  queued  0.0XXs → MockRedisDemoActor.boom()\n'
             'dft  ran in  0.0XXs ! MockRedisDemoActor.boom(): RuntimeError\n'
             'Traceback (most recent call last):\n'
@@ -242,3 +245,9 @@ async def test_bind_replication(tmpdir, loop):
     await worker.run()
     assert file1.read() == 'Parent'
     assert file2.read() == 'Child'
+
+
+def test_job_no_queue():
+    with pytest.raises(ArqError) as exc_info:
+        Job(b'foo')
+    assert 'either queue_name or raw_queue are required' in str(exc_info)

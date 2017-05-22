@@ -114,6 +114,11 @@ class StartupWorker(BaseWorker):
     shadows = [DemoActor, StartupActor]
 
 
+class FastShutdownWorker(BaseWorker):
+    shadows = [DemoActor]
+    shutdown_delay = 0.1
+
+
 class DrainQuit2(Drain):
     def _job_callback(self, task):
         super()._job_callback(task)

@@ -59,15 +59,16 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         LOW_QUEUE,
     )
 
-    def __init__(self, *args, is_shadow=False, concurrency_enabled=True, **kwargs):
+    def __init__(self, *args, worker=None, concurrency_enabled=True, **kwargs):
         """
-        :param is_shadow: whether the actor should be in shadow mode, this should only be set by the worker
+        :param worker: reference to the worker which is managing this actor in shadow mode
         :param concurrency_enabled: **For testing only** if set to False methods are called directly not queued
         :param kwargs: other keyword arguments, see :class:`arq.utils.RedisMixin` for all available options
         """
         self.queue_lookup = {q: self.QUEUE_PREFIX + q.encode() for q in self.queues}
         self.name = self.name or self.__class__.__name__
-        self.is_shadow = is_shadow
+        self.worker = worker
+        self.is_shadow = bool(worker)
         self._bind_concurrent()
         self._concurrency_enabled = concurrency_enabled
         super().__init__(*args, **kwargs)

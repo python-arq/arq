@@ -76,11 +76,15 @@ class BaseWorker(RedisMixin):
 
     drain_class = Drain
 
+    #: Whether or not to re-queue jobs if the worker quits before the job has time to finish.
+    re_queue = False
+
     def __init__(self, *,
                  burst: bool=False,
                  shadows: list=None,
                  queues: list=None,
                  timeout_seconds: int=None,
+                 re_queue: bool=None,
                  **kwargs) -> None:
         """
         :param burst: if true the worker will close as soon as no new jobs are found in the queue lists
@@ -88,13 +92,14 @@ class BaseWorker(RedisMixin):
             overrides shadows already defined in the class definition
         :param queues: list of queue names for the worker to listen on, if None queues is taken from the shadows
         :param timeout_seconds: maximum duration of a job, after that the job will be cancelled by the event loop
+        :param re_queue: Whether or not to re-queue jobs if the worker quits before the job has time to finish.
         :param kwargs: other keyword arguments, see :class:`arq.utils.RedisMixin` for all available options
         """
         self._burst_mode = burst
         self.shadows = shadows or self.shadows
         self.queues = queues
         self.timeout_seconds = timeout_seconds or self.timeout_seconds
-        self._pending_tasks = set()  # type: Set[asyncio.futures.Future]
+        self.re_queue = self.re_queue if re_queue is None else re_queue
 
         self._shadow_lookup = {}  # type: Dict[str, Actor]
         self.start = None  # type: float
@@ -129,7 +134,7 @@ class BaseWorker(RedisMixin):
         """
         return dict(
             redis_settings=self.redis_settings,
-            is_shadow=True,
+            worker=self,
             loop=self.loop,
             existing_pool=await self.get_redis_pool(),
         )
@@ -195,7 +200,7 @@ class BaseWorker(RedisMixin):
 
         self.drain = self.drain_class(
             redis_pool=await self.get_redis_pool(),
-            re_queue=False,
+            re_queue=self.re_queue,
             max_concurrent_tasks=self.max_concurrent_tasks,
             shutdown_delay=self.shutdown_delay - 1,
             timeout_seconds=self.timeout_seconds,
@@ -258,6 +263,11 @@ class BaseWorker(RedisMixin):
     def running(self):
         return self.drain and self.drain.running
 
+    @running.setter
+    def running(self, v):
+        if self.drain:
+            self.drain.running = v
+
     async def record_health(self, redis, redis_queues, queue_lookup):
         now_ts = timestamp()
         if (now_ts - self.last_health_check) < self.health_check_interval:
@@ -271,7 +281,7 @@ class BaseWorker(RedisMixin):
             jobs_complete=self.jobs_complete,
             jobs_failed=self.jobs_failed,
             jobs_timed_out=self.jobs_timed_out,
-            pending_tasks=sum(not t.done() for t in self._pending_tasks),
+            pending_tasks=sum(not t.done() for t in self.drain.pending_tasks),
         )
         for redis_queue in redis_queues:
             info += ' q_{}={}'.format(queue_lookup[redis_queue], await redis.llen(redis_queue))
@@ -371,8 +381,7 @@ class BaseWorker(RedisMixin):
             self._closed = True
 
     def handle_proxy_signal(self, signum, frame):
-        if self.drain:
-            self.drain.running = False
+        self.running = False
         work_logger.info('pid=%d, got signal proxied from main process, stopping...', os.getpid())
         signal.signal(signal.SIGINT, self.handle_sig_force)
         signal.signal(signal.SIGTERM, self.handle_sig_force)
@@ -381,8 +390,7 @@ class BaseWorker(RedisMixin):
         raise HandledExit()
 
     def handle_sig(self, signum, frame):
-        if self.drain:
-            self.drain.running = False
+        self.running = False
         work_logger.info('pid=%d, got signal: %s, stopping...', os.getpid(), Signals(signum).name)
         signal.signal(SIG_PROXY, signal.SIG_IGN)
         signal.signal(signal.SIGINT, self.handle_sig_force)
