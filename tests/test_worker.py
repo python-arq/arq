@@ -11,7 +11,8 @@ from arq.worker import import_string, start_worker
 
 from .example import ActorTest
 from .fixtures import (EXAMPLE_FILE, DemoActor, FastShutdownWorker, FoobarActor, MockRedisDemoActor, MockRedisWorker,
-                       MockRedisWorkerQuit, StartupActor, StartupWorker, Worker, WorkerFail, WorkerQuit, kill_parent)
+                       MockRedisWorkerQuit, ReEnqueueActor, StartupActor, StartupWorker, Worker, WorkerFail,
+                       WorkerQuit, kill_parent)
 
 
 async def test_run_job_burst(tmpworkdir, redis_conn, actor):
@@ -366,9 +367,9 @@ async def test_check_successful_real_value(redis_conn, loop):
 
 
 async def test_does_re_enqueue_job(loop, redis_conn):
-    worker = FastShutdownWorker(burst=True, loop=loop, re_queue=True)
+    worker = FastShutdownWorker(burst=True, loop=loop, shadows=[ReEnqueueActor])
 
-    actor = DemoActor(loop=loop)
+    actor = ReEnqueueActor(loop=loop)
     await actor.sleeper(0.2)
     await actor.close(True)
 
@@ -377,7 +378,7 @@ async def test_does_re_enqueue_job(loop, redis_conn):
 
 
 async def test_doesnt_re_enqueue_job(loop, redis_conn):
-    worker = FastShutdownWorker(burst=True, loop=loop, re_queue=False)
+    worker = FastShutdownWorker(burst=True, loop=loop, shadows=[DemoActor])
 
     actor = DemoActor(loop=loop)
     await actor.sleeper(0.2)

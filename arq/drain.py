@@ -19,7 +19,6 @@ jobs_logger = logging.getLogger('arq.jobs')
 class Drain:
     def __init__(self, *,
                  redis_pool: RedisPool,
-                 re_queue: bool=False,
                  max_concurrent_tasks: int=50,
                  shutdown_delay: float=6,
                  timeout_seconds: int=60) -> None:
@@ -30,7 +29,6 @@ class Drain:
         """
         self.redis_pool = redis_pool
         self.loop = redis_pool._loop
-        self.re_queue = re_queue
         self.max_concurrent_tasks = max_concurrent_tasks
         self.shutdown_delay = max(shutdown_delay, 0.1)
         self.timeout_seconds = timeout_seconds
@@ -73,10 +71,11 @@ class Drain:
                 yield msg
                 await self.wait()
 
-    def add(self, coro, job):
+    def add(self, coro, job, re_enqueue=False):
         work_logger.debug('scheduling job from queue %s', job.queue)
         task = self.loop.create_task(coro(job))
         task.job = job
+        task.re_enqueue = re_enqueue
 
         task.add_done_callback(self._job_callback)
         self.loop.call_later(self.timeout_seconds, self._cancel_job, task, job)
@@ -99,13 +98,15 @@ class Drain:
                 work_logger.info('processor waiting %0.1fs for %d tasks to finish', timeout, len(self.pending_tasks))
                 _, pending = await asyncio.wait(self.pending_tasks, timeout=timeout, loop=self.loop)
                 if pending:
-                    if self.re_queue:
-                        pipe = self.redis.pipeline()
-                        for task in pending:
-                            pipe.rpush(task.job.raw_queue, task.job.raw_data)
-                        await pipe.execute()
+                    pipe = self.redis.pipeline()
+                    exec_pipeline = False
                     for task in pending:
+                        if task.re_enqueue:
+                            pipe.rpush(task.job.raw_queue, task.job.raw_data)
+                            exec_pipeline = True
                         task.cancel()
+                    if exec_pipeline:
+                        await pipe.execute()
 
     def _job_callback(self, task):
         self.jobs_complete += 1

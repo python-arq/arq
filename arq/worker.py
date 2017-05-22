@@ -14,7 +14,7 @@ from datetime import datetime
 from importlib import import_module, reload
 from multiprocessing import Process
 from signal import Signals
-from typing import Dict, Type  # noqa
+from typing import Dict, List, Type  # noqa
 
 from .drain import Drain
 from .jobs import ArqError, Job
@@ -76,15 +76,11 @@ class BaseWorker(RedisMixin):
 
     drain_class = Drain
 
-    #: Whether or not to re-queue jobs if the worker quits before the job has time to finish.
-    re_queue = False
-
     def __init__(self, *,
                  burst: bool=False,
                  shadows: list=None,
                  queues: list=None,
                  timeout_seconds: int=None,
-                 re_queue: bool=None,
                  **kwargs) -> None:
         """
         :param burst: if true the worker will close as soon as no new jobs are found in the queue lists
@@ -97,9 +93,8 @@ class BaseWorker(RedisMixin):
         """
         self._burst_mode = burst
         self.shadows = shadows or self.shadows
-        self.queues = queues
+        self.queues: List[str] = queues
         self.timeout_seconds = timeout_seconds or self.timeout_seconds
-        self.re_queue = self.re_queue if re_queue is None else re_queue
 
         self._shadow_lookup:  Dict[str, Actor] = {}
         self.start: float = None
@@ -200,7 +195,6 @@ class BaseWorker(RedisMixin):
 
         self.drain = self.drain_class(
             redis_pool=await self.get_redis_pool(),
-            re_queue=self.re_queue,
             max_concurrent_tasks=self.max_concurrent_tasks,
             shutdown_delay=self.shutdown_delay - 1,
             timeout_seconds=self.timeout_seconds,
@@ -243,7 +237,9 @@ class BaseWorker(RedisMixin):
                         break
 
                     job = self.job_class(raw_data, queue_name=queue_lookup[raw_queue], raw_queue=raw_queue)
-                    self.drain.add(self.run_job, job)
+                    shadow = self._shadow_lookup.get(job.class_name)
+                    re_enqueue = shadow and getattr(shadow, 're_enqueue_jobs', False)
+                    self.drain.add(self.run_job, job, re_enqueue)
                 await self.record_health(self.drain.redis, original_redis_queues, queue_lookup)
 
     async def record_health(self, redis, redis_queues, queue_lookup):
@@ -375,17 +371,9 @@ class BaseWorker(RedisMixin):
         work_logger.warning('pid=%d, got signal: %s again, forcing exit', os.getpid(), Signals(signum).name)
         raise ImmediateExit('force exit')
 
-    @property
-    def jobs_complete(self):
-        return self.drain.jobs_complete
-
-    @property
-    def jobs_failed(self):
-        return self.drain.jobs_failed
-
-    @property
-    def jobs_timed_out(self):
-        return self.drain.jobs_timed_out
+    jobs_complete = property(lambda self: self.drain.jobs_complete)
+    jobs_failed = property(lambda self: self.drain.jobs_failed)
+    jobs_timed_out = property(lambda self: self.drain.jobs_timed_out)
 
     @property
     def running(self):

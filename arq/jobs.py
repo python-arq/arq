@@ -47,7 +47,7 @@ class Job:
             raise ArqError('either queue_name or raw_queue are required')
         self.queue = queue_name or raw_queue.decode()
         self.raw_queue = raw_queue or queue_name.encode()
-        self.queued_at, self.class_name, self.func_name, self.args, self.kwargs = self._decode(self.raw_data)
+        self.queued_at, self.class_name, self.func_name, self.args, self.kwargs = self._decode(raw_data)
         self.queued_at /= 1000
 
     @classmethod

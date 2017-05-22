@@ -115,7 +115,7 @@ class StartupWorker(BaseWorker):
 
 
 class FastShutdownWorker(BaseWorker):
-    shadows = [DemoActor]
+    shadows = []
     shutdown_delay = 0.1
 
 
@@ -181,3 +181,7 @@ class ChildActor(ParentActor):
 
 class ParentChildActorWorker(MockRedisMixin, BaseWorker):
     shadows = [ParentActor, ChildActor]
+
+
+class ReEnqueueActor(DemoActor):
+    re_enqueue_jobs = True

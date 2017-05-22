@@ -52,6 +52,9 @@ class Actor(RedisMixin, metaclass=ActorMeta):
     #: job class to use when encoding and decoding jobs from this actor
     job_class = Job
 
+    #: Whether or not to re-queue jobs if the worker quits before the job has time to finish.
+    re_enqueue_jobs = False
+
     #: queues the actor can enqueue jobs in, order is important, the first queue is highest priority
     queues = (
         HIGH_QUEUE,
