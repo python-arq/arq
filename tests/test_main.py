@@ -62,7 +62,7 @@ async def test_dispatch_work(tmpworkdir, loop, caplog, redis_conn):
     await worker.run()
     assert tmpworkdir.join('add_numbers').read() == '3'
     log = re.sub('0.0\d\ds', '0.0XXs', caplog.log)
-    log = re.sub("QUIT-.*", "QUIT-<random>", log)
+    log = re.sub("arq:quit-.*", "arq:quit-<random>", log)
     log = re.sub(r'\d{4}-\d+-\d+ \d+:\d+:\d+', '<date time>', log)
     log = re.sub(r'\w{3}-\d+ \d+:\d+:\d+', '<date time2>', log)
     print(log)
@@ -72,9 +72,9 @@ async def test_dispatch_work(tmpworkdir, loop, caplog, redis_conn):
             'Using first shadows job class "Job"\n'
             'Running worker with 1 shadow listening to 3 queues\n'
             'shadows: MockRedisDemoActor | queues: high, dft, low\n'
-            'populating quit queue to prompt exit: QUIT-<random>\n'
             'recording health: <date time2> j_complete=0 j_failed=0 j_timedout=0 j_ongoing=0 q_high=1 q_dft=1 q_low=0\n'
             'starting main blpop loop\n'
+            'populating quit queue to prompt exit: arq:quit-<random>\n'
             'scheduling job <Job MockRedisDemoActor.high_add_numbers(3, 4, c=5) on high>, re-enqueue: False\n'
             'scheduling job <Job MockRedisDemoActor.add_numbers(1, 2) on dft>, re-enqueue: False\n'
             'got job from the quit queue, stopping\n'

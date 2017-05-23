@@ -20,9 +20,6 @@ async def test_drain(redis_pool):
         async for raw_queue, raw_data in drain.iter(b'foobar'):
             assert raw_queue == b'foobar'
             drain.add(run, raw_data)
-            if raw_data == b'4':
-                # 1 second quicker as we don't have to wait for blpop timeout
-                break
     assert total == 10
 
 

@@ -20,7 +20,7 @@ from .drain import Drain
 from .jobs import ArqError, Job
 from .logs import default_log_config
 from .main import Actor  # noqa
-from .utils import RedisMixin, ellipsis, gen_random, timestamp
+from .utils import RedisMixin, ellipsis, timestamp
 
 __all__ = ['BaseWorker', 'RunWorkerProcess', 'StopJob', 'import_string']
 
@@ -198,6 +198,7 @@ class BaseWorker(RedisMixin):
             max_concurrent_tasks=self.max_concurrent_tasks,
             shutdown_delay=self.shutdown_delay - 1,
             timeout_seconds=self.timeout_seconds,
+            burst_mode=self._burst_mode,
         )
         self.start = timestamp()
         try:
@@ -220,22 +221,11 @@ class BaseWorker(RedisMixin):
         """
         redis_queues, queue_lookup = self.get_redis_queues()
         original_redis_queues = list(redis_queues)
-        quit_queue = None
 
         async with self.drain:
-            if self._burst_mode:
-                quit_queue = b'QUIT-%s' % gen_random()
-                work_logger.debug('populating quit queue to prompt exit: %s', quit_queue.decode())
-                await self.drain.redis.rpush(quit_queue, b'1')
-                redis_queues.append(quit_queue)
-
             await self.record_health(self.drain.redis, original_redis_queues, queue_lookup)
             async for raw_queue, raw_data in self.drain.iter(*redis_queues):
                 if raw_queue is not None:
-                    if self._burst_mode and raw_queue == quit_queue:
-                        work_logger.debug('got job from the quit queue, stopping')
-                        break
-
                     job = self.job_class(raw_data, queue_name=queue_lookup[raw_queue], raw_queue=raw_queue)
                     shadow = self._shadow_lookup.get(job.class_name)
                     re_enqueue = shadow and getattr(shadow, 're_enqueue_jobs', False)

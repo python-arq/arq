@@ -9,6 +9,8 @@ import logging
 from typing import Set  # noqa
 
 from aioredis import RedisPool
+
+from arq.utils import gen_random
 from .jobs import ArqError
 
 __all__ = ['Drain']
@@ -30,6 +32,7 @@ class Drain:
                  max_concurrent_tasks: int=50,
                  shutdown_delay: float=6,
                  timeout_seconds: int=60,
+                 burst_mode: bool=True,
                  raise_task_exception: bool=False) -> None:
         """
         :param redis_pool: redis pool to get connection from to pop items from list, also used to optionally
@@ -37,6 +40,7 @@ class Drain:
         :param max_concurrent_tasks: maximum number of jobs which can be execute at the same time by the event loop
         :param shutdown_delay: number of seconds to wait for tasks to finish
         :param timeout_seconds: maximum duration of a job, after that the job will be cancelled by the event loop
+        :param burst_mode: break the iter loop as soon as no more jobs are available by adding an sentinel quit queue
         :param raise_task_exception: whether or not to raise an exception which occurs in a processed task
         """
         self.redis_pool = redis_pool
@@ -44,6 +48,7 @@ class Drain:
         self.max_concurrent_tasks = max_concurrent_tasks
         self.shutdown_delay = max(shutdown_delay, 0.1)
         self.timeout_seconds = timeout_seconds
+        self.burst_mode = burst_mode
         self.raise_task_exception = raise_task_exception
         self.pending_tasks: Set[asyncio.futures.Future] = set()
         self.task_exception: Exception = None
@@ -75,13 +80,23 @@ class Drain:
         :yields: tuple ``(raw_queue_name, raw_data)`` or ``(None, None)`` if all jobs are empty
         """
         work_logger.debug('starting main blpop loop')
+        quit_queue = None
+        if self.burst_mode:
+            quit_queue = b'arq:quit-' + gen_random()
+            work_logger.debug('populating quit queue to prompt exit: %s', quit_queue.decode())
+            await self.redis.rpush(quit_queue, b'1')
+            raw_queues = tuple(raw_queues) + (quit_queue,)
         while self.running:
             msg = await self.redis.blpop(*raw_queues, timeout=pop_timeout)
             if msg is None:
                 yield None, None
-            else:
-                yield msg
-                await self.wait()
+                continue
+            raw_queue, raw_data = msg
+            if self.burst_mode and raw_queue == quit_queue:
+                work_logger.debug('got job from the quit queue, stopping')
+                break
+            yield raw_queue, raw_data
+            await self.wait()
 
     def add(self, coro, job, re_enqueue=False):
         """
