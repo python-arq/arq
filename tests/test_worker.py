@@ -77,7 +77,7 @@ async def test_separate_log_levels(mock_actor_worker, caplog):
     assert ('arq.work: Initialising work manager, burst mode: True\n'
             'arq.work: Running worker with 1 shadow listening to 3 queues\n'
             'arq.work: shadows: MockRedisDemoActor | queues: high, dft, low\n'
-            'arq.work: processor waiting 5.0s for 1 tasks to finish\n'
+            'arq.work: drain waiting 5.0s for 1 tasks to finish\n'
             'arq.work: shutting down worker after 0.0XXs ◆ 1 jobs done ◆ 0 failed ◆ 0 timed out\n') == log
 
 
@@ -377,7 +377,7 @@ async def test_does_re_enqueue_job(loop, redis_conn):
     assert 1 == await redis_conn.llen(b'arq:q:dft')
 
 
-async def test_doesnt_re_enqueue_job(loop, redis_conn):
+async def test_does_not_re_enqueue_job(loop, redis_conn):
     worker = FastShutdownWorker(burst=True, loop=loop, shadows=[DemoActor])
 
     actor = DemoActor(loop=loop)

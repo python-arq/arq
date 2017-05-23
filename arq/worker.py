@@ -239,6 +239,7 @@ class BaseWorker(RedisMixin):
                     job = self.job_class(raw_data, queue_name=queue_lookup[raw_queue], raw_queue=raw_queue)
                     shadow = self._shadow_lookup.get(job.class_name)
                     re_enqueue = shadow and getattr(shadow, 're_enqueue_jobs', False)
+                    work_logger.debug('scheduling job %r, re-enqueue: %r', job, re_enqueue)
                     self.drain.add(self.run_job, job, re_enqueue)
                 await self.record_health(self.drain.redis, original_redis_queues, queue_lookup)
 

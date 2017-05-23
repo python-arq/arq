@@ -5,6 +5,7 @@
 Defines the ``Job`` class and descendants which deal with encoding and decoding job data.
 """
 from datetime import datetime
+from typing import Callable
 
 import msgpack
 
@@ -29,10 +30,10 @@ class Job:
     __slots__ = ('queue', 'queued_at', 'class_name', 'func_name', 'args', 'kwargs', 'raw_queue', 'raw_data')
 
     #: custom encoder for msgpack, see :class:`arq.jobs.DatetimeJob` for an example of usage
-    msgpack_encoder = None  # type: function
+    msgpack_encoder: Callable = None
 
     #: custom object hook for msgpack, see :class:`arq.jobs.DatetimeJob` for an example of usage
-    msgpack_object_hook = None  # type: function
+    msgpack_object_hook: Callable = None
 
     def __init__(self, raw_data: bytes, *, queue_name: str=None, raw_queue: bytes=None) -> None:
         """

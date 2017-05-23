@@ -47,7 +47,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
 
     #: if not None this name is used instead of the class name when encoding and referencing jobs,
     #: if None the class's name is used
-    name = None  # type: str
+    name: str = None
 
     #: job class to use when encoding and decoding jobs from this actor
     job_class = Job
@@ -107,8 +107,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         :param kwargs: key word arguments to pass to the function
         """
         queue = queue or self.DEFAULT_QUEUE
-        data = self.job_class.encode(class_name=self.name, func_name=func_name,  # type: ignore
-                                     args=args, kwargs=kwargs)  # type: ignore
+        data = self.job_class.encode(class_name=self.name, func_name=func_name, args=args, kwargs=kwargs)
         main_logger.debug('%s.%s ▶ %s', self.name, func_name, queue)
 
         if self._concurrency_enabled:

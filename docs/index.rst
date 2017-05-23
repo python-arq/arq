@@ -96,6 +96,9 @@ API Reference
 .. automodule:: arq.worker
    :members:
 
+.. automodule:: arq.drain
+   :members:
+
 .. automodule:: arq.jobs
    :members: Job, DatetimeJob
 
