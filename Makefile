@@ -13,7 +13,7 @@ isort:
 lint:
 	python setup.py check -rms
 	flake8 arq/ tests/
-	pytest arq -p no:sugar -q --cache-clear
+	pytest arq -p no:sugar -q
 	mypy --ignore-missing-imports --follow-imports=skip arq/
 
 .PHONY: test

@@ -19,7 +19,7 @@ class ActorMeta(type):
     def __new__(mcs, cls, bases, classdict):
         queues = classdict.get('queues')
         if queues and len(queues) != len(set(queues)):
-            raise AssertionError('{} looks like it has duplicated queue names: {}'.format(cls, queues))
+            raise AssertionError(f'{cls} looks like it has duplicated queue names: {queues}')
         return super().__new__(mcs, cls, bases, classdict)
 
 
@@ -47,10 +47,13 @@ class Actor(RedisMixin, metaclass=ActorMeta):
 
     #: if not None this name is used instead of the class name when encoding and referencing jobs,
     #: if None the class's name is used
-    name = None  # type: str
+    name: str = None
 
     #: job class to use when encoding and decoding jobs from this actor
     job_class = Job
+
+    #: Whether or not to re-queue jobs if the worker quits before the job has time to finish.
+    re_enqueue_jobs = False
 
     #: queues the actor can enqueue jobs in, order is important, the first queue is highest priority
     queues = (
@@ -59,15 +62,16 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         LOW_QUEUE,
     )
 
-    def __init__(self, *args, is_shadow=False, concurrency_enabled=True, **kwargs):
+    def __init__(self, *args, worker=None, concurrency_enabled=True, **kwargs):
         """
-        :param is_shadow: whether the actor should be in shadow mode, this should only be set by the worker
+        :param worker: reference to the worker which is managing this actor in shadow mode
         :param concurrency_enabled: **For testing only** if set to False methods are called directly not queued
         :param kwargs: other keyword arguments, see :class:`arq.utils.RedisMixin` for all available options
         """
         self.queue_lookup = {q: self.QUEUE_PREFIX + q.encode() for q in self.queues}
         self.name = self.name or self.__class__.__name__
-        self.is_shadow = is_shadow
+        self.worker = worker
+        self.is_shadow = bool(worker)
         self._bind_concurrent()
         self._concurrency_enabled = concurrency_enabled
         super().__init__(*args, **kwargs)
@@ -103,8 +107,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         :param kwargs: key word arguments to pass to the function
         """
         queue = queue or self.DEFAULT_QUEUE
-        data = self.job_class.encode(class_name=self.name, func_name=func_name,  # type: ignore
-                                     args=args, kwargs=kwargs)  # type: ignore
+        data = self.job_class.encode(class_name=self.name, func_name=func_name, args=args, kwargs=kwargs)
         main_logger.debug('%s.%s ▶ %s', self.name, func_name, queue)
 
         if self._concurrency_enabled:
@@ -114,7 +117,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
             async with pool.get() as redis:
                 await redis.rpush(queue_list, data)
         else:
-            j = self.job_class(queue, data)
+            j = self.job_class(data, queue_name=queue)
             await getattr(self, j.func_name).direct(*j.args, **j.kwargs)
 
     async def close(self, shutdown=False):
@@ -129,7 +132,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         await super().close()
 
     def __repr__(self):
-        return '<{self.__class__.__name__}({self.name}) at 0x{id:02x}>'.format(self=self, id=id(self))
+        return f'<{self.__class__.__name__}({self.name}) at 0x{id(self):02x}>'
 
 
 class Concurrent:
@@ -145,7 +148,7 @@ class Concurrent:
         # if we're already bound we assume func is of the correct type and skip repeat logging
         if not self.bound:
             if not inspect.iscoroutinefunction(func):
-                raise TypeError('{} is not a coroutine function'.format(func.__qualname__))
+                raise TypeError(f'{func.__qualname__} is not a coroutine function')
 
             main_logger.debug('registering concurrent function %s', func.__qualname__)
         self._func = func
@@ -183,7 +186,7 @@ class Concurrent:
         return self._func.__name__
 
     def __repr__(self):
-        return '<concurrent function {name} of {s!r}>'.format(name=self._func.__qualname__, s=self._self_obj)
+        return f'<concurrent function {self._func.__qualname__} of {self._self_obj!r}>'
 
 
 def concurrent(func_or_queue):

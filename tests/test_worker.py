@@ -10,8 +10,9 @@ from arq.testing import RaiseWorker
 from arq.worker import import_string, start_worker
 
 from .example import ActorTest
-from .fixtures import (EXAMPLE_FILE, DemoActor, FoobarActor, MockRedisDemoActor, MockRedisWorker, MockRedisWorkerQuit,
-                       StartupActor, StartupWorker, Worker, WorkerFail, WorkerQuit, kill_parent)
+from .fixtures import (EXAMPLE_FILE, DemoActor, FastShutdownWorker, FoobarActor, MockRedisDemoActor, MockRedisWorker,
+                       MockRedisWorkerQuit, ReEnqueueActor, StartupActor, StartupWorker, Worker, WorkerFail,
+                       WorkerQuit, kill_parent)
 
 
 async def test_run_job_burst(tmpworkdir, redis_conn, actor):
@@ -76,7 +77,7 @@ async def test_separate_log_levels(mock_actor_worker, caplog):
     assert ('arq.work: Initialising work manager, burst mode: True\n'
             'arq.work: Running worker with 1 shadow listening to 3 queues\n'
             'arq.work: shadows: MockRedisDemoActor | queues: high, dft, low\n'
-            'arq.work: shutting down worker, waiting for 1 jobs to finish\n'
+            'arq.work: drain waiting 5.0s for 1 tasks to finish\n'
             'arq.work: shutting down worker after 0.0XXs ◆ 1 jobs done ◆ 0 failed ◆ 0 timed out\n') == log
 
 
@@ -213,14 +214,14 @@ async def test_run_proxy_signal(actor, monkeypatch):
     monkeypatch.setattr(arq.worker.signal, 'alarm', mock_signal_alarm)
 
     worker = Worker(burst=True, loop=actor.loop)
-    assert worker.running is True
+    assert worker.running is None
     assert mock_signal_signal.call_count == 3
     assert mock_signal_alarm.call_count == 0
 
     with pytest.raises(arq.worker.HandledExit):
         worker.handle_proxy_signal(arq.worker.SIG_PROXY, None)
 
-    assert worker.running is False
+    assert worker.running is None
     assert mock_signal_signal.call_count == 6
     assert mock_signal_alarm.call_count == 1
 
@@ -264,14 +265,12 @@ async def test_job_timeout(loop, caplog):
     await worker.run()
     log = caplog(
         ('(\d.\d\d)\d', r'\1X'),
-        (', line \d+,', ', line <no>,'),
-        ('"/.*?/(\w+/\w+)\.py"', r'"/path/to/\1.py"'),
     )
     print(log)
     assert ('arq.jobs: dft  queued  0.00Xs → MockRedisDemoActor.sleeper(0.2)\n'
             'arq.jobs: dft  queued  0.00Xs → MockRedisDemoActor.sleeper(0.05)\n'
             'arq.jobs: dft  ran in  0.05Xs ← MockRedisDemoActor.sleeper ● 0.05\n'
-            'arq.jobs: job timed out <Job MockRedisDemoActor.sleeper(0.2) on dft>\n'
+            'arq.jobs: task timed out <Job MockRedisDemoActor.sleeper(0.2) on dft>\n'
             'arq.jobs: dft  ran in  0.10Xs ! MockRedisDemoActor.sleeper(0.2): CancelledError\n') in log
     assert ('concurrent.futures._base.CancelledError\n'
             'arq.work: shutting down worker after 0.10Xs ◆ 2 jobs done ◆ 1 failed ◆ 1 timed out\n') in log
@@ -345,8 +344,8 @@ async def test_startup_shutdown(tmpworkdir, redis_conn, loop):
         assert worker.jobs_failed == 0
     finally:
         await actor.close(True)
-        assert tmpworkdir.join('events').read() == ('startup[True],concurrent_func[foobar],'
-                                                    'shutdown[True],shutdown[False],')
+    assert tmpworkdir.join('events').read() == ('startup[True],concurrent_func[foobar],'
+                                                'shutdown[True],shutdown[False],')
 
 
 def test_check_successful(redis_conn, loop):
@@ -365,3 +364,25 @@ async def test_check_successful_real_value(redis_conn, loop):
     await worker.run()
     assert 1 == await redis_conn.exists(b'arq:health-check')
     assert 0 == await Worker(loop=loop)._check_health()
+
+
+async def test_does_re_enqueue_job(loop, redis_conn):
+    worker = FastShutdownWorker(burst=True, loop=loop, shadows=[ReEnqueueActor])
+
+    actor = ReEnqueueActor(loop=loop)
+    await actor.sleeper(0.2)
+    await actor.close(True)
+
+    await worker.run()
+    assert 1 == await redis_conn.llen(b'arq:q:dft')
+
+
+async def test_does_not_re_enqueue_job(loop, redis_conn):
+    worker = FastShutdownWorker(burst=True, loop=loop, shadows=[DemoActor])
+
+    actor = DemoActor(loop=loop)
+    await actor.sleeper(0.2)
+    await actor.close(True)
+
+    await worker.run()
+    assert 0 == await redis_conn.llen(b'arq:q:dft')

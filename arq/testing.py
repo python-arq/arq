@@ -107,11 +107,17 @@ class MockRedisPoolContextManager:
 
 class MockRedisPool:
     def __init__(self, loop=None):
-        self.loop = loop or asyncio.get_event_loop()
+        self._loop = loop or asyncio.get_event_loop()
         self.data = {}
 
+    async def acquire(self):
+        return MockRedis(loop=self._loop, data=self.data)
+
+    def release(self, conn):
+        pass
+
     def get(self):
-        return MockRedisPoolContextManager(self.loop, self.data)
+        return MockRedisPoolContextManager(self._loop, self.data)
 
     def close(self):
         pass

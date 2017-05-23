@@ -43,7 +43,7 @@ Dependencies
 
 Required **before pip install**:
 
-* `Python 3.5.0+`_ *asyncio* is used throughout with new style ``async/await`` syntax.
+* `Python 3.6.0+`_ *asyncio* is used throughout with new style ``async/await`` syntax and ``async yield``.
 * `Redis`_ Redis lists are used to communication between the front end and worker, redis can also be used to store job results.
 
 Installed as dependencies by pip:
@@ -96,6 +96,9 @@ API Reference
 .. automodule:: arq.worker
    :members:
 
+.. automodule:: arq.drain
+   :members:
+
 .. automodule:: arq.jobs
    :members: Job, DatetimeJob
 
@@ -126,7 +129,7 @@ Indices and tables
 .. _msgpack: http://msgpack.org/index.html
 .. _benchmarks: https://github.com/samuelcolvin/arq/tree/master/performance_benchmarks
 .. _aiohttp: http://aiohttp.readthedocs.io/en/stable/
-.. _Python 3.5.0+: https://docs.python.org/3/whatsnew/3.5.html
+.. _Python 3.6.0+: https://docs.python.org/3/whatsnew/3.6.html
 .. _Redis: http://redis.io/
 .. _aioredis: http://aioredis.readthedocs.io/
 .. _click: http://click.pocoo.org/6/

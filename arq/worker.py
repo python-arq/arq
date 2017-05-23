@@ -14,9 +14,10 @@ from datetime import datetime
 from importlib import import_module, reload
 from multiprocessing import Process
 from signal import Signals
-from typing import Dict, Set  # noqa
+from typing import Dict, List, Type  # noqa
 
-from .jobs import Job
+from .drain import Drain
+from .jobs import ArqError, Job
 from .logs import default_log_config
 from .main import Actor  # noqa
 from .utils import RedisMixin, ellipsis, gen_random, timestamp
@@ -27,19 +28,11 @@ work_logger = logging.getLogger('arq.work')
 jobs_logger = logging.getLogger('arq.jobs')
 
 
-class ArqError(Exception):
-    pass
-
-
 class HandledExit(ArqError):
     pass
 
 
 class ImmediateExit(ArqError):
-    pass
-
-
-class BadJob(ArqError):
     pass
 
 
@@ -81,6 +74,8 @@ class BaseWorker(RedisMixin):
     # when logging job execution
     log_curtail = 80
 
+    drain_class = Drain
+
     def __init__(self, *,
                  burst: bool=False,
                  shadows: list=None,
@@ -93,26 +88,24 @@ class BaseWorker(RedisMixin):
             overrides shadows already defined in the class definition
         :param queues: list of queue names for the worker to listen on, if None queues is taken from the shadows
         :param timeout_seconds: maximum duration of a job, after that the job will be cancelled by the event loop
+        :param re_queue: Whether or not to re-queue jobs if the worker quits before the job has time to finish.
         :param kwargs: other keyword arguments, see :class:`arq.utils.RedisMixin` for all available options
         """
         self._burst_mode = burst
         self.shadows = shadows or self.shadows
-        self.queues = queues
+        self.queues: List[str] = queues
         self.timeout_seconds = timeout_seconds or self.timeout_seconds
-        self._pending_tasks = set()  # type: Set[asyncio.futures.Future]
 
-        self.jobs_complete, self.jobs_failed, self.jobs_timed_out = 0, 0, 0
-        self._task_exception = None  # type: Exception
-        self._shadow_lookup = {}  # type: Dict[str, Actor]
-        self.start = None  # type: float
+        self._shadow_lookup:  Dict[str, Actor] = {}
+        self.start: float = None
         self.last_health_check = 0
-        self.running = True
         self._closed = False
-        self.job_class = None  # type: type # TODO
+        self.drain: Drain = None
+        self.job_class: Type[Job] = None
         signal.signal(signal.SIGINT, self.handle_sig)
         signal.signal(signal.SIGTERM, self.handle_sig)
         signal.signal(SIG_PROXY, self.handle_proxy_signal)
-        super().__init__(**kwargs)  # type: ignore # TODO
+        super().__init__(**kwargs)
         self._shutdown_lock = asyncio.Lock(loop=self.loop)
 
     async def shadow_factory(self) -> list:
@@ -136,7 +129,7 @@ class BaseWorker(RedisMixin):
         """
         return dict(
             redis_settings=self.redis_settings,
-            is_shadow=True,
+            worker=self,
             loop=self.loop,
             existing_pool=await self.get_redis_pool(),
         )
@@ -163,8 +156,8 @@ class BaseWorker(RedisMixin):
         try:
             queues = [(q_lookup[q], q) for q in self.queues]
         except KeyError as e:
-            raise KeyError('queue not found in queue lookups from shadows, '
-                           'queues: {}, combined shadow queue lookups: {}'.format(self.queues, q_lookup)) from e
+            raise KeyError(f'queue not found in queue lookups from shadows, '
+                           f'queues: {self.queues}, combined shadow queue lookups: {q_lookup}') from e
         return [r for r, q in queues], dict(queues)
 
     def run_until_complete(self):
@@ -184,15 +177,15 @@ class BaseWorker(RedisMixin):
         work_logger.debug('Using first shadows job class "%s"', self.job_class.__name__)
         for shadow in shadows[1:]:
             if shadow.job_class != self.job_class:
-                raise TypeError("shadows don't match: {s} has a different job class to the first shadow, "
-                                "{s.job_class} != {self.job_class}".format(s=shadow, self=self))
+                raise TypeError(f"shadows don't match: {shadow} has a different job class to the first shadow, "
+                                f"{shadow.job_class} != {self.job_class}")
 
         if not self.queues:
             self.queues = shadows[0].queues
             for shadow in shadows[1:]:
                 if shadow.queues != self.queues:
-                    raise TypeError('{s} has a different list of queues to the first shadow: '
-                                    '{s.queues} != {self.queues}'.format(s=shadow, self=self))
+                    raise TypeError(f'{shadow} has a different list of queues to the first shadow: '
+                                    f'{shadow.queues} != {self.queues}')
 
         self._shadow_lookup = {w.name: w for w in shadows}
 
@@ -200,14 +193,24 @@ class BaseWorker(RedisMixin):
                          len(self._shadow_lookup), '' if len(self._shadow_lookup) == 1 else 's', len(self.queues))
         work_logger.info('shadows: %s | queues: %s', self.shadow_names, ', '.join(self.queues))
 
+        self.drain = self.drain_class(
+            redis_pool=await self.get_redis_pool(),
+            max_concurrent_tasks=self.max_concurrent_tasks,
+            shutdown_delay=self.shutdown_delay - 1,
+            timeout_seconds=self.timeout_seconds,
+        )
         self.start = timestamp()
         try:
             await self.work()
         finally:
-            await self.shutdown()
-            if self._task_exception:
-                work_logger.error('Found task exception "%s"', self._task_exception)
-                raise self._task_exception
+            t = (timestamp() - self.start) if self.start else 0
+            work_logger.info('shutting down worker after %0.3fs ◆ %d jobs done ◆ %d failed ◆ %d timed out',
+                             t, self.jobs_complete, self.jobs_failed, self.jobs_timed_out)
+            if not self.reusable:
+                await self.close()
+            if self.drain.task_exception:
+                work_logger.error('Found task exception "%s"', self.drain.task_exception)
+                raise self.drain.task_exception
 
     async def work(self):
         """
@@ -218,40 +221,37 @@ class BaseWorker(RedisMixin):
         redis_queues, queue_lookup = self.get_redis_queues()
         original_redis_queues = list(redis_queues)
         quit_queue = None
-        async with await self.get_redis_conn() as redis:
+
+        async with self.drain:
             if self._burst_mode:
                 quit_queue = b'QUIT-%s' % gen_random()
                 work_logger.debug('populating quit queue to prompt exit: %s', quit_queue.decode())
-                await redis.rpush(quit_queue, b'1')
+                await self.drain.redis.rpush(quit_queue, b'1')
                 redis_queues.append(quit_queue)
-            work_logger.debug('starting main blpop loop')
-            while self.running:
-                await self.record_health(redis, original_redis_queues, queue_lookup)
-                msg = await redis.blpop(*redis_queues, timeout=1)
-                if msg is None:
-                    continue
-                raw_queue, data = msg
-                if self._burst_mode and raw_queue == quit_queue:
-                    work_logger.debug('got job from the quit queue, stopping')
-                    break
-                queue = queue_lookup[raw_queue]
-                self.schedule_job(data, queue)
-                await self.below_concurrency_limit()
+
+            await self.record_health(self.drain.redis, original_redis_queues, queue_lookup)
+            async for raw_queue, raw_data in self.drain.iter(*redis_queues):
+                if raw_queue is not None:
+                    if self._burst_mode and raw_queue == quit_queue:
+                        work_logger.debug('got job from the quit queue, stopping')
+                        break
+
+                    job = self.job_class(raw_data, queue_name=queue_lookup[raw_queue], raw_queue=raw_queue)
+                    shadow = self._shadow_lookup.get(job.class_name)
+                    re_enqueue = shadow and getattr(shadow, 're_enqueue_jobs', False)
+                    work_logger.debug('scheduling job %r, re-enqueue: %r', job, re_enqueue)
+                    self.drain.add(self.run_job, job, re_enqueue)
+                await self.record_health(self.drain.redis, original_redis_queues, queue_lookup)
 
     async def record_health(self, redis, redis_queues, queue_lookup):
         now_ts = timestamp()
         if (now_ts - self.last_health_check) < self.health_check_interval:
             return
         self.last_health_check = now_ts
+        pending_tasks = sum(not t.done() for t in self.drain.pending_tasks)
         info = (
-            '{now:%b-%d %H:%M:%S} j_complete={jobs_complete} j_failed={jobs_failed} '
-            'j_timedout={jobs_timed_out} j_ongoing={pending_tasks}'
-        ).format(
-            now=datetime.now(),
-            jobs_complete=self.jobs_complete,
-            jobs_failed=self.jobs_failed,
-            jobs_timed_out=self.jobs_timed_out,
-            pending_tasks=sum(not t.done() for t in self._pending_tasks),
+            f'{datetime.now():%b-%d %H:%M:%S} j_complete={self.jobs_complete} j_failed={self.jobs_failed} '
+            f'j_timedout={self.jobs_timed_out} j_ongoing={pending_tasks}'
         )
         for redis_queue in redis_queues:
             info += ' q_{}={}'.format(queue_lookup[redis_queue], await redis.llen(redis_queue))
@@ -281,41 +281,15 @@ class BaseWorker(RedisMixin):
         self = cls(**kwargs)
         return self.loop.run_until_complete(self._check_health())
 
-    def schedule_job(self, data, queue):
-        work_logger.debug('scheduling job from queue %s', queue)
-        job = self.job_class(queue, data)
-
-        task = self.loop.create_task(self.run_job(job))
-        task.add_done_callback(self.job_callback)
-        self.loop.call_later(self.timeout_seconds, self.cancel_job, task, job)
-        self._pending_tasks.add(task)
-
-    async def below_concurrency_limit(self):
-        pt_cnt = len(self._pending_tasks)
-        while True:
-            if pt_cnt < self.max_concurrent_tasks:
-                return
-            work_logger.debug('%d pending tasks, waiting for one to finish', pt_cnt)
-            _, self._pending_tasks = await asyncio.wait(self._pending_tasks, loop=self.loop,
-                                                        return_when=asyncio.FIRST_COMPLETED)
-            pt_cnt = len(self._pending_tasks)
-
-    def cancel_job(self, task, job):
-        if not task.cancel():
-            return
-        self.jobs_timed_out += 1
-        jobs_logger.error('job timed out %r', job)
-
     async def run_job(self, j: Job):
         try:
             shadow = self._shadow_lookup[j.class_name]
         except KeyError:
-            return self.handle_prepare_exc('Job Error: unable to find shadow for {!r}'.format(j))
+            return self.handle_prepare_exc(f'Job Error: unable to find shadow for {j!r}')
         try:
             func = getattr(shadow, j.func_name)
         except AttributeError:
-            msg = 'Job Error: shadow class "{}" has no function "{}"'.format(shadow.name, j.func_name)
-            return self.handle_prepare_exc(msg)
+            return self.handle_prepare_exc(f'Job Error: shadow class "{shadow.name}" has no function "{j.func_name}"')
 
         try:
             func = func.direct
@@ -337,16 +311,6 @@ class BaseWorker(RedisMixin):
             self.log_job_result(started_at, result, j)
             return 0
 
-    def job_callback(self, task):
-        self.jobs_complete += 1
-        task_exception = task.exception()
-        if task_exception:
-            self.running = False
-            self._task_exception = task_exception
-        elif task.result():
-            self.jobs_failed += 1
-        jobs_logger.debug('task complete, %d jobs done, %d failed', self.jobs_complete, self.jobs_failed)
-
     def log_job_start(self, started_at: float, j: Job):
         if jobs_logger.isEnabledFor(logging.INFO):
             job_str = j.to_string(self.log_curtail)
@@ -360,7 +324,7 @@ class BaseWorker(RedisMixin):
         jobs_logger.info('%-4s ran in%7.3fs ← %s.%s ● %s', j.queue, job_time, j.class_name, j.func_name, sr)
 
     def handle_prepare_exc(self, msg: str):
-        self.jobs_failed += 1
+        self.drain.jobs_failed += 1
         jobs_logger.error(msg)
         # exit with zero so we don't increment jobs_failed twice
         return 0
@@ -377,17 +341,6 @@ class BaseWorker(RedisMixin):
     def handle_execute_exc(cls, started_at: float, exc: BaseException, j: Job):
         exc_type = exc.__class__.__name__
         jobs_logger.exception('%-4s ran in%7.3fs ! %s: %s', j.queue, timestamp() - started_at, j, exc_type)
-
-    async def shutdown(self):
-        with await self._shutdown_lock:
-            if self._pending_tasks:
-                work_logger.info('shutting down worker, waiting for %d jobs to finish', len(self._pending_tasks))
-                await asyncio.wait(self._pending_tasks, loop=self.loop)
-            t = (timestamp() - self.start) if self.start else 0
-            work_logger.info('shutting down worker after %0.3fs ◆ %d jobs done ◆ %d failed ◆ %d timed out',
-                             t, self.jobs_complete, self.jobs_failed, self.jobs_timed_out)
-            if not self.reusable:
-                await self.close()
 
     async def close(self):
         if not self._closed:
@@ -418,6 +371,19 @@ class BaseWorker(RedisMixin):
     def handle_sig_force(self, signum, frame):
         work_logger.warning('pid=%d, got signal: %s again, forcing exit', os.getpid(), Signals(signum).name)
         raise ImmediateExit('force exit')
+
+    jobs_complete = property(lambda self: self.drain.jobs_complete)
+    jobs_failed = property(lambda self: self.drain.jobs_failed)
+    jobs_timed_out = property(lambda self: self.drain.jobs_timed_out)
+
+    @property
+    def running(self):
+        return self.drain and self.drain.running
+
+    @running.setter
+    def running(self, v):
+        if self.drain:
+            self.drain.running = v
 
 
 def import_string(file_path, attr_name):

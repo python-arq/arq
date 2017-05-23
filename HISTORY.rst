@@ -3,6 +3,11 @@
 History
 -------
 
+v0.7.0 (TBD)
+............
+* implementing reusable ``Drain`` which takes tasks from a redis list and allows them to be execute asynchronously.
+* Drain uses python 3.6 ``async yield``, therefore **python 3.5 is no longer supported**.
+
 v0.6.1 (2017-05-06)
 ...................
 * mypy at last passing, #30

@@ -95,7 +95,7 @@ def create_tz(utcoffset=0) -> timezone:
     :param utcoffset: utc offset in seconds, if 0 timezone.utc is returned.
     """
     if utcoffset == 0:
-        return timezone.utc  # type: ignore
+        return timezone.utc
     else:
         return timezone(timedelta(seconds=utcoffset))
 
