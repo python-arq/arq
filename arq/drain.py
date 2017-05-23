@@ -9,11 +9,16 @@ import logging
 from typing import Set  # noqa
 
 from aioredis import RedisPool
+from .jobs import ArqError
 
 __all__ = ['Drain']
 
 work_logger = logging.getLogger('arq.work')
 jobs_logger = logging.getLogger('arq.jobs')
+
+
+class TaskError(ArqError, RuntimeError):
+    pass
 
 
 class Drain:
@@ -24,19 +29,22 @@ class Drain:
                  redis_pool: RedisPool,
                  max_concurrent_tasks: int=50,
                  shutdown_delay: float=6,
-                 timeout_seconds: int=60) -> None:
+                 timeout_seconds: int=60,
+                 raise_task_exception: bool=False) -> None:
         """
         :param redis_pool: redis pool to get connection from to pop items from list, also used to optionally
             re-enqueue pending jobs on termination
         :param max_concurrent_tasks: maximum number of jobs which can be execute at the same time by the event loop
         :param shutdown_delay: number of seconds to wait for tasks to finish
         :param timeout_seconds: maximum duration of a job, after that the job will be cancelled by the event loop
+        :param raise_task_exception: whether or not to raise an exception which occurs in a processed task
         """
         self.redis_pool = redis_pool
         self.loop = redis_pool._loop
         self.max_concurrent_tasks = max_concurrent_tasks
         self.shutdown_delay = max(shutdown_delay, 0.1)
         self.timeout_seconds = timeout_seconds
+        self.raise_task_exception = raise_task_exception
         self.pending_tasks: Set[asyncio.futures.Future] = set()
         self.task_exception: Exception = None
 
@@ -53,8 +61,9 @@ class Drain:
         await self.finish()
         self.redis_pool.release(self.redis)
         self.redis = None
-        # if self.task_exception:
-        #     raise RuntimeError('A processed task failed') from self.task_exception
+        if self.raise_task_exception and self.task_exception:
+            e = self.task_exception
+            raise TaskError(f'A processed task failed: {e.__class__.__name__}, {e}') from e
 
     async def iter(self, *raw_queues: bytes, pop_timeout=1):
         """
