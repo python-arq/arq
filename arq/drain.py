@@ -81,6 +81,7 @@ class Drain:
         """
         work_logger.debug('starting main blpop loop')
         quit_queue = None
+        assert self.running, 'drain iter will only work when the drain is running'
         if self.burst_mode:
             quit_queue = b'arq:quit-' + gen_random()
             work_logger.debug('populating quit queue to prompt exit: %s', quit_queue.decode())
