@@ -75,7 +75,7 @@ class BaseWorker(RedisMixin):
     log_curtail = 80
 
     #: Whether or not to skip log messages from health checks where nothing has changed
-    skip_repeat_health_check_logs = True
+    repeat_health_check_logs = False
 
     drain_class = Drain
 
@@ -227,7 +227,7 @@ class BaseWorker(RedisMixin):
         original_redis_queues = list(redis_queues)
 
         async with self.drain:
-            await self.record_health(self.drain.redis, original_redis_queues, queue_lookup)
+            await self.record_health(original_redis_queues, queue_lookup)
             async for raw_queue, raw_data in self.drain.iter(*redis_queues):
                 if raw_queue is not None:
                     job = self.job_class(raw_data, queue_name=queue_lookup[raw_queue], raw_queue=raw_queue)
@@ -235,9 +235,9 @@ class BaseWorker(RedisMixin):
                     re_enqueue = shadow and getattr(shadow, 're_enqueue_jobs', False)
                     work_logger.debug('scheduling job %r, re-enqueue: %r', job, re_enqueue)
                     self.drain.add(self.run_job, job, re_enqueue)
-                await self.record_health(self.drain.redis, original_redis_queues, queue_lookup)
+                await self.record_health(original_redis_queues, queue_lookup)
 
-    async def record_health(self, redis, redis_queues, queue_lookup):
+    async def record_health(self, redis_queues, queue_lookup):
         now_ts = timestamp()
         if (now_ts - self.last_health_check) < self.health_check_interval:
             return
@@ -248,10 +248,10 @@ class BaseWorker(RedisMixin):
             f'j_timedout={self.jobs_timed_out} j_ongoing={pending_tasks}'
         )
         for redis_queue in redis_queues:
-            info += ' q_{}={}'.format(queue_lookup[redis_queue], await redis.llen(redis_queue))
-        await redis.setex(self.health_check_key, self.health_check_interval + 1, info.encode())
+            info += ' q_{}={}'.format(queue_lookup[redis_queue], await self.drain.redis.llen(redis_queue))
+        await self.drain.redis.setex(self.health_check_key, self.health_check_interval + 1, info.encode())
         log_suffix = info[info.index('j_complete='):]
-        if not self.skip_repeat_health_check_logs or log_suffix != self._last_health_check_log:  # pragma: no branch
+        if self.repeat_health_check_logs or log_suffix != self._last_health_check_log:
             jobs_logger.info('recording health: %s', info)
             self._last_health_check_log = log_suffix
 

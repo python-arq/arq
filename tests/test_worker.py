@@ -358,6 +358,34 @@ def test_check_fails(redis_conn, loop):
     assert 1 == Worker.check_health(loop=loop)
 
 
+async def test_health_check_repeats(redis_conn, loop, caplog):
+    worker = Worker(burst=True, loop=loop)
+    worker.repeat_health_check_logs = True
+    worker.drain = worker.drain_class(redis_pool=await worker.get_redis_pool())
+    async with worker.drain:
+        await worker.record_health([b'a', b'b'], {b'a': 'A', b'b': 'B'})
+        worker.last_health_check = 0
+        await worker.record_health([b'a', b'b'], {b'a': 'A', b'b': 'B'})
+        worker.last_health_check = 0
+        await worker.record_health([b'a', b'b'], {b'a': 'A', b'b': 'B'})
+    assert str(caplog).count('recording health:') == 3
+    await worker.close()
+
+
+async def test_health_check_repeats_hidden(redis_conn, loop, caplog):
+    worker = Worker(burst=True, loop=loop)
+    worker.repeat_health_check_logs = False
+    worker.drain = worker.drain_class(redis_pool=await worker.get_redis_pool())
+    async with worker.drain:
+        await worker.record_health([b'a', b'b'], {b'a': 'A', b'b': 'B'})
+        worker.last_health_check = 0
+        await worker.record_health([b'a', b'b'], {b'a': 'A', b'b': 'B'})
+        worker.last_health_check = 0
+        await worker.record_health([b'a', b'b'], {b'a': 'A', b'b': 'B'})
+    assert str(caplog).count('recording health:') == 1
+    await worker.close()
+
+
 async def test_check_successful_real_value(redis_conn, loop):
     assert 0 == await redis_conn.exists(b'arq:health-check')
     worker = Worker(burst=True, loop=loop)
