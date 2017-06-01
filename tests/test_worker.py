@@ -11,8 +11,8 @@ from arq.worker import import_string, start_worker
 
 from .example import ActorTest
 from .fixtures import (EXAMPLE_FILE, DemoActor, FastShutdownWorker, FoobarActor, MockRedisDemoActor, MockRedisWorker,
-                       MockRedisWorkerQuit, ReEnqueueActor, StartupActor, StartupWorker, Worker, WorkerFail,
-                       WorkerQuit, kill_parent)
+                       MockRedisWorkerQuit, ReEnqueueActor, StartupActor, StartupWorker, Worker, WorkerFail, WorkerQuit,
+                       kill_parent)
 
 
 async def test_run_job_burst(tmpworkdir, redis_conn, actor):

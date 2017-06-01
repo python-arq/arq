@@ -7,6 +7,7 @@ v0.7.0 (2017-06-01)
 ...................
 * implementing reusable ``Drain`` which takes tasks from a redis list and allows them to be execute asynchronously.
 * Drain uses python 3.6 ``async yield``, therefore **python 3.5 is no longer supported**.
+* prevent repeated identical health check log messages
 
 v0.6.1 (2017-05-06)
 ...................

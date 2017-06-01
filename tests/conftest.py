@@ -1,5 +1,4 @@
 import pytest
-
 from aioredis import create_pool, create_redis
 
 from .fixtures import DemoActor, MockRedisDemoActor, MockRedisWorker

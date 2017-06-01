@@ -1,4 +1,5 @@
 import pytest
+
 from arq import Drain
 from arq.drain import TaskError
 

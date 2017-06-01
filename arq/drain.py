@@ -11,6 +11,7 @@ from typing import Set  # noqa
 from aioredis import RedisPool
 
 from arq.utils import gen_random
+
 from .jobs import ArqError
 
 __all__ = ['Drain']

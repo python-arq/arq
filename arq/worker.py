@@ -74,6 +74,9 @@ class BaseWorker(RedisMixin):
     # when logging job execution
     log_curtail = 80
 
+    #: Whether or not to skip log messages from health checks where nothing has changed
+    skip_repeat_health_check_logs = True
+
     drain_class = Drain
 
     def __init__(self, *,
@@ -99,6 +102,7 @@ class BaseWorker(RedisMixin):
         self._shadow_lookup:  Dict[str, Actor] = {}
         self.start: float = None
         self.last_health_check = 0
+        self._last_health_check_log = None
         self._closed = False
         self.drain: Drain = None
         self.job_class: Type[Job] = None
@@ -246,7 +250,10 @@ class BaseWorker(RedisMixin):
         for redis_queue in redis_queues:
             info += ' q_{}={}'.format(queue_lookup[redis_queue], await redis.llen(redis_queue))
         await redis.setex(self.health_check_key, self.health_check_interval + 1, info.encode())
-        jobs_logger.info('recording health: %s', info)
+        log_suffix = info[info.index('j_complete='):]
+        if not self.skip_repeat_health_check_logs or log_suffix != self._last_health_check_log:  # pragma: no branch
+            jobs_logger.info('recording health: %s', info)
+            self._last_health_check_log = log_suffix
 
     async def _check_health(self):
         r = 1
