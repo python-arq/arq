@@ -2,7 +2,10 @@ import logging
 import os
 from datetime import datetime
 
-from arq import RedisSettings
+import pytest
+
+import arq.utils
+from arq import RedisMixin, RedisSettings
 from arq.logs import ColourHandler
 from arq.testing import MockRedis
 from arq.utils import timestamp
@@ -49,3 +52,11 @@ async def test_mock_redis_flushdb(loop):
     assert 'bar' == await r.get('foo')
     await r.flushdb()
     assert None is await r.get('foo')
+
+
+async def test_redis_timeout(loop, mocker):
+    mocker.spy(arq.utils.asyncio, 'sleep')
+    r = RedisMixin(redis_settings=RedisSettings(port=0, conn_retry_delay=0), loop=loop)
+    with pytest.raises(OSError):
+        await r.get_redis_pool()
+    assert arq.utils.asyncio.sleep.call_count == 5

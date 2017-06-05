@@ -9,6 +9,7 @@ v0.8.0 (2017-06-05)
 * change logger name for control process log messages
 * use ``Semaphore`` rather than ``asyncio.wait(...return_when=asyncio.FIRST_COMPLETED)`` for improved performance
 * improve log display
+* add timeout and retry logic to ``RedisMixin.create_redis_pool``
 
 v0.7.0 (2017-06-01)
 ...................

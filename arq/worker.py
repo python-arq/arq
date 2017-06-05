@@ -81,6 +81,7 @@ class BaseWorker(RedisMixin):
     repeat_health_check_logs = False
 
     drain_class = Drain
+    _shadow_factory_timeout = 10
 
     def __init__(self, *,
                  burst: bool=False,
@@ -178,7 +179,7 @@ class BaseWorker(RedisMixin):
         self._stopped = False
         work_logger.info('Initialising work manager, burst mode: %s, creating shadows...', self._burst_mode)
 
-        with timeout(10):
+        with timeout(self._shadow_factory_timeout):
             shadows = await self.shadow_factory()
         assert isinstance(shadows, list), 'shadow_factory should return a list not %s' % type(shadows)
         self.job_class = shadows[0].job_class

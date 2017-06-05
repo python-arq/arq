@@ -6,25 +6,33 @@ Utilises for running arq used by other modules.
 """
 import asyncio
 import base64
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Tuple, Union
 
 import aioredis
 from aioredis.pool import RedisPool
+from async_timeout import timeout
 
 __all__ = ['RedisSettings', 'RedisMixin']
+logger = logging.getLogger('arq.utils')
 
 
 class RedisSettings:
     """
     No-Op class used to hold redis connection redis_settings.
     """
+    __slots__ = 'host', 'port', 'database', 'password', 'conn_retries', 'conn_timeout', 'conn_retry_delay'
+
     def __init__(self,
                  host='localhost',
                  port=6379,
                  database=0,
-                 password=None):
+                 password=None,
+                 conn_timeout=1,
+                 conn_retries=5,
+                 conn_retry_delay=1):
         """
         :param host: redis host
         :param port: redis port
@@ -35,6 +43,9 @@ class RedisSettings:
         self.port = port
         self.database = database
         self.password = password
+        self.conn_timeout = conn_timeout
+        self.conn_retries = conn_retries
+        self.conn_retry_delay = conn_retry_delay
 
 
 class RedisMixin:
@@ -56,12 +67,23 @@ class RedisMixin:
         self.redis_settings = redis_settings or getattr(self, 'redis_settings', None) or RedisSettings()
         self._redis_pool = existing_pool
 
-    async def create_redis_pool(self) -> RedisPool:
+    async def create_redis_pool(self, *, _retry=0) -> RedisPool:
         """
         Create a new redis pool.
         """
-        return await aioredis.create_pool((self.redis_settings.host, self.redis_settings.port), loop=self.loop,
-                                          db=self.redis_settings.database, password=self.redis_settings.password)
+        addr = self.redis_settings.host, self.redis_settings.port
+        try:
+            with timeout(self.redis_settings.conn_timeout):
+                return await aioredis.create_pool(addr, loop=self.loop, db=self.redis_settings.database,
+                                                  password=self.redis_settings.password)
+        except (ConnectionError, OSError, aioredis.RedisError, asyncio.TimeoutError) as e:
+            if _retry < self.redis_settings.conn_retries:
+                logger.warning('redis connection error %s %s, %d retries remaining...',
+                               e.__class__.__name__, e, self.redis_settings.conn_retries - _retry)
+                await asyncio.sleep(self.redis_settings.conn_retry_delay)
+                return await self.create_redis_pool(_retry=_retry + 1)
+            else:
+                raise
 
     async def get_redis_pool(self) -> RedisPool:
         """
