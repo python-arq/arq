@@ -74,7 +74,7 @@ async def test_separate_log_levels(mock_actor_worker, caplog):
     await actor.concat(a='1', b='2')
     await worker.run()
     log = caplog(('0.0\d\ds', '0.0XXs'))
-    assert ('arq.work: Initialising work manager, burst mode: True\n'
+    assert ('arq.work: Initialising work manager, burst mode: True, creating shadows...\n'
             'arq.work: Running worker with 1 shadow listening to 3 queues\n'
             'arq.work: shadows: MockRedisDemoActor | queues: high, dft, low\n'
             'arq.work: drain waiting 5.0s for 1 tasks to finish\n'

@@ -16,6 +16,8 @@ from multiprocessing import Process
 from signal import Signals
 from typing import Dict, List, Type  # noqa
 
+from async_timeout import timeout
+
 from .drain import Drain
 from .jobs import ArqError, Job
 from .logs import default_log_config
@@ -25,6 +27,7 @@ from .utils import RedisMixin, ellipsis, timestamp
 __all__ = ['BaseWorker', 'RunWorkerProcess', 'StopJob', 'import_string']
 
 work_logger = logging.getLogger('arq.work')
+ctrl_logger = logging.getLogger('arq.control')
 jobs_logger = logging.getLogger('arq.jobs')
 
 
@@ -173,9 +176,10 @@ class BaseWorker(RedisMixin):
         perform jobs.
         """
         self._stopped = False
-        work_logger.info('Initialising work manager, burst mode: %s', self._burst_mode)
+        work_logger.info('Initialising work manager, burst mode: %s, creating shadows...', self._burst_mode)
 
-        shadows = await self.shadow_factory()
+        with timeout(10):
+            shadows = await self.shadow_factory()
         assert isinstance(shadows, list), 'shadow_factory should return a list not %s' % type(shadows)
         self.job_class = shadows[0].job_class
         work_logger.debug('Using first shadows job class "%s"', self.job_class.__name__)
@@ -416,8 +420,8 @@ def start_worker(worker_path: str, worker_class: str, burst: bool, loop: asyncio
     :param loop: asyncio loop use to or None
     """
     worker_cls = import_string(worker_path, worker_class)
-    worker = worker_cls(burst=burst, loop=loop)
     work_logger.info('Starting "%s" on pid=%d', worker_cls.__name__, os.getpid())
+    worker = worker_cls(burst=burst, loop=loop)
     try:
         worker.run_until_complete()
     except HandledExit:
@@ -444,14 +448,14 @@ class RunWorkerProcess:
 
     def run_worker(self, worker_path, worker_class, burst):
         name = 'WorkProcess'
-        work_logger.info('starting work process "%s"', name)
+        ctrl_logger.info('starting work process "%s"', name)
         self.process = Process(target=start_worker, args=(worker_path, worker_class, burst), name=name)
         self.process.start()
         self.process.join()
         if self.process.exitcode == 0:
-            work_logger.info('worker process exited ok')
+            ctrl_logger.info('worker process exited ok')
             return
-        work_logger.critical('worker process %s exited badly with exit code %s',
+        ctrl_logger.critical('worker process %s exited badly with exit code %s',
                              self.process.pid, self.process.exitcode)
         sys.exit(3)
         # could restart worker here, but better to leave it up to the real manager eg. docker restart: always
@@ -459,17 +463,17 @@ class RunWorkerProcess:
     def handle_sig(self, signum, frame):
         signal.signal(signal.SIGINT, self.handle_sig_force)
         signal.signal(signal.SIGTERM, self.handle_sig_force)
-        work_logger.info('got signal: %s, waiting for worker pid=%s to finish...', Signals(signum).name,
+        ctrl_logger.info('got signal: %s, waiting for worker pid=%s to finish...', Signals(signum).name,
                          self.process and self.process.pid)
         # sleep to make sure worker.handle_sig above has executed if it's going to and detached handle_proxy_signal
         time.sleep(0.01)
         if self.process and self.process.is_alive():
-            work_logger.debug("sending custom shutdown signal to worker in case it didn't receive the signal")
+            ctrl_logger.debug("sending custom shutdown signal to worker in case it didn't receive the signal")
             os.kill(self.process.pid, SIG_PROXY)
 
     def handle_sig_force(self, signum, frame):
-        work_logger.warning('got signal: %s again, forcing exit', Signals(signum).name)
+        ctrl_logger.warning('got signal: %s again, forcing exit', Signals(signum).name)
         if self.process and self.process.is_alive():
-            work_logger.error('sending worker %d SIGTERM', self.process.pid)
+            ctrl_logger.error('sending worker %d SIGTERM', self.process.pid)
             os.kill(self.process.pid, signal.SIGTERM)
         raise ImmediateExit('force exit')

@@ -45,6 +45,7 @@ setup(
         arq=arq.cli:cli
     """,
     install_requires=[
+        'async-timeout==1.1.0',
         'aioredis>=0.2.9',
         'click>=6.6',
         'msgpack-python>=0.4.8',

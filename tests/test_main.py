@@ -68,7 +68,7 @@ async def test_dispatch_work(tmpworkdir, loop, caplog, redis_conn):
     print(log)
     assert ('MockRedisDemoActor.add_numbers ▶ dft\n'
             'MockRedisDemoActor.high_add_numbers ▶ high\n'
-            'Initialising work manager, burst mode: True\n'
+            'Initialising work manager, burst mode: True, creating shadows...\n'
             'Using first shadows job class "Job"\n'
             'Running worker with 1 shadow listening to 3 queues\n'
             'shadows: MockRedisDemoActor | queues: high, dft, low\n'
@@ -102,7 +102,7 @@ async def test_handle_exception(loop, caplog):
     log = re.sub(r'\d{4}-\d+-\d+ \d+:\d+:\d+', '<date time>', log)
     log = re.sub(r'\w{3}-\d+ \d+:\d+:\d+', '<date time2>', log)
     print(log)
-    assert ('Initialising work manager, burst mode: True\n'
+    assert ('Initialising work manager, burst mode: True, creating shadows...\n'
             'Running worker with 1 shadow listening to 3 queues\n'
             'shadows: MockRedisDemoActor | queues: high, dft, low\n'
             'recording health: <date time2> j_complete=0 j_failed=0 j_timedout=0 j_ongoing=0 q_high=0 q_dft=1 q_low=0\n'

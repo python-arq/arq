@@ -1,3 +1,5 @@
+.DEFAULT_GOAL := all
+
 .PHONY: install
 install:
 	pip install -U pip setuptools

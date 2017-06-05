@@ -3,6 +3,11 @@
 History
 -------
 
+v0.8.0 (TBC)
+............
+* add ``async-timeout`` dependency and use async timeout around ``shadow_factory``
+* change logger name for control process log messages
+
 v0.7.0 (2017-06-01)
 ...................
 * implementing reusable ``Drain`` which takes tasks from a redis list and allows them to be execute asynchronously.

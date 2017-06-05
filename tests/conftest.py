@@ -70,5 +70,5 @@ def mock_actor_worker(mock_actor):
 
 @pytest.fixture
 def caplog(caplog):
-    caplog.set_loggers(log_names=('arq.main', 'arq.work', 'arq.jobs'), fmt='%(name)s: %(message)s')
+    caplog.set_loggers(log_names=('arq.control', 'arq.main', 'arq.work', 'arq.jobs'), fmt='%(name)s: %(message)s')
     return caplog
