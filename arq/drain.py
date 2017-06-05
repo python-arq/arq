@@ -47,6 +47,7 @@ class Drain:
         self.redis_pool = redis_pool
         self.loop = redis_pool._loop
         self.max_concurrent_tasks = max_concurrent_tasks
+        self.task_semaphore = asyncio.Semaphore(value=max_concurrent_tasks, loop=self.loop)
         self.shutdown_delay = max(shutdown_delay, 0.1)
         self.timeout_seconds = timeout_seconds
         self.burst_mode = burst_mode
@@ -71,6 +72,10 @@ class Drain:
             e = self.task_exception
             raise TaskError(f'A processed task failed: {e.__class__.__name__}, {e}') from e
 
+    @property
+    def jobs_in_progress(self):
+        return self.max_concurrent_tasks - self.task_semaphore._value
+
     async def iter(self, *raw_queues: bytes, pop_timeout=1):
         """
         blpop jobs from redis queues and yield them. Waits for the number of tasks to drop below max_concurrent_tasks
@@ -88,17 +93,21 @@ class Drain:
             work_logger.debug('populating quit queue to prompt exit: %s', quit_queue.decode())
             await self.redis.rpush(quit_queue, b'1')
             raw_queues = tuple(raw_queues) + (quit_queue,)
-        while self.running:
+        while True:
+            await self.task_semaphore.acquire()
+            if not self.running:
+                break
             msg = await self.redis.blpop(*raw_queues, timeout=pop_timeout)
             if msg is None:
                 yield None, None
+                self.task_semaphore.release()
                 continue
             raw_queue, raw_data = msg
             if self.burst_mode and raw_queue == quit_queue:
                 work_logger.debug('got job from the quit queue, stopping')
                 break
+            work_logger.debug('jobs in progress %d', self.jobs_in_progress)
             yield raw_queue, raw_data
-            await self.wait()
 
     def add(self, coro, job, re_enqueue=False):
         """
@@ -114,18 +123,6 @@ class Drain:
         task.add_done_callback(self._job_callback)
         self.loop.call_later(self.timeout_seconds, self._cancel_job, task, job)
         self.pending_tasks.add(task)
-
-    async def wait(self):
-        """
-        Wait for a the number of pending tasks to drop bellow ``max_concurrent_tasks``
-        """
-        while True:
-            pt_cnt = len(self.pending_tasks)
-            if pt_cnt < self.max_concurrent_tasks:
-                return
-            work_logger.info('%d pending tasks, waiting for one to finish', pt_cnt)
-            _, self.pending_tasks = await asyncio.wait(self.pending_tasks, loop=self.loop,
-                                                       return_when=asyncio.FIRST_COMPLETED)
 
     async def finish(self, timeout=None):
         """
@@ -150,6 +147,7 @@ class Drain:
                 self.pending_tasks = set()
 
     def _job_callback(self, task):
+        self.task_semaphore.release()
         self.jobs_complete += 1
         task_exception = task.exception()
         if task_exception:

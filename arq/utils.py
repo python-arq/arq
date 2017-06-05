@@ -106,6 +106,8 @@ EPOCH_TZ = EPOCH.replace(tzinfo=create_tz())
 
 def timestamp() -> float:
     """
+    This should be exactly the same as time.time(), we use this approach for consistency with
+    other methods and possibly greater accuracy.
     :return: now in unix time, eg. seconds since 1970
     """
     return (datetime.utcnow() - EPOCH).total_seconds()

@@ -3,10 +3,12 @@
 History
 -------
 
-v0.8.0 (TBC)
-............
+v0.8.0 (2017-06-05)
+...................
 * add ``async-timeout`` dependency and use async timeout around ``shadow_factory``
 * change logger name for control process log messages
+* use ``Semaphore`` rather than ``asyncio.wait(...return_when=asyncio.FIRST_COMPLETED)`` for improved performance
+* improve log display
 
 v0.7.0 (2017-06-01)
 ...................
