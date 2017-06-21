@@ -95,6 +95,21 @@ async def test_redis_timeout(loop, mocker):
         datetime(2032, 1, 1, 4, 2),
         dict(hour=4, minute={2, 4, 6}),
     ),
+    (
+        datetime(2032, 2, 5, 0, 0, 0),
+        datetime(2032, 3, 31, 0, 0, 0),
+        dict(day=31),
+    ),
+    (
+        datetime(2001, 1, 1, 0, 0, 0),  # Monday
+        datetime(2001, 1, 7, 0, 0, 0),
+        dict(weekday=6),  # Sunday
+    ),
+    (
+        datetime(2001, 1, 1, 0, 0, 0),  # Monday
+        datetime(2001, 11, 7, 0, 0, 0),
+        dict(month=11, weekday=2),
+    ),
 ])
 def test_next_cron(previous, expected, kwargs):
     start = datetime.now()

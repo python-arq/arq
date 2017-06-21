@@ -193,6 +193,7 @@ def ellipsis(s: str, length: int=DEFAULT_CURTAIL) -> str:
 _dt_fields = [
     'month',
     'day',
+    'weekday',
     'hour',
     'minute',
     'second',
@@ -204,8 +205,11 @@ def _get_jump(dt_, options):
         v = options[field]
         if v is None:
             continue
+        if field == 'weekday':
+            next_v = dt_.weekday()
+        else:
+            next_v = getattr(dt_, field)
         mismatch = False
-        next_v = getattr(dt_, field)
         if isinstance(v, set):
             if next_v not in v:
                 mismatch = True
@@ -219,12 +223,14 @@ def _get_jump(dt_, options):
                 return timedelta(minutes=1) - timedelta(seconds=dt_.second)
             elif field == 'hour':
                 return timedelta(hours=1) - timedelta(minutes=dt_.minute, seconds=dt_.second)
+            elif field == 'month':
+                return timedelta(days=28) - timedelta(days=min(dt_.day, 27), minutes=dt_.minute, seconds=dt_.second)
             else:
-                assert field in ('month', 'day')
+                assert field in ('month', 'day', 'weekday')
                 return timedelta(days=1) - timedelta(hours=dt_.hour, minutes=dt_.minute, seconds=dt_.second)
 
 
-def next_cron(preview_dt: datetime, month=None, day=None, hour=None, minute=None, second=0):  # noqa: C901
+def next_cron(preview_dt: datetime, month=None, day=None, weekday=None, hour=None, minute=None, second=0):  # noqa: C901
     """
     Find the next datetime matching the given parameters.
     """
