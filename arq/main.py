@@ -72,7 +72,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         self.name = self.name or self.__class__.__name__
         self.worker = worker
         self.is_shadow = bool(worker)
-        self._bind_concurrent()
+        self._bind_bindable()
         self._concurrency_enabled = concurrency_enabled
         super().__init__(*args, **kwargs)
 
@@ -88,10 +88,10 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         """
         pass
 
-    def _bind_concurrent(self):
+    def _bind_bindable(self):
         for attr_name in dir(self.__class__):
             v = getattr(self.__class__, attr_name)
-            isinstance(v, Concurrent) and v.bind(self)
+            isinstance(v, Bindable) and v.bind(self)
 
     async def enqueue_job(self, func_name: str, *args, queue: str=None, **kwargs):
         """
@@ -135,24 +135,14 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         return f'<{self.__class__.__name__}({self.name}) at 0x{id(self):02x}>'
 
 
-class Concurrent:
-    """
-    Class used to describe a concurrent function. This is what the ``@concurrent`` decorator returns.
-
-    You shouldn't have to use this directly, but instead apply the ``@concurrent`` decorator
-    """
-    __slots__ = ['_func', '_dft_queue', '_self_obj']
-
-    def __init__(self, *, func, dft_queue=None, self_obj=None):
+class Bindable:
+    def __init__(self, *, func, self_obj=None, **kwargs):
         self._self_obj = self_obj
         # if we're already bound we assume func is of the correct type and skip repeat logging
-        if not self.bound:
-            if not inspect.iscoroutinefunction(func):
-                raise TypeError(f'{func.__qualname__} is not a coroutine function')
-
-            main_logger.debug('registering concurrent function %s', func.__qualname__)
+        if not self.bound and not inspect.iscoroutinefunction(func):
+            raise TypeError(f'{func.__qualname__} is not a coroutine function')
         self._func = func
-        self._dft_queue = dft_queue
+        self._extra_kwargs = kwargs
 
     def bind(self, obj: object):
         """
@@ -161,7 +151,7 @@ class Concurrent:
 
         :param obj: object to bind the function to eg. "self" in the eyes of func.
         """
-        new_inst = Concurrent(func=self._func, dft_queue=self._dft_queue, self_obj=obj)
+        new_inst = self.__class__(func=self._func, self_obj=obj, **self._extra_kwargs)
         setattr(obj, self._func.__name__, new_inst)
 
     @property
@@ -172,18 +162,36 @@ class Concurrent:
         return await self.defer(*args, **kwargs)
 
     async def defer(self, *args, queue_name=None, **kwargs):
-        await self._self_obj.enqueue_job(self._func.__name__, *args, queue=queue_name or self._dft_queue, **kwargs)
+        raise NotImplementedError()
 
     async def direct(self, *args, **kwargs):
         return await self._func(self._self_obj, *args, **kwargs)
 
     @property
-    def __doc__(self):
-        return self._func.__doc__
-
-    @property
     def __name__(self):
         return self._func.__name__
+
+
+class Concurrent(Bindable):
+    """
+    Class used to describe a concurrent function. This is what the ``@concurrent`` decorator returns.
+
+    You shouldn't have to use this directly, but instead apply the ``@concurrent`` decorator
+    """
+    __slots__ = '_func', '_dft_queue', '_self_obj', '_extra_kwargs'
+
+    def __init__(self, *, func, self_obj=None, dft_queue=None):
+        super().__init__(func=func, self_obj=self_obj, dft_queue=dft_queue)
+        if not self.bound:
+            main_logger.debug('registering concurrent function %s', func.__qualname__)
+        self._dft_queue = dft_queue
+
+    async def defer(self, *args, queue_name=None, **kwargs):
+        await self._self_obj.enqueue_job(self._func.__name__, *args, queue=queue_name or self._dft_queue, **kwargs)
+
+    @property
+    def __doc__(self):
+        return self._func.__doc__
 
     def __repr__(self):
         return f'<concurrent function {self._func.__qualname__} of {self._self_obj!r}>'
