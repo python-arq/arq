@@ -8,7 +8,7 @@ import arq.utils
 from arq import RedisMixin, RedisSettings
 from arq.logs import ColourHandler
 from arq.testing import MockRedis
-from arq.utils import timestamp
+from arq.utils import next_datetime, timestamp
 
 
 def test_settings_changed():
@@ -60,3 +60,41 @@ async def test_redis_timeout(loop, mocker):
     with pytest.raises(OSError):
         await r.get_redis_pool()
     assert arq.utils.asyncio.sleep.call_count == 5
+
+
+@pytest.mark.parametrize('previous,expected,kwargs', [
+    (datetime(2016, 6, 1, 12, 10, 10), datetime(2016, 6, 1, 12, 10, 20), dict(second=20)),
+    (datetime(2016, 6, 1, 12, 10, 10), datetime(2016, 6, 1, 12, 11, 0), dict(minute=11)),
+    (
+        datetime(2016, 6, 1, 12, 10, 10),
+        datetime(2017, 6, 1, 12, 10, 10),
+        dict(month=6, day=1, hour=12, minute=10, second=10),
+    ),
+    (
+        datetime(2016, 6, 1, 12, 10, 10),
+        datetime(2016, 7, 1, 12, 10, 10),
+        dict(day=1, hour=12, minute=10, second=10),
+    ),
+    (
+        datetime(2032, 1, 31, 0, 0, 0),
+        datetime(2032, 2, 28, 0, 0, 0),
+        dict(day=28),
+    ),
+    (
+        datetime(2032, 1, 1, 0, 5),
+        datetime(2032, 1, 1, 4, 0),
+        dict(hour=4),
+    ),
+    (
+        datetime(2032, 1, 1, 0, 0),
+        datetime(2032, 1, 1, 4, 2),
+        dict(hour=4, minute={2, 4, 6}),
+    ),
+    # (
+    #     datetime(2032, 1, 1, 0, 5),
+    #     datetime(2032, 1, 1, 4, 2),
+    #     dict(hour=4, minute={2, 4, 6}),
+    # ),
+])
+def test_next_datetime(previous, expected, kwargs):
+    assert next_datetime(previous, **kwargs) == expected

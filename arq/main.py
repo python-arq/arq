@@ -142,7 +142,7 @@ class Bindable:
         if not self.bound and not inspect.iscoroutinefunction(func):
             raise TypeError(f'{func.__qualname__} is not a coroutine function')
         self._func = func
-        self._extra_kwargs = kwargs
+        self._kwargs = kwargs
 
     def bind(self, obj: object):
         """
@@ -151,7 +151,7 @@ class Bindable:
 
         :param obj: object to bind the function to eg. "self" in the eyes of func.
         """
-        new_inst = self.__class__(func=self._func, self_obj=obj, **self._extra_kwargs)
+        new_inst = self.__class__(func=self._func, self_obj=obj, **self._kwargs)
         setattr(obj, self._func.__name__, new_inst)
 
     @property
@@ -178,7 +178,7 @@ class Concurrent(Bindable):
 
     You shouldn't have to use this directly, but instead apply the ``@concurrent`` decorator
     """
-    __slots__ = '_func', '_dft_queue', '_self_obj', '_extra_kwargs'
+    __slots__ = '_func', '_dft_queue', '_self_obj', '_kwargs'
 
     def __init__(self, *, func, self_obj=None, dft_queue=None):
         super().__init__(func=func, self_obj=self_obj, dft_queue=dft_queue)

@@ -15,7 +15,7 @@ import aioredis
 from aioredis.pool import RedisPool
 from async_timeout import timeout
 
-__all__ = ['RedisSettings', 'RedisMixin']
+__all__ = ['RedisSettings', 'RedisMixin', 'next_datetime']
 logger = logging.getLogger('arq.utils')
 
 
@@ -186,3 +186,47 @@ def ellipsis(s: str, length: int=DEFAULT_CURTAIL) -> str:
     if len(s) > length:
         s = s[:length - 1] + '…'
     return s
+
+
+def next_datetime(preview_dt: datetime, month=None, day=None, hour=None, minute=None, second=0):  # noqa: C901
+    """
+    Find the next datetime matching the given parameters.
+    """
+    fields = [
+        ('second', 1),
+        ('minute', 60),
+        ('hour', 3600),
+        ('day', 86400),
+        ('month', 86400 * 28),
+    ]
+    next_dt = preview_dt + timedelta(seconds=1)
+
+    options = {}
+    prev_set = False
+    for field, _ in reversed(fields):
+        f = locals()[field]
+        if not isinstance(f, (type(None), int, set)):
+            raise TypeError(f'{field} should be None, set or int')
+
+        # if any of the bigger values have been set we have to set a value
+        options[field] = 0 if (f is None and prev_set) else f
+        prev_set = prev_set or f is not None
+
+    def check_fields(dt_):
+        for field, increment_ in fields:
+            v = options[field]
+            if v is None:
+                continue
+            next_v = getattr(dt_, field)
+            if isinstance(v, set):
+                if next_v not in v:
+                    return increment_
+            elif next_v != v:
+                return increment_
+
+    while True:
+        increment = check_fields(next_dt)
+        if increment is None:
+            return next_dt
+        next_dt += timedelta(seconds=increment)
+        # print(next_dt)
