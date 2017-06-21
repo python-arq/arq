@@ -8,7 +8,7 @@ import arq.utils
 from arq import RedisMixin, RedisSettings
 from arq.logs import ColourHandler
 from arq.testing import MockRedis
-from arq.utils import next_datetime, timestamp
+from arq.utils import next_cron, timestamp
 
 
 def test_settings_changed():
@@ -90,11 +90,14 @@ async def test_redis_timeout(loop, mocker):
         datetime(2032, 1, 1, 4, 2),
         dict(hour=4, minute={2, 4, 6}),
     ),
-    # (
-    #     datetime(2032, 1, 1, 0, 5),
-    #     datetime(2032, 1, 1, 4, 2),
-    #     dict(hour=4, minute={2, 4, 6}),
-    # ),
+    (
+        datetime(2032, 1, 1, 0, 5),
+        datetime(2032, 1, 1, 4, 2),
+        dict(hour=4, minute={2, 4, 6}),
+    ),
 ])
-def test_next_datetime(previous, expected, kwargs):
-    assert next_datetime(previous, **kwargs) == expected
+def test_next_cron(previous, expected, kwargs):
+    start = datetime.now()
+    assert next_cron(previous, **kwargs) == expected
+    diff = datetime.now() - start
+    print(f'{diff.total_seconds() * 1000:0.3f}ms')

@@ -5,6 +5,8 @@
 Utilises for running arq used by other modules.
 """
 import asyncio
+from itertools import product
+
 import base64
 import logging
 import os
@@ -15,7 +17,7 @@ import aioredis
 from aioredis.pool import RedisPool
 from async_timeout import timeout
 
-__all__ = ['RedisSettings', 'RedisMixin', 'next_datetime']
+__all__ = ['RedisSettings', 'RedisMixin', 'next_cron']
 logger = logging.getLogger('arq.utils')
 
 
@@ -188,45 +190,58 @@ def ellipsis(s: str, length: int=DEFAULT_CURTAIL) -> str:
     return s
 
 
-def next_datetime(preview_dt: datetime, month=None, day=None, hour=None, minute=None, second=0):  # noqa: C901
+_dt_fields = [
+    'month',
+    'day',
+    'hour',
+    'minute',
+    'second',
+]
+
+
+def _get_jump(dt_, options):
+    for field in _dt_fields:
+        v = options[field]
+        if v is None:
+            continue
+        mismatch = False
+        next_v = getattr(dt_, field)
+        if isinstance(v, set):
+            if next_v not in v:
+                mismatch = True
+        elif next_v != v:
+            mismatch = True
+
+        if mismatch:
+            if field == 'second':
+                return timedelta(seconds=1)
+            elif field == 'minute':
+                return timedelta(minutes=1) - timedelta(seconds=dt_.second)
+            elif field == 'hour':
+                return timedelta(hours=1) - timedelta(minutes=dt_.minute, seconds=dt_.second)
+            else:
+                assert field in ('month', 'day')
+                return timedelta(days=1) - timedelta(hours=dt_.hour, minutes=dt_.minute, seconds=dt_.second)
+
+
+def next_cron(preview_dt: datetime, month=None, day=None, hour=None, minute=None, second=0):  # noqa: C901
     """
     Find the next datetime matching the given parameters.
     """
-    fields = [
-        ('second', 1),
-        ('minute', 60),
-        ('hour', 3600),
-        ('day', 86400),
-        ('month', 86400 * 28),
-    ]
+    # TODO day of week
     next_dt = preview_dt + timedelta(seconds=1)
-
     options = {}
-    prev_set = False
-    for field, _ in reversed(fields):
+    for field in _dt_fields:
         f = locals()[field]
         if not isinstance(f, (type(None), int, set)):
             raise TypeError(f'{field} should be None, set or int')
 
         # if any of the bigger values have been set we have to set a value
-        options[field] = 0 if (f is None and prev_set) else f
-        prev_set = prev_set or f is not None
-
-    def check_fields(dt_):
-        for field, increment_ in fields:
-            v = options[field]
-            if v is None:
-                continue
-            next_v = getattr(dt_, field)
-            if isinstance(v, set):
-                if next_v not in v:
-                    return increment_
-            elif next_v != v:
-                return increment_
+        options[field] = f
 
     while True:
-        increment = check_fields(next_dt)
-        if increment is None:
+        jump = _get_jump(next_dt, options)
+        if jump is None:
             return next_dt
-        next_dt += timedelta(seconds=increment)
+        next_dt += jump
         # print(next_dt)
