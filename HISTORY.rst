@@ -3,6 +3,10 @@
 History
 -------
 
+v0.9.0 (2017-XX-XX)
+...................
+* allow set encoding in msgpack for jobs #49
+
 v0.8.1 (2017-06-05)
 ...................
 * uprev setup requires

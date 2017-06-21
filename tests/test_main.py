@@ -10,7 +10,7 @@ from arq.jobs import ArqError
 from arq.testing import MockRedisWorker as MockRedisBaseWorker
 
 from .fixtures import (ChildActor, DemoActor, FoobarActor, MockRedisDemoActor, MockRedisWorker, ParentActor,
-                       ParentChildActorWorker)
+                       ParentChildActorWorker, Worker)
 
 
 async def test_simple_job_dispatch(tmpworkdir, loop, debug):
@@ -253,3 +253,17 @@ def test_job_no_queue():
     with pytest.raises(ArqError) as exc_info:
         Job(b'foo')
     assert 'either queue_name or raw_queue are required' in str(exc_info)
+
+
+async def test_encode_set(tmpworkdir, loop, redis_conn):
+    actor = DemoActor(loop=loop)
+    await actor.subtract({1, 2, 3, 4}, {4, 5})
+    await actor.close()
+
+    worker = Worker(loop=actor.loop, burst=True)
+    await worker.run()
+    assert worker.jobs_failed == 0
+    assert tmpworkdir.join('subtract').exists()
+    assert tmpworkdir.join('subtract').read() == '{1, 2, 3}'
+
+    await worker.close()

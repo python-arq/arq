@@ -5,7 +5,6 @@
 Defines the ``Job`` class and descendants which deal with encoding and decoding job data.
 """
 from datetime import datetime
-from typing import Callable
 
 import msgpack
 
@@ -22,18 +21,16 @@ class JobSerialisationError(ArqError):
     pass
 
 
+# "device control one" should be fairly unique as a dict key and only one byte
+DEVICE_CONTROL_ONE = '\x11'
+
+
 class Job:
     """
     Main Job class responsible for encoding and decoding jobs as they go
     into and come out of redis.
     """
     __slots__ = ('queue', 'queued_at', 'class_name', 'func_name', 'args', 'kwargs', 'raw_queue', 'raw_data')
-
-    #: custom encoder for msgpack, see :class:`arq.jobs.DatetimeJob` for an example of usage
-    msgpack_encoder: Callable = None
-
-    #: custom object hook for msgpack, see :class:`arq.jobs.DatetimeJob` for an example of usage
-    msgpack_object_hook: Callable = None
 
     def __init__(self, raw_data: bytes, *, queue_name: str=None, raw_queue: bytes=None) -> None:
         """
@@ -71,6 +68,22 @@ class Job:
             raise JobSerialisationError(str(e)) from e
 
     @classmethod
+    def msgpack_encoder(cls, obj):
+        """
+        The default msgpack encoder, adds support for encoding sets.
+        """
+        if isinstance(obj, set):
+            return {DEVICE_CONTROL_ONE: list(obj)}
+        else:
+            return obj
+
+    @classmethod
+    def msgpack_object_hook(cls, obj):
+        if len(obj) == 1 and DEVICE_CONTROL_ONE in obj:
+            return set(obj[DEVICE_CONTROL_ONE])
+        return obj
+
+    @classmethod
     def _encode(cls, data) -> bytes:
         return msgpack.packb(data, default=cls.msgpack_encoder, use_bin_type=True)
 
@@ -96,8 +109,7 @@ class Job:
         return f'<Job {self} on {self.queue}>'
 
 
-# unicode clock is small to encode and should be fairly unlikely to clash with another dict key
-DATETIME = '⌚'
+DEVICE_CONTROL_TWO = '\x12'
 TIMEZONE = 'O'
 
 
@@ -107,19 +119,20 @@ class DatetimeJob(Job):
     the returned datetimes will use a :mod:`datetime.timezone` class to define the timezone
     regardless of the timezone class originally used on the datetime object (eg. ``pytz``).
     """
-    @staticmethod
-    def msgpack_encoder(obj):
+    @classmethod
+    def msgpack_encoder(cls, obj):
         if isinstance(obj, datetime):
             ts, tz = to_unix_ms(obj)
-            result = {DATETIME: ts}
+            result = {DEVICE_CONTROL_TWO: ts}
             if tz is not None:
                 result[TIMEZONE] = tz
             return result
         else:
-            return obj
+            return super().msgpack_encoder(obj)
 
-    @staticmethod
-    def msgpack_object_hook(obj):
-        if DATETIME in obj and len(obj) <= 2:
-            return from_unix_ms(obj[DATETIME], utcoffset=obj.get(TIMEZONE))
-        return obj
+    @classmethod
+    def msgpack_object_hook(cls, obj):
+        if len(obj) <= 2 and DEVICE_CONTROL_TWO in obj:
+            return from_unix_ms(obj[DEVICE_CONTROL_TWO], utcoffset=obj.get(TIMEZONE))
+        else:
+            return super().msgpack_object_hook(obj)
