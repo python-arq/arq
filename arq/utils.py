@@ -5,8 +5,6 @@
 Utilises for running arq used by other modules.
 """
 import asyncio
-from itertools import product
-
 import base64
 import logging
 import os
@@ -200,7 +198,7 @@ _dt_fields = [
 ]
 
 
-def _get_jump(dt_, options):
+def _get_jump(dt_, options):  # noqa: C901
     for field in _dt_fields:
         v = options[field]
         if v is None:
@@ -230,20 +228,27 @@ def _get_jump(dt_, options):
                 return timedelta(days=1) - timedelta(hours=dt_.hour, minutes=dt_.minute, seconds=dt_.second)
 
 
-def next_cron(preview_dt: datetime, month=None, day=None, weekday=None, hour=None, minute=None, second=0):  # noqa: C901
+def next_cron(preview_dt: datetime, *,
+              month: Union[None, set, int]=None,
+              day: Union[None, set, int]=None,
+              weekday: Union[None, set, int, str]=None,
+              hour: Union[None, set, int]=None,
+              minute: Union[None, set, int]=None,
+              second: Union[None, set, int]=0):
     """
     Find the next datetime matching the given parameters.
     """
-    # TODO day of week
     next_dt = preview_dt + timedelta(seconds=1)
-    options = {}
-    for field in _dt_fields:
-        f = locals()[field]
-        if not isinstance(f, (type(None), int, set)):
-            raise TypeError(f'{field} should be None, set or int')
-
-        # if any of the bigger values have been set we have to set a value
-        options[field] = f
+    if isinstance(weekday, str):
+        weekday = ['mon', 'tues', 'wed', 'thurs', 'fri', 'sat', 'sun'].index(weekday.lower())
+    options = dict(
+        month=month,
+        day=day,
+        weekday=weekday,
+        hour=hour,
+        minute=minute,
+        second=second,
+    )
 
     while True:
         jump = _get_jump(next_dt, options)

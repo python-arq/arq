@@ -103,12 +103,22 @@ async def test_redis_timeout(loop, mocker):
     (
         datetime(2001, 1, 1, 0, 0, 0),  # Monday
         datetime(2001, 1, 7, 0, 0, 0),
+        dict(weekday='Sun'),  # Sunday
+    ),
+    (
+        datetime(2001, 1, 1, 0, 0, 0),
+        datetime(2001, 1, 7, 0, 0, 0),
         dict(weekday=6),  # Sunday
     ),
     (
-        datetime(2001, 1, 1, 0, 0, 0),  # Monday
+        datetime(2001, 1, 1, 0, 0, 0),
         datetime(2001, 11, 7, 0, 0, 0),
         dict(month=11, weekday=2),
+    ),
+    (
+        datetime(2001, 1, 1, 0, 0, 0),
+        datetime(2001, 1, 3, 0, 0, 0),
+        dict(weekday='wed'),
     ),
 ])
 def test_next_cron(previous, expected, kwargs):
@@ -116,3 +126,8 @@ def test_next_cron(previous, expected, kwargs):
     assert next_cron(previous, **kwargs) == expected
     diff = datetime.now() - start
     print(f'{diff.total_seconds() * 1000:0.3f}ms')
+
+
+def test_next_cron_invalid():
+    with pytest.raises(ValueError):
+        next_cron(datetime(2001, 1, 1, 0, 0, 0), weekday='monday')
