@@ -22,12 +22,12 @@ lint:
 test:
 	TZ=Asia/Singapore pytest --cov=arq && coverage combine
 
-.PHONY: .test-build-cov
-.test-build-cov:
+.PHONY: testcov
+testcov:
 	TZ=Asia/Singapore pytest --cov=arq && (echo "building coverage html"; coverage combine; coverage html)
 
 .PHONY: all
-all: .test-build-cov lint
+all: testcov lint
 
 .PHONY: clean
 clean:
