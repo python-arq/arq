@@ -201,6 +201,11 @@ class CronActor(Actor):
         with open('spam', 'w') as f:
             f.write(f'spam the value')
 
+    @cron(hour=3, minute=0, second=0, unique=False)
+    async def save_not_unique(self):
+        with open('not_unique', 'w') as f:
+            f.write(f'not_unique the value')
+
     def _now(self):
         try:
             with open('datatime.pkl', 'rb') as f:

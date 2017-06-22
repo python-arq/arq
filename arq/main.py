@@ -3,6 +3,8 @@
 ===========
 
 Defines the main ``Actor`` class and ``@concurrent`` decorator for using arq from within your code.
+
+Also defines the ``@cron`` decorator for declaring cron job functions.
 """
 import asyncio
 import inspect
@@ -11,7 +13,7 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Union  # noqa
 
 from .jobs import Job
-from .utils import RedisMixin, next_cron
+from .utils import RedisMixin, next_cron, to_unix_ms
 
 __all__ = ['Actor', 'concurrent', 'cron']
 
@@ -144,8 +146,8 @@ class Actor(RedisMixin, metaclass=ActorMeta):
 
         for cron_job in self.con_jobs:
             if n >= cron_job.next_run:
+                to_run.add((cron_job, cron_job.next_run))
                 cron_job.set_next(n)
-                to_run.add(cron_job)
 
         if not to_run:
             return
@@ -153,16 +155,20 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         main_logger.debug('cron, %d jobs to run', len(to_run))
         async with pool.get() as redis:
             job_futures = set()
-            for cron_job in to_run:
-                sentinel_key = self.CRON_SENTINEL_PREFIX + f'{self.name}.{cron_job.__name__}'.encode()
-                v, _ = await asyncio.gather(
-                    redis.getset(sentinel_key, b'1'),
-                    redis.expire(sentinel_key, cron_job.sentinel_timeout),
-                )
-                if not v:
-                    job_futures.add(self.job_future(redis, cron_job.dft_queue or self.DEFAULT_QUEUE, cron_job.__name__))
-            if job_futures:
-                await asyncio.gather(*job_futures)
+            for cron_job, run_at in to_run:
+                if cron_job.unique:
+                    sentinel_key = self.CRON_SENTINEL_PREFIX + f'{self.name}.{cron_job.__name__}'.encode()
+                    sentinel_value = str(to_unix_ms(run_at)[0]).encode()
+                    v, _ = await asyncio.gather(
+                        redis.getset(sentinel_key, sentinel_value),
+                        redis.expire(sentinel_key, 3600),
+                    )
+                    if v == sentinel_value:
+                        # if v is equal to sentinel value, another worker has already set it and is doing this cron run
+                        continue
+                job_futures.add(self.job_future(redis, cron_job.dft_queue or self.DEFAULT_QUEUE, cron_job.__name__))
+
+            job_futures and await asyncio.gather(*job_futures)
 
     async def close(self, shutdown=False):
         """
@@ -258,8 +264,7 @@ def concurrent(func_or_queue):
 
 
 class CronJob(Bindable):
-    __slots__ = ('_func', '_dft_queue', '_self_obj', '_kwargs', 'run_at_startup', 'sentinel_timeout',
-                 'cron_kwargs', 'next_run')
+    __slots__ = '_func', '_dft_queue', '_self_obj', '_kwargs', 'run_at_startup', 'unique', 'cron_kwargs', 'next_run'
 
     def __init__(self, *, func, self_obj=None, **kwargs):
         super().__init__(func=func, self_obj=self_obj, **kwargs)
@@ -267,7 +272,7 @@ class CronJob(Bindable):
             main_logger.debug('registering cron function %s', func.__qualname__)
         kwargs2 = kwargs.copy()
         self.run_at_startup = kwargs2.pop('run_at_startup')
-        self.sentinel_timeout = kwargs2.pop('sentinel_timeout')
+        self.unique = kwargs2.pop('unique')
         kwargs2.pop('dft_queue')
         self.cron_kwargs = kwargs2
         self.next_run = None
@@ -281,11 +286,14 @@ class CronJob(Bindable):
     def set_next(self, dt: datetime):
         self.next_run = next_cron(dt, **self.cron_kwargs)
 
+    def __repr__(self):
+        return f'<cron function {self._func.__qualname__} of {self._self_obj!r}>'
+
 
 def cron(*,
          dft_queue=None,
          run_at_startup=False,
-         sentinel_timeout=10,
+         unique=True,
          month: Union[None, set, int]=None,
          day: Union[None, set, int]=None,
          weekday: Union[None, set, int, str]=None,
@@ -293,12 +301,30 @@ def cron(*,
          minute: Union[None, set, int]=None,
          second: Union[None, set, int]=0,
          microsecond: int=123456):
+    """
+
+    Decorator which defines a functions as a cron job, eg. it should be executed at specific times...
+
+    If you wish to call the function directly you can access the original function at ``<func>.direct``.
+
+    :param dft_queue: default queue to use
+    :param run_at_startup: whether to run as worker starts
+    :param unique: whether the job should be only be executed on one worker.
+    :param month: month(s) to run the job on, 1 - 12
+    :param day: day(s) to run the job on, 1 - 31
+    :param weekday: week day(s) to run the job on, 0 - 6 or mon - sun
+    :param hour: hour(s) to run the job on, 0 - 23
+    :param minute: minute(s) to run the job on, 0 - 59
+    :param second: second(s) to run the job on, 0 - 59
+    :param microsecond: microsecond(s) to run the job on,
+        defaults to 123456 as the world is busier at the top of a second 0 - 1e6
+    """
 
     return lambda f: CronJob(
         func=f,
         dft_queue=dft_queue,
         run_at_startup=run_at_startup,
-        sentinel_timeout=sentinel_timeout,
+        unique=unique,
         month=month,
         day=day,
         weekday=weekday,
