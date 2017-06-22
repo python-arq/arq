@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import pickle
 import signal
 import time
 from pathlib import Path
@@ -199,6 +200,17 @@ class CronActor(Actor):
     async def save_spam(self):
         with open('spam', 'w') as f:
             f.write(f'spam the value')
+
+    def _now(self):
+        try:
+            with open('datatime.pkl', 'rb') as f:
+                dts = pickle.load(f)
+            dt = dts.pop(0)
+            with open('datatime.pkl', 'wb') as f:
+                pickle.dump(dts, f)
+            return dt
+        except FileNotFoundError:
+            return super()._now()
 
 
 class CronWorker(BaseWorker):
