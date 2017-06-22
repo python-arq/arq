@@ -6,9 +6,11 @@ Defines the main ``Actor`` class and ``@concurrent`` decorator for using arq fro
 """
 import inspect
 import logging
+from datetime import datetime
+from typing import Union
 
 from .jobs import Job
-from .utils import RedisMixin
+from .utils import RedisMixin, next_cron
 
 __all__ = ['Actor', 'concurrent']
 
@@ -142,6 +144,7 @@ class Bindable:
         if not self.bound and not inspect.iscoroutinefunction(func):
             raise TypeError(f'{func.__qualname__} is not a coroutine function')
         self._func = func
+        self._dft_queue = kwargs['dft_queue']
         self._kwargs = kwargs
 
     def bind(self, obj: object):
@@ -184,7 +187,6 @@ class Concurrent(Bindable):
         super().__init__(func=func, self_obj=self_obj, dft_queue=dft_queue)
         if not self.bound:
             main_logger.debug('registering concurrent function %s', func.__qualname__)
-        self._dft_queue = dft_queue
 
     async def defer(self, *args, queue_name=None, **kwargs):
         await self._self_obj.enqueue_job(self._func.__name__, *args, queue=queue_name or self._dft_queue, **kwargs)
@@ -209,3 +211,48 @@ def concurrent(func_or_queue):
         return lambda f: Concurrent(func=f, dft_queue=func_or_queue)
     else:
         return Concurrent(func=func_or_queue)
+
+
+class Cron(Bindable):
+    def __init__(self, *, func, self_obj=None, **kwargs):
+        super().__init__(func=func, self_obj=self_obj, **kwargs)
+        if not self.bound:
+            main_logger.debug('registering cron function %s', func.__qualname__)
+        kwargs2 = kwargs.copy()
+        self.run_at_startup = kwargs2.pop('run_at_startup')
+        self.sentinel_timeout = kwargs2.pop('sentinel_timeout')
+        kwargs2.pop('dft_queue')
+        self.cron_kwargs = kwargs2
+        self.next_run = next_cron(datetime.now(), **self.cron_kwargs)
+
+    async def defer(self, *args, force=False, queue_name=None, **kwargs):
+        n = datetime.now()
+        if n < self.next_run:
+            return
+        await self._self_obj.enqueue_job(self._func.__name__, *args, queue=queue_name or self._dft_queue, **kwargs)
+
+
+def cron(*,
+         dft_queue=None,
+         run_at_startup=False,
+         sentinel_timeout=10,
+         month: Union[None, set, int]=None,
+         day: Union[None, set, int]=None,
+         weekday: Union[None, set, int, str]=None,
+         hour: Union[None, set, int]=None,
+         minute: Union[None, set, int]=None,
+         second: Union[None, set, int]=0,
+         microsecond: int=123456):
+
+    return lambda f: Cron(
+        func=f,
+        dft_queue=dft_queue,
+        run_at_startup=run_at_startup,
+        sentinel_timeout=sentinel_timeout,
+        month=month,
+        day=day,
+        weekday=weekday,
+        hour=hour,
+        minute=minute,
+        second=second,
+        microsecond=microsecond)
