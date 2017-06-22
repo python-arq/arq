@@ -5,7 +5,7 @@ import signal
 import time
 from pathlib import Path
 
-from arq import Actor, BaseWorker, StopJob, concurrent
+from arq import Actor, BaseWorker, StopJob, concurrent, cron
 from arq.drain import Drain
 from arq.testing import MockRedisMixin
 
@@ -185,3 +185,21 @@ class ParentChildActorWorker(MockRedisMixin, BaseWorker):
 
 class ReEnqueueActor(DemoActor):
     re_enqueue_jobs = True
+
+
+class CronActor(Actor):
+    # using 3:0:0 makes it very unlikely the job will be caused due hitting the right time
+
+    @cron(hour=3, minute=0, second=0, run_at_startup=True)
+    async def save_foobar(self):
+        with open('foobar', 'w') as f:
+            f.write(f'foobar the value')
+
+    @cron(hour=3, minute=0, second=0)
+    async def save_spam(self):
+        with open('spam', 'w') as f:
+            f.write(f'spam the value')
+
+
+class CronWorker(BaseWorker):
+    shadows = [CronActor]
