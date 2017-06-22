@@ -195,10 +195,11 @@ _dt_fields = [
     'hour',
     'minute',
     'second',
+    'microsecond',
 ]
 
 
-def _get_jump(dt_, options):  # noqa: C901
+def _get_next_dt(dt_, options):  # noqa: C901
     for field in _dt_fields:
         v = options[field]
         if v is None:
@@ -207,25 +208,31 @@ def _get_jump(dt_, options):  # noqa: C901
             next_v = dt_.weekday()
         else:
             next_v = getattr(dt_, field)
-        mismatch = False
-        if isinstance(v, set):
-            if next_v not in v:
-                mismatch = True
-        elif next_v != v:
-            mismatch = True
-
+        if isinstance(v, int):
+            mismatch = next_v != v
+        else:
+            assert isinstance(v, (set, list, tuple))
+            mismatch = next_v not in v
+        # print(field, v, next_v, mismatch)
         if mismatch:
-            if field == 'second':
-                return timedelta(seconds=1)
-            elif field == 'minute':
-                return timedelta(minutes=1) - timedelta(seconds=dt_.second)
+            micro = max(dt_.microsecond - options['microsecond'], 0)
+            if field == 'month':
+                if dt_.month == 12:
+                    return datetime(dt_.year + 1, 1, 1)
+                else:
+                    return datetime(dt_.year, dt_.month + 1, 1)
+            elif field in ('day', 'weekday'):
+                return dt_ + timedelta(days=1) - timedelta(hours=dt_.hour, minutes=dt_.minute, seconds=dt_.second,
+                                                           microseconds=micro)
             elif field == 'hour':
-                return timedelta(hours=1) - timedelta(minutes=dt_.minute, seconds=dt_.second)
-            elif field == 'month':
-                return timedelta(days=28) - timedelta(days=min(dt_.day, 27), minutes=dt_.minute, seconds=dt_.second)
+                return dt_ + timedelta(hours=1) - timedelta(minutes=dt_.minute, seconds=dt_.second, microseconds=micro)
+            elif field == 'minute':
+                return dt_ + timedelta(minutes=1) - timedelta(seconds=dt_.second, microseconds=micro)
+            elif field == 'second':
+                return dt_ + timedelta(seconds=1) - timedelta(microseconds=micro)
             else:
-                assert field in ('month', 'day', 'weekday')
-                return timedelta(days=1) - timedelta(hours=dt_.hour, minutes=dt_.minute, seconds=dt_.second)
+                assert field == 'microsecond'
+                return dt_ + timedelta(microseconds=options['microsecond'] - dt_.microsecond)
 
 
 def next_cron(preview_dt: datetime, *,
@@ -234,11 +241,12 @@ def next_cron(preview_dt: datetime, *,
               weekday: Union[None, set, int, str]=None,
               hour: Union[None, set, int]=None,
               minute: Union[None, set, int]=None,
-              second: Union[None, set, int]=0):
+              second: Union[None, set, int]=0,
+              microsecond: int=123456):
     """
     Find the next datetime matching the given parameters.
     """
-    next_dt = preview_dt + timedelta(seconds=1)
+    dt = preview_dt + timedelta(seconds=1)
     if isinstance(weekday, str):
         weekday = ['mon', 'tues', 'wed', 'thurs', 'fri', 'sat', 'sun'].index(weekday.lower())
     options = dict(
@@ -248,11 +256,12 @@ def next_cron(preview_dt: datetime, *,
         hour=hour,
         minute=minute,
         second=second,
+        microsecond=microsecond,
     )
 
     while True:
-        jump = _get_jump(next_dt, options)
-        if jump is None:
-            return next_dt
-        next_dt += jump
-        # print(next_dt)
+        next_dt = _get_next_dt(dt, options)
+        # print(dt, next_dt)
+        if next_dt is None:
+            return dt
+        dt = next_dt
