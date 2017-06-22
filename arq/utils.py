@@ -15,7 +15,7 @@ import aioredis
 from aioredis.pool import RedisPool
 from async_timeout import timeout
 
-__all__ = ['RedisSettings', 'RedisMixin']
+__all__ = ['RedisSettings', 'RedisMixin', 'next_cron']
 logger = logging.getLogger('arq.utils')
 
 
@@ -186,3 +186,82 @@ def ellipsis(s: str, length: int=DEFAULT_CURTAIL) -> str:
     if len(s) > length:
         s = s[:length - 1] + '…'
     return s
+
+
+_dt_fields = [
+    'month',
+    'day',
+    'weekday',
+    'hour',
+    'minute',
+    'second',
+    'microsecond',
+]
+
+
+def _get_next_dt(dt_, options):  # noqa: C901
+    for field in _dt_fields:
+        v = options[field]
+        if v is None:
+            continue
+        if field == 'weekday':
+            next_v = dt_.weekday()
+        else:
+            next_v = getattr(dt_, field)
+        if isinstance(v, int):
+            mismatch = next_v != v
+        else:
+            assert isinstance(v, (set, list, tuple))
+            mismatch = next_v not in v
+        # print(field, v, next_v, mismatch)
+        if mismatch:
+            micro = max(dt_.microsecond - options['microsecond'], 0)
+            if field == 'month':
+                if dt_.month == 12:
+                    return datetime(dt_.year + 1, 1, 1)
+                else:
+                    return datetime(dt_.year, dt_.month + 1, 1)
+            elif field in ('day', 'weekday'):
+                return dt_ + timedelta(days=1) - timedelta(hours=dt_.hour, minutes=dt_.minute, seconds=dt_.second,
+                                                           microseconds=micro)
+            elif field == 'hour':
+                return dt_ + timedelta(hours=1) - timedelta(minutes=dt_.minute, seconds=dt_.second, microseconds=micro)
+            elif field == 'minute':
+                return dt_ + timedelta(minutes=1) - timedelta(seconds=dt_.second, microseconds=micro)
+            elif field == 'second':
+                return dt_ + timedelta(seconds=1) - timedelta(microseconds=micro)
+            else:
+                assert field == 'microsecond'
+                return dt_ + timedelta(microseconds=options['microsecond'] - dt_.microsecond)
+
+
+def next_cron(preview_dt: datetime, *,
+              month: Union[None, set, int]=None,
+              day: Union[None, set, int]=None,
+              weekday: Union[None, set, int, str]=None,
+              hour: Union[None, set, int]=None,
+              minute: Union[None, set, int]=None,
+              second: Union[None, set, int]=0,
+              microsecond: int=123456):
+    """
+    Find the next datetime matching the given parameters.
+    """
+    dt = preview_dt + timedelta(seconds=1)
+    if isinstance(weekday, str):
+        weekday = ['mon', 'tues', 'wed', 'thurs', 'fri', 'sat', 'sun'].index(weekday.lower())
+    options = dict(
+        month=month,
+        day=day,
+        weekday=weekday,
+        hour=hour,
+        minute=minute,
+        second=second,
+        microsecond=microsecond,
+    )
+
+    while True:
+        next_dt = _get_next_dt(dt, options)
+        # print(dt, next_dt)
+        if next_dt is None:
+            return dt
+        dt = next_dt

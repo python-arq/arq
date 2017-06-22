@@ -232,7 +232,7 @@ class BaseWorker(RedisMixin):
         original_redis_queues = list(redis_queues)
 
         async with self.drain:
-            await self.record_health(original_redis_queues, queue_lookup)
+            await self.heart_beat(original_redis_queues, queue_lookup)
             async for raw_queue, raw_data in self.drain.iter(*redis_queues):
                 if raw_queue is not None:
                     job = self.job_class(raw_data, queue_name=queue_lookup[raw_queue], raw_queue=raw_queue)
@@ -240,7 +240,12 @@ class BaseWorker(RedisMixin):
                     re_enqueue = shadow and getattr(shadow, 're_enqueue_jobs', False)
                     work_logger.debug('scheduling job %r, re-enqueue: %r', job, re_enqueue)
                     self.drain.add(self.run_job, job, re_enqueue)
-                await self.record_health(original_redis_queues, queue_lookup)
+                await self.heart_beat(original_redis_queues, queue_lookup)
+
+    async def heart_beat(self, redis_queues, queue_lookup):
+        await self.record_health(redis_queues, queue_lookup)
+        for shadow in self._shadow_lookup.values():
+            await shadow.run_cron()
 
     async def record_health(self, redis_queues, queue_lookup):
         now_ts = timestamp()
