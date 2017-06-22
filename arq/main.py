@@ -4,10 +4,11 @@
 
 Defines the main ``Actor`` class and ``@concurrent`` decorator for using arq from within your code.
 """
+import asyncio
 import inspect
 import logging
 from datetime import datetime
-from typing import Union
+from typing import Any, Callable, Dict, List, Union  # noqa
 
 from .jobs import Job
 from .utils import RedisMixin, next_cron
@@ -47,6 +48,8 @@ class Actor(RedisMixin, metaclass=ActorMeta):
     #: prefix prepended to all queue names to create the list keys in redis
     QUEUE_PREFIX = b'arq:q:'
 
+    CRON_SENTINAL_PREFIX = b'arq:cron:'
+
     #: if not None this name is used instead of the class name when encoding and referencing jobs,
     #: if None the class's name is used
     name: str = None
@@ -74,7 +77,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         self.name = self.name or self.__class__.__name__
         self.worker = worker
         self.is_shadow = bool(worker)
-        self._bind_bindable()
+        self.con_jobs: List[CronJob] = list(self._bind_decorators())
         self._concurrency_enabled = concurrency_enabled
         super().__init__(*args, **kwargs)
 
@@ -90,10 +93,13 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         """
         pass
 
-    def _bind_bindable(self):
+    def _bind_decorators(self):
         for attr_name in dir(self.__class__):
             v = getattr(self.__class__, attr_name)
-            isinstance(v, Bindable) and v.bind(self)
+            if isinstance(v, Bindable):
+                v.bind(self)
+                if isinstance(v, CronJob):
+                    yield v
 
     async def enqueue_job(self, func_name: str, *args, queue: str=None, **kwargs):
         """
@@ -109,18 +115,50 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         :param kwargs: key word arguments to pass to the function
         """
         queue = queue or self.DEFAULT_QUEUE
-        data = self.job_class.encode(class_name=self.name, func_name=func_name, args=args, kwargs=kwargs)
-        main_logger.debug('%s.%s ▶ %s', self.name, func_name, queue)
-
         if self._concurrency_enabled:
-            queue_list = self.queue_lookup[queue]
             # use the pool directly rather than get_redis_conn to avoid one extra await
             pool = self._redis_pool or await self.get_redis_pool()
+            main_logger.debug('%s.%s ▶ %s', self.name, func_name, queue)
             async with pool.get() as redis:
-                await redis.rpush(queue_list, data)
+                await self.job_future(redis, queue, func_name, *args, **kwargs)
         else:
+            main_logger.debug('%s.%s ▶ %s (called directly)', self.name, func_name, queue)
+            data = self.job_class.encode(class_name=self.name, func_name=func_name, args=args, kwargs=kwargs)
             j = self.job_class(data, queue_name=queue)
             await getattr(self, j.func_name).direct(*j.args, **j.kwargs)
+
+    def job_future(self, redis, queue: str, func_name: str, *args, **kwargs):
+        return redis.rpush(
+            self.queue_lookup[queue],
+            self.job_class.encode(class_name=self.name, func_name=func_name, args=args, kwargs=kwargs),
+        )
+
+    async def run_cron(self):
+        n = datetime.now()
+        pool = self._redis_pool or await self.get_redis_pool()
+        to_run = set()
+
+        for cron_job in self.con_jobs:
+            if n < cron_job.next_run:
+                continue
+            cron_job.set_next(n)
+            to_run.add(cron_job)
+
+        if not to_run:
+            return
+
+        async with pool.get() as redis:
+            job_futures = set()
+            for cron_job in to_run:
+                sentinel_key = self.QUEUE_PREFIX + f'{self.name}.{cron_job.__name__}'.encode()
+                v, _ = await asyncio.gather(
+                    redis.getset(sentinel_key, b'1'),
+                    redis.expire(sentinel_key, cron_job.sentinel_timeout),
+                )
+                if not v:
+                    job_futures.add(cron_job.job_future())
+            if job_futures:
+                await asyncio.gather(*job_futures)
 
     async def close(self, shutdown=False):
         """
@@ -139,13 +177,13 @@ class Actor(RedisMixin, metaclass=ActorMeta):
 
 class Bindable:
     def __init__(self, *, func, self_obj=None, **kwargs):
-        self._self_obj = self_obj
+        self._self_obj: Actor = self_obj
         # if we're already bound we assume func is of the correct type and skip repeat logging
         if not self.bound and not inspect.iscoroutinefunction(func):
             raise TypeError(f'{func.__qualname__} is not a coroutine function')
-        self._func = func
-        self._dft_queue = kwargs['dft_queue']
-        self._kwargs = kwargs
+        self._func: Callable = func
+        self._dft_queue: str = kwargs['dft_queue']
+        self._kwargs: Dict[str, Any] = kwargs
 
     def bind(self, obj: object):
         """
@@ -165,7 +203,10 @@ class Bindable:
         return await self.defer(*args, **kwargs)
 
     async def defer(self, *args, queue_name=None, **kwargs):
-        raise NotImplementedError()
+        await self._self_obj.enqueue_job(self._func.__name__, *args, queue=queue_name or self._dft_queue, **kwargs)
+
+    def job_future(self, *args, queue_name=None, **kwargs):
+        return self._self_obj.job_future(queue_name or self._dft_queue, self._func.__name__, *args, **kwargs)
 
     async def direct(self, *args, **kwargs):
         return await self._func(self._self_obj, *args, **kwargs)
@@ -187,9 +228,6 @@ class Concurrent(Bindable):
         super().__init__(func=func, self_obj=self_obj, dft_queue=dft_queue)
         if not self.bound:
             main_logger.debug('registering concurrent function %s', func.__qualname__)
-
-    async def defer(self, *args, queue_name=None, **kwargs):
-        await self._self_obj.enqueue_job(self._func.__name__, *args, queue=queue_name or self._dft_queue, **kwargs)
 
     @property
     def __doc__(self):
@@ -213,7 +251,7 @@ def concurrent(func_or_queue):
         return Concurrent(func=func_or_queue)
 
 
-class Cron(Bindable):
+class CronJob(Bindable):
     def __init__(self, *, func, self_obj=None, **kwargs):
         super().__init__(func=func, self_obj=self_obj, **kwargs)
         if not self.bound:
@@ -223,13 +261,11 @@ class Cron(Bindable):
         self.sentinel_timeout = kwargs2.pop('sentinel_timeout')
         kwargs2.pop('dft_queue')
         self.cron_kwargs = kwargs2
-        self.next_run = next_cron(datetime.now(), **self.cron_kwargs)
+        self.next_run = None
+        self.set_next(datetime.now())
 
-    async def defer(self, *args, force=False, queue_name=None, **kwargs):
-        n = datetime.now()
-        if n < self.next_run:
-            return
-        await self._self_obj.enqueue_job(self._func.__name__, *args, queue=queue_name or self._dft_queue, **kwargs)
+    def set_next(self, dt: datetime):
+        self.next_run = next_cron(dt, **self.cron_kwargs)
 
 
 def cron(*,
@@ -244,7 +280,7 @@ def cron(*,
          second: Union[None, set, int]=0,
          microsecond: int=123456):
 
-    return lambda f: Cron(
+    return lambda f: CronJob(
         func=f,
         dft_queue=dft_queue,
         run_at_startup=run_at_startup,
