@@ -45,7 +45,7 @@ async def test_cron_time_match_sentinel_set(tmpworkdir, redis_conn, actor):
     with open('datatime.pkl', 'wb') as f:
         pickle.dump(datetimes, f)
 
-    v = str(to_unix_ms(datetime(2032, 1, 1, 3, 0, 0, 123456))[0]).encode()
+    v = str(to_unix_ms(datetime(2032, 1, 1, 3, 0, 0, 123456))).encode()
     await redis_conn.set(b'arq:cron:CronActor.save_spam', v)
 
     worker = CronWorker(burst=True, loop=actor.loop)
@@ -59,7 +59,7 @@ async def test_cron_time_match_not_unique(tmpworkdir, redis_conn, actor):
     with open('datatime.pkl', 'wb') as f:
         pickle.dump(datetimes, f)
 
-    v = str(to_unix_ms(datetime(2032, 1, 1, 3, 0, 0, 123456))[0]).encode()
+    v = str(to_unix_ms(datetime(2032, 1, 1, 3, 0, 0, 123456))).encode()
     await redis_conn.set(b'arq:cron:CronActor.save_not_unique', v)
 
     worker = CronWorker(burst=True, loop=actor.loop)

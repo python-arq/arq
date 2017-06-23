@@ -106,7 +106,7 @@ API Reference
    :members:
 
 .. automodule:: arq.utils
-   :members: RedisSettings, RedisMixin, create_tz, timestamp, timestamp, to_unix_ms, from_unix_ms, gen_random, ellipsis
+   :members: RedisSettings, RedisMixin, create_tz, timestamp, timestamp, to_unix_ms_tz, to_unix_ms, from_unix_ms, gen_random, ellipsis
 
 .. automodule:: arq.testing
    :members:

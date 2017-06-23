@@ -135,9 +135,9 @@ def timestamp() -> float:
     return (datetime.utcnow() - EPOCH).total_seconds()
 
 
-def to_unix_ms(dt: datetime) -> Tuple[int, Union[int, None]]:
+def to_unix_ms_tz(dt: datetime) -> Tuple[int, Union[int, None]]:
     """
-    convert a datetime to number of milliseconds since 1970
+    convert a datetime to number of milliseconds since 1970 and calculate timezone offset
     :param dt: datetime to evaluate
     :return: tuple - (unix time in milliseconds, utc offset in seconds)
     """
@@ -148,6 +148,15 @@ def to_unix_ms(dt: datetime) -> Tuple[int, Union[int, None]]:
         return int(unix * 1000), int(_utcoffset)
     else:
         return int((dt - EPOCH).total_seconds() * 1000), None
+
+
+def to_unix_ms(dt: datetime) -> int:
+    """
+    convert a datetime to number of milliseconds since 1970
+    :param dt: datetime to evaluate
+    :return: unix time in milliseconds
+    """
+    return to_unix_ms_tz(dt)[0]
 
 
 def from_unix_ms(ms: int, utcoffset: int=None) -> datetime:

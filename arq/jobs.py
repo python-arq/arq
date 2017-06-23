@@ -8,7 +8,7 @@ from datetime import datetime
 
 import msgpack
 
-from .utils import DEFAULT_CURTAIL, ellipsis, from_unix_ms, timestamp, to_unix_ms
+from .utils import DEFAULT_CURTAIL, ellipsis, from_unix_ms, timestamp, to_unix_ms_tz
 
 __all__ = ['JobSerialisationError', 'Job', 'DatetimeJob']
 
@@ -122,7 +122,7 @@ class DatetimeJob(Job):
     @classmethod
     def msgpack_encoder(cls, obj):
         if isinstance(obj, datetime):
-            ts, tz = to_unix_ms(obj)
+            ts, tz = to_unix_ms_tz(obj)
             result = {DEVICE_CONTROL_TWO: ts}
             if tz is not None:
                 result[TIMEZONE] = tz

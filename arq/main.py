@@ -158,7 +158,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
             for cron_job, run_at in to_run:
                 if cron_job.unique:
                     sentinel_key = self.CRON_SENTINEL_PREFIX + f'{self.name}.{cron_job.__name__}'.encode()
-                    sentinel_value = str(to_unix_ms(run_at)[0]).encode()
+                    sentinel_value = str(to_unix_ms(run_at)).encode()
                     v, _ = await asyncio.gather(
                         redis.getset(sentinel_key, sentinel_value),
                         redis.expire(sentinel_key, 3600),

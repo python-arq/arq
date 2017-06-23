@@ -3,10 +3,12 @@
 History
 -------
 
-v0.9.0 (2017-XX-XX)
+v0.9.0 (2017-06-23)
 ...................
 * allow set encoding in msgpack for jobs #49
 * cron tasks allowing scheduling of functions in the future #50
+* **Breaking change:** switch ``to_unix_ms`` to just return the timestamp int, add ``to_unix_ms_tz`` to
+  return tz offset too
 
 v0.8.1 (2017-06-05)
 ...................
