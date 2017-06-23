@@ -185,7 +185,7 @@ def gen_random(length: int=20) -> bytes:
 DEFAULT_CURTAIL = 80
 
 
-def ellipsis(s: str, length: int=DEFAULT_CURTAIL) -> str:
+def truncate(s: str, length: int=DEFAULT_CURTAIL) -> str:
     """
     Truncate a string and add an ellipsis (three dots) to the end if it was too long
 

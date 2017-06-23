@@ -22,7 +22,7 @@ from .drain import Drain
 from .jobs import ArqError, Job
 from .logs import default_log_config
 from .main import Actor  # noqa
-from .utils import RedisMixin, ellipsis, timestamp
+from .utils import RedisMixin, timestamp, truncate
 
 __all__ = ['BaseWorker', 'RunWorkerProcess', 'StopJob', 'import_string']
 
@@ -327,7 +327,7 @@ class BaseWorker(RedisMixin):
         if not jobs_logger.isEnabledFor(logging.INFO):
             return
         job_time = timestamp() - started_at
-        sr = '' if result is None else ellipsis(repr(result), self.log_curtail)
+        sr = '' if result is None else truncate(repr(result), self.log_curtail)
         jobs_logger.info('%-4s ran in%7.3fs ← %s.%s ● %s', j.queue, job_time, j.class_name, j.func_name, sr)
 
     def handle_prepare_exc(self, msg: str):

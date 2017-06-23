@@ -8,7 +8,7 @@ from datetime import datetime
 
 import msgpack
 
-from .utils import DEFAULT_CURTAIL, ellipsis, from_unix_ms, timestamp, to_unix_ms_tz
+from .utils import DEFAULT_CURTAIL, from_unix_ms, timestamp, to_unix_ms_tz, truncate
 
 __all__ = ['JobSerialisationError', 'Job', 'DatetimeJob']
 
@@ -100,7 +100,7 @@ class Job:
                 arguments += ', '
             arguments += ', '.join(f'{k}={v!r}' for k, v in sorted(self.kwargs.items()))
 
-        return '{s.class_name}.{s.func_name}({args})'.format(s=self, args=ellipsis(arguments, args_curtail))
+        return '{s.class_name}.{s.func_name}({args})'.format(s=self, args=truncate(arguments, args_curtail))
 
     def __str__(self):
         return self.to_string()
