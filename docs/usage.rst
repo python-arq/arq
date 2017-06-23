@@ -70,7 +70,7 @@ Functions can be scheduled to be run periodically at specific times
 
 See :meth:`arq.main.cron` for details on the available arguments and how how cron works.
 
-Usage roughly shadows `cron <https://helpmanual.io/man8/cron/>`_ except ``None`` is equivilent on ``*`` in crontab.
+Usage roughly shadows `cron <https://helpmanual.io/man8/cron/>`_ except ``None`` is equivalent on ``*`` in crontab.
 As per the example sets can be used to run at multiple of the given unit.
 
 Note that ``second`` defaults to ``0`` so you don't in inadvertently run jobs every second and ``microsecond``
