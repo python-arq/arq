@@ -61,6 +61,22 @@ Where the items have the following meaning:
 * ``j_ongoing`` the number of jobs currently being performed
 * ``q_*`` the number of pending jobs in each queue
 
+Cron Jobs
+.........
+
+Functions can be scheduled to be run periodically at specific times
+
+.. literalinclude:: examples/cron.py
+
+See :meth:`arq.main.cron` for details on the available arguments and how how cron works.
+
+Usage roughly shadows `cron <https://helpmanual.io/man8/cron/>`_ except ``None`` is equivilent on ``*`` in crontab.
+As per the example sets can be used to run at multiple of the given unit.
+
+Note that ``second`` defaults to ``0`` so you don't in inadvertently run jobs every second and ``microsecond``
+defaults to ``123456`` so you don't inadvertently run jobs every microsecond and so *arq* avoids enqueuing jobs
+at the top of a second when the world is generally slightly busier.
+
 Multiple Queues
 ...............
 

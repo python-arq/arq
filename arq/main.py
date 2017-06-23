@@ -291,25 +291,24 @@ class CronJob(Bindable):
 
 
 def cron(*,
-         dft_queue=None,
-         run_at_startup=False,
-         unique=True,
          month: Union[None, set, int]=None,
          day: Union[None, set, int]=None,
          weekday: Union[None, set, int, str]=None,
          hour: Union[None, set, int]=None,
          minute: Union[None, set, int]=None,
          second: Union[None, set, int]=0,
-         microsecond: int=123456):
+         microsecond: int=123456,
+         dft_queue=None,
+         run_at_startup=False,
+         unique=True):
     """
+    Decorator which defines a functions as a cron job, eg. it should be executed at specific times.
 
-    Decorator which defines a functions as a cron job, eg. it should be executed at specific times...
+    Workers will enqueue this job at or just after the set times. If ``unique`` is true (the default) the
+    job will only be enqueued once even if multiple workers are running.
 
     If you wish to call the function directly you can access the original function at ``<func>.direct``.
 
-    :param dft_queue: default queue to use
-    :param run_at_startup: whether to run as worker starts
-    :param unique: whether the job should be only be executed on one worker.
     :param month: month(s) to run the job on, 1 - 12
     :param day: day(s) to run the job on, 1 - 31
     :param weekday: week day(s) to run the job on, 0 - 6 or mon - sun
@@ -317,7 +316,10 @@ def cron(*,
     :param minute: minute(s) to run the job on, 0 - 59
     :param second: second(s) to run the job on, 0 - 59
     :param microsecond: microsecond(s) to run the job on,
-        defaults to 123456 as the world is busier at the top of a second 0 - 1e6
+        defaults to 123456 as the world is busier at the top of a second, 0 - 1e6
+    :param dft_queue: default queue to use
+    :param run_at_startup: whether to run as worker starts
+    :param unique: whether the job should be only be executed once at each time
     """
 
     return lambda f: CronJob(
