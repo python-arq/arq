@@ -6,7 +6,7 @@ Usage is best described by example.
 Simple Usage
 ............
 
-.. literalinclude:: demo.py
+.. literalinclude:: examples/main_demo.py
 
 (This script is complete, it should run "as is" both to enqueue jobs and run them)
 
@@ -67,18 +67,7 @@ Multiple Queues
 Functions can be assigned to different queues, by default arq defines three queues:
 ``HIGH_QUEUE``, ``DEFAULT_QUEUE`` and ``LOW_QUEUE`` which are prioritised by the worker in that order.
 
-.. code:: python
-
-    from arq import Actor, concurrent
-
-    class RegistrationEmail(Actor):
-        @concurrent
-        async def email_standard_user(self, user_id):
-            send_user_email(user_id)
-
-        @concurrent(Actor.HIGH_QUEUE)
-        async def email_premium_user(self, user_id):
-            send_user_email(user_id)
+.. literalinclude:: examples/multiple_queues.py
 
 (Just a snippet, won't run "as is")
 
@@ -87,18 +76,7 @@ Direct Enqueuing
 
 Functions can we enqueued directly whether or no they're decorated with ``@concurrent``.
 
-.. code:: python
-
-    from arq import Actor, concurrent
-
-    class FooBar(Actor):
-        async def foo(self, a, b, c):
-            print(a + b + c)
-
-    async def main():
-        foobar = FooBar()
-        await foobar.enqueue_job('foo', 1, 2, c=48, queue=Actor.LOW_QUEUE)
-        await foobar.enqueue_job('foo', 1, 2, c=48)  # this will be queued in DEFAULT_QUEUE
+.. literalinclude:: examples/direct_enqueuing.py
 
 
 (This script is almost complete except for ``loop.run_until_complete(main())`` as above to run ``main``,
@@ -112,31 +90,7 @@ Worker Customisation
 Workers can be customised in numerous ways, this is preferred to command line arguments as it's easier to
 document and record.
 
-.. code:: python
-
-    from arq import BaseWorker
-
-    class Worker(BaseWorker):
-        # execute jobs from both Downloader and FooBar above
-        shadows = [Downloader, FooBar]
-
-        # allow lots and lots of jobs to run simultaniously, default 50
-        max_concurrent_tasks = 500
-
-        # force the worker to close quickly after a termination signal is received, default 6
-        shutdown_delay = 2
-
-        # jobs may not take more than 10 seconds, default 60
-        timeout_seconds = 10
-
-        # number of seconds between health checks, default 60
-        health_check_interval = 30
-
-        def logging_config(self, verbose):
-            conf = super().logging_config(verbose)
-            # alter logging setup to set arq.jobs level to WARNING
-            conf['loggers']['arq.jobs']['level'] = 'WARNING'
-            return conf
+.. literalinclude:: examples/worker_customisation.py
 
 (This script is more-or-less complete,
 provided ``Downloader`` and ``FooBar`` are defined and imported it should run "as is")

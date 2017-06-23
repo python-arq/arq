@@ -1,3 +1,5 @@
+.DEFAULT_GOAL := html
+
 # You can set these variables from the command line.
 SPHINXOPTS    = -W
 SPHINXBUILD   = sphinx-build

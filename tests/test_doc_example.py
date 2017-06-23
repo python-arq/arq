@@ -5,7 +5,7 @@ THIS_DIR = Path(__file__).parent
 
 
 async def test_run_job_burst(redis_conn, loop, caplog):
-    demo = SourceFileLoader('demo', str(THIS_DIR / '../docs/demo.py')).load_module()
+    demo = SourceFileLoader('demo', str(THIS_DIR / '../docs/examples/main_demo.py')).load_module()
     worker = demo.Worker(burst=True, loop=loop)
 
     downloader = demo.Downloader(loop=loop)
