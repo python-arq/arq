@@ -168,14 +168,16 @@ class BaseWorker(RedisMixin):
                            f'queues: {self.queues}, combined shadow queue lookups: {q_lookup}') from e
         return [r for r, q in queues], dict(queues)
 
-    def run_until_complete(self):
-        self.loop.run_until_complete(self.run())
+    def run_until_complete(self, log_redis_version=False):
+        self.loop.run_until_complete(self.run(log_redis_version))
 
-    async def run(self):
+    async def run(self, log_redis_version=False):
         """
         Main entry point for the the worker which initialises shadows, checks they look ok then runs ``work`` to
         perform jobs.
         """
+        if log_redis_version:
+            await self.log_redis_info(work_logger.info)
         self._stopped = False
         work_logger.info('Initialising work manager, burst mode: %s, creating shadows...', self._burst_mode)
 
@@ -429,7 +431,7 @@ def start_worker(worker_path: str, worker_class: str, burst: bool, loop: asyncio
     work_logger.info('Starting "%s" on pid=%d', worker_cls.__name__, os.getpid())
     worker = worker_cls(burst=burst, loop=loop)
     try:
-        worker.run_until_complete()
+        worker.run_until_complete(log_redis_version=True)
     except HandledExit:
         work_logger.debug('worker exited with well handled exception')
         pass

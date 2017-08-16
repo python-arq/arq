@@ -100,6 +100,18 @@ class RedisMixin:
         pool = await self.get_redis_pool()
         return pool.get()
 
+    async def log_redis_info(self, log_func):
+        pool = await self.get_redis_pool()
+        async with pool.get() as redis:
+            info = await redis.info()
+            # from pprint import pprint
+            # pprint(info)
+            log_func(
+                f'redis version: {info["server"]["redis_version"]}, '
+                f'mem. usage: {info["memory"]["used_memory_human"]}, '
+                f'clients connected: {info["clients"]["connected_clients"]}, '
+            )
+
     async def close(self):
         """
         Close the pool and wait for all connections to close.
