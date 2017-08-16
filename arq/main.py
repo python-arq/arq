@@ -120,11 +120,11 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         if self._concurrency_enabled:
             # use the pool directly rather than get_redis_conn to avoid one extra await
             pool = self._redis_pool or await self.get_redis_pool()
-            main_logger.debug('%s.%s ▶ %s', self.name, func_name, queue)
+            main_logger.debug('%s.%s → %s', self.name, func_name, queue)
             async with pool.get() as redis:
                 await self.job_future(redis, queue, func_name, *args, **kwargs)
         else:
-            main_logger.debug('%s.%s ▶ %s (called directly)', self.name, func_name, queue)
+            main_logger.debug('%s.%s → %s (called directly)', self.name, func_name, queue)
             data = self.job_class.encode(class_name=self.name, func_name=func_name, args=args, kwargs=kwargs)
             j = self.job_class(data, queue_name=queue)
             await getattr(self, j.func_name).direct(*j.args, **j.kwargs)

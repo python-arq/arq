@@ -54,8 +54,8 @@ async def test_dispatch_work(tmpworkdir, loop, caplog, redis_conn):
     assert None is await actor.high_add_numbers(3, 4, c=5)
     assert len(actor.mock_data[b'arq:q:dft']) == 1
     assert len(actor.mock_data[b'arq:q:high']) == 1
-    assert caplog.log == ('MockRedisDemoActor.add_numbers ▶ dft\n'
-                          'MockRedisDemoActor.high_add_numbers ▶ high\n')
+    assert caplog.log == ('MockRedisDemoActor.add_numbers → dft\n'
+                          'MockRedisDemoActor.high_add_numbers → high\n')
     worker = MockRedisWorker(burst=True, loop=actor.loop)
     worker.mock_data = actor.mock_data
     assert not tmpworkdir.join('add_numbers').exists()
@@ -66,8 +66,8 @@ async def test_dispatch_work(tmpworkdir, loop, caplog, redis_conn):
     log = re.sub(r'\d{4}-\d+-\d+ \d+:\d+:\d+', '<date time>', log)
     log = re.sub(r'\w{3}-\d+ \d+:\d+:\d+', '<date time2>', log)
     print(log)
-    assert ('MockRedisDemoActor.add_numbers ▶ dft\n'
-            'MockRedisDemoActor.high_add_numbers ▶ high\n'
+    assert ('MockRedisDemoActor.add_numbers → dft\n'
+            'MockRedisDemoActor.high_add_numbers → high\n'
             'Initialising work manager, burst mode: True, creating shadows...\n'
             'Using first shadows job class "Job"\n'
             'Running worker with 1 shadow listening to 3 queues\n'
