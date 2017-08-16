@@ -74,7 +74,7 @@ class RedisMixin:
         addr = self.redis_settings.host, self.redis_settings.port
         try:
             with timeout(self.redis_settings.conn_timeout):
-                return await aioredis.create_pool(addr, loop=self.loop, db=self.redis_settings.database,
+                pool = await aioredis.create_pool(addr, loop=self.loop, db=self.redis_settings.database,
                                                   password=self.redis_settings.password)
         except (ConnectionError, OSError, aioredis.RedisError, asyncio.TimeoutError) as e:
             if _retry < self.redis_settings.conn_retries:
@@ -84,6 +84,10 @@ class RedisMixin:
                 return await self.create_redis_pool(_retry=_retry + 1)
             else:
                 raise
+        else:
+            if _retry > 0:
+                logger.warning('redis connection successful')
+            return pool
 
     async def get_redis_pool(self) -> RedisPool:
         """

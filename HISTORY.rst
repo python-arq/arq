@@ -3,6 +3,11 @@
 History
 -------
 
+v0.9.1 (2017-08-16)
+...................
+* log redis version when starting worker, fix #64
+* log "connection success" when connecting to redis after connection failures, fix #67
+
 v0.9.0 (2017-06-23)
 ...................
 * allow set encoding in msgpack for jobs #49

@@ -62,6 +62,19 @@ async def test_redis_timeout(loop, mocker):
     assert arq.utils.asyncio.sleep.call_count == 5
 
 
+async def test_redis_success_log(loop, caplog):
+    r = RedisMixin(loop=loop)
+    pool = await r.create_redis_pool()
+    assert 'redis connection successful' not in caplog
+    pool.close()
+    await pool.wait_closed()
+
+    pool = await r.create_redis_pool(_retry=1)
+    assert 'redis connection successful' not in caplog
+    pool.close()
+    await pool.wait_closed()
+
+
 @pytest.mark.parametrize('previous,expected,kwargs', [
     (
         datetime(2016, 6, 1, 12, 10, 10),
