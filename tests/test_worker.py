@@ -264,16 +264,16 @@ async def test_job_timeout(loop, caplog):
     worker.mock_data = actor.mock_data
     await worker.run()
     log = caplog(
-        ('(\d.\d\d)\d', r'\1X'),
+        (r'(\d\.\d)\d\ds', r'\1XXs'),
     )
     print(log)
-    assert ('arq.jobs: dft  queued  0.00Xs → MockRedisDemoActor.sleeper(0.2)\n'
-            'arq.jobs: dft  queued  0.00Xs → MockRedisDemoActor.sleeper(0.05)\n'
-            'arq.jobs: dft  ran in  0.05Xs ← MockRedisDemoActor.sleeper ● 0.05\n'
+    assert ('arq.jobs: dft  queued  0.0XXs → MockRedisDemoActor.sleeper(0.2)\n'
+            'arq.jobs: dft  queued  0.0XXs → MockRedisDemoActor.sleeper(0.05)\n'
+            'arq.jobs: dft  ran in  0.0XXs ← MockRedisDemoActor.sleeper ● 0.05\n'
             'arq.jobs: task timed out <Job MockRedisDemoActor.sleeper(0.2) on dft>\n'
-            'arq.jobs: dft  ran in  0.10Xs ! MockRedisDemoActor.sleeper(0.2): CancelledError\n') in log
+            'arq.jobs: dft  ran in  0.1XXs ! MockRedisDemoActor.sleeper(0.2): CancelledError\n') in log
     assert ('concurrent.futures._base.CancelledError\n'
-            'arq.work: shutting down worker after 0.10Xs ◆ 2 jobs done ◆ 1 failed ◆ 1 timed out\n') in log
+            'arq.work: shutting down worker after 0.1XXs ◆ 2 jobs done ◆ 1 failed ◆ 1 timed out\n') in log
 
 
 def test_repeat_worker_close(tmpworkdir, redis_conn, caplog):
