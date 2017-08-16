@@ -75,6 +75,21 @@ async def test_redis_success_log(loop, caplog):
     await pool.wait_closed()
 
 
+async def test_redis_log(loop, caplog):
+    r = RedisMixin(loop=loop)
+
+    log_msgs = []
+
+    def _log(s):
+        log_msgs.append(s)
+
+    await r.log_redis_info(_log)
+    await r.close()
+    print(log_msgs)
+    assert len(log_msgs) == 1
+    assert 'redis version: 3.' in log_msgs[0]
+
+
 @pytest.mark.parametrize('previous,expected,kwargs', [
     (
         datetime(2016, 6, 1, 12, 10, 10),

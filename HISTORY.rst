@@ -3,6 +3,10 @@
 History
 -------
 
+v0.10.1 (2017-08-16)
+....................
+* correct format of ``log_redis_info``
+
 v0.10.0 (2017-08-16)
 ....................
 * log redis version when starting worker, fix #64
