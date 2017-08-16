@@ -4,6 +4,8 @@
 
 Defines the ``Job`` class and descendants which deal with encoding and decoding job data.
 """
+import base64
+import os
 from datetime import datetime
 
 import msgpack
@@ -21,6 +23,15 @@ class JobSerialisationError(ArqError):
     pass
 
 
+def gen_random():
+    """
+    generate a lowercase alpha-numeric random string of length 24.
+
+    Should have more randomness for its size thank uuid
+    """
+    return base64.b32encode(os.urandom(10))[:16].decode().lower()
+
+
 # "device control one" should be fairly unique as a dict key and only one byte
 DEVICE_CONTROL_ONE = '\x11'
 
@@ -30,7 +41,7 @@ class Job:
     Main Job class responsible for encoding and decoding jobs as they go
     into and come out of redis.
     """
-    __slots__ = ('queue', 'queued_at', 'class_name', 'func_name', 'args', 'kwargs', 'raw_queue', 'raw_data')
+    __slots__ = 'id', 'queue', 'queued_at', 'class_name', 'func_name', 'args', 'kwargs', 'raw_queue', 'raw_data'
 
     def __init__(self, raw_data: bytes, *, queue_name: str=None, raw_queue: bytes=None) -> None:
         """
@@ -45,16 +56,17 @@ class Job:
             raise ArqError('either queue_name or raw_queue are required')
         self.queue = queue_name or raw_queue.decode()
         self.raw_queue = raw_queue or queue_name.encode()
-        self.queued_at, self.class_name, self.func_name, self.args, self.kwargs = self._decode(raw_data)
+        self.queued_at, self.class_name, self.func_name, self.args, self.kwargs, self.id = self.decode_raw(raw_data)
         self.queued_at /= 1000
 
     @classmethod
-    def encode(cls, *, queued_at: int=None, class_name: str, func_name: str,
+    def encode(cls, *, job_id: str=None, queued_at: int=None, class_name: str, func_name: str,
                args: tuple, kwargs: dict) -> bytes:
         """
         Create a byte string suitable for pushing into redis which contains all
         required information about a job to be performed.
 
+        :param job_id: id to use for the job, leave blank to generate a uuid
         :param queued_at: time in ms unix time when the job was queue, if None now is used
         :param class_name: name (see :attr:`arq.main.Actor.name`) of the actor class where the job is defined
         :param func_name: name of the function be called
@@ -63,9 +75,13 @@ class Job:
         """
         queued_at = queued_at or int(timestamp() * 1000)
         try:
-            return cls._encode([queued_at, class_name, func_name, args, kwargs])
+            return cls.encode_raw([queued_at, class_name, func_name, args, kwargs, cls.generate_id(job_id)])
         except TypeError as e:
             raise JobSerialisationError(str(e)) from e
+
+    @classmethod
+    def generate_id(cls, given_id):
+        return given_id or gen_random()
 
     @classmethod
     def msgpack_encoder(cls, obj):
@@ -84,11 +100,11 @@ class Job:
         return obj
 
     @classmethod
-    def _encode(cls, data) -> bytes:
+    def encode_raw(cls, data) -> bytes:
         return msgpack.packb(data, default=cls.msgpack_encoder, use_bin_type=True)
 
     @classmethod
-    def _decode(cls, data: bytes):
+    def decode_raw(cls, data: bytes):
         return msgpack.unpackb(data, object_hook=cls.msgpack_object_hook, encoding='utf8')
 
     def to_string(self, args_curtail=DEFAULT_CURTAIL):
@@ -100,7 +116,10 @@ class Job:
                 arguments += ', '
             arguments += ', '.join(f'{k}={v!r}' for k, v in sorted(self.kwargs.items()))
 
-        return '{s.class_name}.{s.func_name}({args})'.format(s=self, args=truncate(arguments, args_curtail))
+        return '{s.id:.6} {s.class_name}.{s.func_name}({args})'.format(s=self, args=truncate(arguments, args_curtail))
+
+    def short_ref(self):
+        return '{s.id:.6} {s.class_name}.{s.func_name}'.format(s=self)
 
     def __str__(self):
         return self.to_string()

@@ -13,5 +13,9 @@ async def test_run_job_burst(redis_conn, loop, caplog):
     await downloader.download_content('http://example.com')
     await worker.run()
     await downloader.close()
-    assert 's → Downloader.download_content(http://example.com)' in caplog
-    assert 's ← Downloader.download_content ● 1' in caplog
+    log = caplog(
+        (' [0-9a-z]{6} ', ' __id__ ')
+    )
+    print(log)
+    assert 's → __id__ Downloader.download_content(http://example.com)' in log
+    assert 's ← __id__ Downloader.download_content ● 1' in log

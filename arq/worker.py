@@ -330,7 +330,7 @@ class BaseWorker(RedisMixin):
             return
         job_time = timestamp() - started_at
         sr = '' if result is None else truncate(repr(result), self.log_curtail)
-        jobs_logger.info('%-4s ran in%7.3fs ← %s.%s ● %s', j.queue, job_time, j.class_name, j.func_name, sr)
+        jobs_logger.info('%-4s ran in%7.3fs ← %s ● %s', j.queue, job_time, j.short_ref(), sr)
 
     def handle_prepare_exc(self, msg: str):
         self.drain.jobs_failed += 1
@@ -341,10 +341,10 @@ class BaseWorker(RedisMixin):
     @classmethod
     def handle_stop_job(cls, started_at: float, exc: StopJob, j: Job):
         if exc.warning:
-            msg, logger = '%-4s ran in%7.3fs ■ %s.%s ● Stopped Warning %s', jobs_logger.warning
+            msg, logger = '%-4s ran in%7.3fs ■ %s ● Stopped Warning %s', jobs_logger.warning
         else:
-            msg, logger = '%-4s ran in%7.3fs ■ %s.%s ● Stopped %s', jobs_logger.info
-        logger(msg, j.queue, timestamp() - started_at, j.class_name, j.func_name, exc)
+            msg, logger = '%-4s ran in%7.3fs ■ %s ● Stopped %s', jobs_logger.info
+        logger(msg, j.queue, timestamp() - started_at, j.short_ref(), exc)
 
     @classmethod
     def handle_execute_exc(cls, started_at: float, exc: BaseException, j: Job):

@@ -24,7 +24,7 @@ async def test_simple_job_dispatch(tmpworkdir, loop, debug):
     data = msgpack.unpackb(v[0], encoding='utf8')
     # timestamp
     assert 1e12 < data.pop(0) < 3e12
-    assert data == ['MockRedisDemoActor', 'add_numbers', [1, 2], {}]
+    assert data == ['MockRedisDemoActor', 'add_numbers', [1, 2], {}, '__id__']
 
 
 async def test_concurrency_disabled_job_dispatch(tmpworkdir, loop):
@@ -44,7 +44,7 @@ async def test_enqueue_redis_job(actor, redis_conn):
     data = msgpack.unpackb(dft_queue[0], encoding='utf8')
     # timestamp
     assert 1e12 < data.pop(0) < 3e12
-    assert data == ['DemoActor', 'add_numbers', [1, 2], {}]
+    assert data == ['DemoActor', 'add_numbers', [1, 2], {}, '__id__']
 
 
 async def test_dispatch_work(tmpworkdir, loop, caplog, redis_conn):
@@ -69,22 +69,22 @@ async def test_dispatch_work(tmpworkdir, loop, caplog, redis_conn):
     assert ('MockRedisDemoActor.add_numbers → dft\n'
             'MockRedisDemoActor.high_add_numbers → high\n'
             'Initialising work manager, burst mode: True, creating shadows...\n'
-            'Using first shadows job class "Job"\n'
+            'Using first shadows job class "JobConstID"\n'
             'Running worker with 1 shadow listening to 3 queues\n'
             'shadows: MockRedisDemoActor | queues: high, dft, low\n'
             'recording health: <date time2> j_complete=0 j_failed=0 j_timedout=0 j_ongoing=0 q_high=1 q_dft=1 q_low=0\n'
             'starting main blpop loop\n'
             'populating quit queue to prompt exit: arq:quit-<random>\n'
             'jobs in progress 1\n'
-            'scheduling job <Job MockRedisDemoActor.high_add_numbers(3, 4, c=5) on high>, re-enqueue: False\n'
+            'scheduling job <Job __id__ MockRedisDemoActor.high_add_numbers(3, 4, c=5) on high>, re-enqueue: False\n'
             'jobs in progress 2\n'
-            'scheduling job <Job MockRedisDemoActor.add_numbers(1, 2) on dft>, re-enqueue: False\n'
+            'scheduling job <Job __id__ MockRedisDemoActor.add_numbers(1, 2) on dft>, re-enqueue: False\n'
             'got job from the quit queue, stopping\n'
             'drain waiting 5.0s for 2 tasks to finish\n'
-            'high queued  0.0XXs → MockRedisDemoActor.high_add_numbers(3, 4, c=5)\n'
-            'high ran in  0.0XXs ← MockRedisDemoActor.high_add_numbers ● 12\n'
-            'dft  queued  0.0XXs → MockRedisDemoActor.add_numbers(1, 2)\n'
-            'dft  ran in  0.0XXs ← MockRedisDemoActor.add_numbers ● \n'
+            'high queued  0.0XXs → __id__ MockRedisDemoActor.high_add_numbers(3, 4, c=5)\n'
+            'high ran in  0.0XXs ← __id__ MockRedisDemoActor.high_add_numbers ● 12\n'
+            'dft  queued  0.0XXs → __id__ MockRedisDemoActor.add_numbers(1, 2)\n'
+            'dft  ran in  0.0XXs ← __id__ MockRedisDemoActor.add_numbers ● \n'
             'task complete, 1 jobs done, 0 failed\n'
             'task complete, 2 jobs done, 0 failed\n'
             'shutting down worker after 0.0XXs ◆ 2 jobs done ◆ 0 failed ◆ 0 timed out\n') == log
@@ -109,8 +109,8 @@ async def test_handle_exception(loop, caplog):
             'shadows: MockRedisDemoActor | queues: high, dft, low\n'
             'recording health: <date time2> j_complete=0 j_failed=0 j_timedout=0 j_ongoing=0 q_high=0 q_dft=1 q_low=0\n'
             'drain waiting 5.0s for 1 tasks to finish\n'
-            'dft  queued  0.0XXs → MockRedisDemoActor.boom()\n'
-            'dft  ran in  0.0XXs ! MockRedisDemoActor.boom(): RuntimeError\n'
+            'dft  queued  0.0XXs → __id__ MockRedisDemoActor.boom()\n'
+            'dft  ran in  0.0XXs ! __id__ MockRedisDemoActor.boom(): RuntimeError\n'
             'Traceback (most recent call last):\n'
             '  File "/path/to/arq/worker.py", line <no>, in run_job\n'
             '    result = await func(*j.args, **j.kwargs)\n'
@@ -157,8 +157,8 @@ async def test_call_direct(mock_actor_worker, caplog):
     assert worker.jobs_failed == 0
     assert worker.jobs_complete == 1
     log = re.sub('0.0\d\ds', '0.0XXs', caplog.log)
-    assert ('arq.jobs: dft  queued  0.0XXs → MockRedisDemoActor.direct_method(1, 2)\n'
-            'arq.jobs: dft  ran in  0.0XXs ← MockRedisDemoActor.direct_method ● 3') in log
+    assert ('arq.jobs: dft  queued  0.0XXs → __id__ MockRedisDemoActor.direct_method(1, 2)\n'
+            'arq.jobs: dft  ran in  0.0XXs ← __id__ MockRedisDemoActor.direct_method ● 3') in log
 
 
 async def test_direct_binding(mock_actor_worker, caplog):

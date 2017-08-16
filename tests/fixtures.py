@@ -6,12 +6,20 @@ import signal
 import time
 from pathlib import Path
 
-from arq import Actor, BaseWorker, StopJob, concurrent, cron
+from arq import Actor, BaseWorker, Job, StopJob, concurrent, cron
 from arq.drain import Drain
 from arq.testing import MockRedisMixin
 
 
+class JobConstID(Job):
+    @classmethod
+    def generate_id(cls, given_id):
+        return '__id__'
+
+
 class DemoActor(Actor):
+    job_class = JobConstID
+
     @concurrent
     async def add_numbers(self, a, b):
         """add_number docs"""
@@ -88,6 +96,10 @@ class DemoActor(Actor):
         raise StopJob('stopping job with warning', warning=True)
 
 
+class RealJobActor(DemoActor):
+    job_class = Job
+
+
 class MockRedisDemoActor(MockRedisMixin, DemoActor):
     pass
 
@@ -97,6 +109,8 @@ class Worker(BaseWorker):
 
 
 class StartupActor(Actor):
+    job_class = JobConstID
+
     async def startup(self):
         with open('events', 'a') as f:
             f.write('startup[{}],'.format(self.is_shadow))
@@ -190,6 +204,7 @@ class ReEnqueueActor(DemoActor):
 
 class CronActor(Actor):
     # using 3:0:0 makes it very unlikely the job will be caused due hitting the right time
+    job_class = JobConstID
 
     @cron(hour=3, minute=0, second=0, run_at_startup=True)
     async def save_foobar(self):

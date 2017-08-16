@@ -7,7 +7,7 @@ import pytz
 from arq.jobs import DatetimeJob, Job, JobSerialisationError
 from arq.worker import BaseWorker
 
-from .fixtures import DemoActor
+from .fixtures import DemoActor, RealJobActor
 
 
 class DatetimeActor(DemoActor):
@@ -77,7 +77,7 @@ async def test_encode_non_datetimes(tmpworkdir, loop, redis_conn):
 
 
 async def test_wrong_job_class(loop):
-    worker = DatetimeWorker(loop=loop, burst=True, shadows=[DemoActor, DemoActor, DatetimeActor])
+    worker = DatetimeWorker(loop=loop, burst=True, shadows=[RealJobActor, RealJobActor, DatetimeActor])
     with pytest.raises(TypeError) as excinfo:
         await worker.run()
     assert excinfo.value.args[0].endswith("has a different job class to the first shadow, "
@@ -99,7 +99,7 @@ async def test_wrong_queues(loop):
 
 
 async def test_switch_job_class(loop):
-    worker = DatetimeWorker(loop=loop, burst=True, shadows=[DemoActor])
+    worker = DatetimeWorker(loop=loop, burst=True, shadows=[RealJobActor])
     assert worker.job_class is None
     await worker.run()
     assert worker.job_class == Job
@@ -109,8 +109,8 @@ async def test_switch_job_class(loop):
 def test_naïve_dt_encoding():
     t = datetime(2000, 1, 1)
     assert str(t) == '2000-01-01 00:00:00'
-    p = DatetimeJob._encode(t)
-    t2 = DatetimeJob._decode(p)
+    p = DatetimeJob.encode_raw(t)
+    t2 = DatetimeJob.decode_raw(p)
     assert t == t2
     assert str(t2) == '2000-01-01 00:00:00'
 
@@ -118,8 +118,8 @@ def test_naïve_dt_encoding():
 def test_utc_dt_encoding():
     t = datetime(2000, 1, 1, tzinfo=timezone.utc)
     assert str(t) == '2000-01-01 00:00:00+00:00'
-    p = DatetimeJob._encode(t)
-    t2 = DatetimeJob._decode(p)
+    p = DatetimeJob.encode_raw(t)
+    t2 = DatetimeJob.decode_raw(p)
     assert t == t2
     assert str(t2) == '2000-01-01 00:00:00+00:00'
 
@@ -127,8 +127,8 @@ def test_utc_dt_encoding():
 def test_new_york_dt_encoding():
     t = datetime(2000, 1, 1, tzinfo=timezone(timedelta(hours=-5)))
     assert str(t) == '2000-01-01 00:00:00-05:00'
-    p = DatetimeJob._encode(t)
-    t2 = DatetimeJob._decode(p)
+    p = DatetimeJob.encode_raw(t)
+    t2 = DatetimeJob.decode_raw(p)
     assert t == t2
     assert str(t2) == '2000-01-01 00:00:00-05:00'
 
@@ -137,8 +137,8 @@ def test_pytz_new_york_dt_encoding():
     ny = pytz.timezone('America/New_York')
     t = ny.localize(datetime(2000, 1, 1))
     assert str(t) == '2000-01-01 00:00:00-05:00'
-    p = DatetimeJob._encode(t)
-    t2 = DatetimeJob._decode(p)
+    p = DatetimeJob.encode_raw(t)
+    t2 = DatetimeJob.decode_raw(p)
     assert t == t2
     assert datetime(2000, 1, 1, tzinfo=timezone(timedelta(hours=-5))) == t2
     assert str(t2) == '2000-01-01 00:00:00-05:00'
@@ -147,8 +147,8 @@ def test_pytz_new_york_dt_encoding():
 def test_dt_encoding_with_ms():
     t = datetime(2000, 1, 1, 0, 0, 0, 123000)
     assert str(t) == '2000-01-01 00:00:00.123000'
-    p = DatetimeJob._encode(t)
-    t2 = DatetimeJob._decode(p)
+    p = DatetimeJob.encode_raw(t)
+    t2 = DatetimeJob.decode_raw(p)
     assert t == t2
     assert str(t2) == '2000-01-01 00:00:00.123000'
 
@@ -156,8 +156,8 @@ def test_dt_encoding_with_ms():
 def test_dt_encoding_with_μs():
     t = datetime(2000, 1, 1, 0, 0, 0, 123456)
     assert str(t) == '2000-01-01 00:00:00.123456'
-    p = DatetimeJob._encode(t)
-    t2 = DatetimeJob._decode(p)
+    p = DatetimeJob.encode_raw(t)
+    t2 = DatetimeJob.decode_raw(p)
     assert t != t2
     assert (t - t2) == timedelta(microseconds=456)
     assert str(t2) == '2000-01-01 00:00:00.123000'

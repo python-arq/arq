@@ -31,9 +31,10 @@ async def test_long_args(mock_actor_worker, caplog):
     await actor.concat(a=v, b=v)
     await worker.run()
     log = caplog(('0.0\d\ds', '0.0XXs'))
-    assert ("dft  queued  0.0XXs → MockRedisDemoActor.concat"
+    print(log)
+    assert ("dft  queued  0.0XXs → __id__ MockRedisDemoActor.concat"
             "(a='0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19', b='0,1,2,3,4,5,6,7,8,9,1…)\n") in log
-    assert ("dft  ran in  0.0XXs ← MockRedisDemoActor.concat ● "
+    assert ("dft  ran in  0.0XXs ← __id__ MockRedisDemoActor.concat ● "
             "'0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19 + 0,1,2,3,4,5,6,7,8,9,10,11,…\n") in log
 
 
@@ -44,9 +45,9 @@ async def test_longer_args(mock_actor_worker, caplog):
     await actor.concat(a=v, b=v)
     await worker.run()
     log = caplog(('0.0\d\ds', '0.0XXs'))
-    assert ("dft  queued  0.0XXs → MockRedisDemoActor.concat"
+    assert ("dft  queued  0.0XXs → __id__ MockRedisDemoActor.concat"
             "(a='0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19', b='0,1,2,3,4,5,6,7,8,9,10,11,12,13…)\n") in log
-    assert ("dft  ran in  0.0XXs ← MockRedisDemoActor.concat ● "
+    assert ("dft  ran in  0.0XXs ← __id__ MockRedisDemoActor.concat ● "
             "'0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19 + 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,1…\n") in log
 
 
@@ -55,7 +56,7 @@ async def test_stop_job_normal(mock_actor_worker, caplog):
     actor, worker = mock_actor_worker
     await actor.stop_job_normal()
     await worker.run()
-    assert ('arq.jobs INFO: dft  ran in  0.0XXs ■ MockRedisDemoActor.stop_job_normal ● Stopped '
+    assert ('arq.jobs INFO: dft  ran in  0.0XXs ■ __id__ MockRedisDemoActor.stop_job_normal ● Stopped '
             'stopping job normally') in caplog(('0.0\d\ds', '0.0XXs'))
 
 
@@ -64,7 +65,7 @@ async def test_stop_job_warning(mock_actor_worker, caplog):
     actor, worker = mock_actor_worker
     await actor.stop_job_warning()
     await worker.run()
-    assert ('arq.jobs WARNING: dft  ran in  0.0XXs ■ MockRedisDemoActor.stop_job_warning ● Stopped Warning '
+    assert ('arq.jobs WARNING: dft  ran in  0.0XXs ■ __id__ MockRedisDemoActor.stop_job_warning ● Stopped Warning '
             'stopping job with warning') in caplog(('0.0\d\ds', '0.0XXs'))
 
 
@@ -88,7 +89,7 @@ async def test_wrong_worker(mock_actor_worker, loop, caplog):
     assert None is await actor2.concat('a', 'b')
     await worker.run()
     assert worker.jobs_failed == 1
-    assert 'Job Error: unable to find shadow for <Job foobar.concat(a, b) on dft>' in caplog
+    assert 'Job Error: unable to find shadow for <Job __id__ foobar.concat(a, b) on dft>' in caplog
 
 
 async def test_queue_not_found(loop):
@@ -267,11 +268,11 @@ async def test_job_timeout(loop, caplog):
         (r'(\d\.\d)\d\ds', r'\1XXs'),
     )
     print(log)
-    assert ('arq.jobs: dft  queued  0.0XXs → MockRedisDemoActor.sleeper(0.2)\n'
-            'arq.jobs: dft  queued  0.0XXs → MockRedisDemoActor.sleeper(0.05)\n'
-            'arq.jobs: dft  ran in  0.0XXs ← MockRedisDemoActor.sleeper ● 0.05\n'
-            'arq.jobs: task timed out <Job MockRedisDemoActor.sleeper(0.2) on dft>\n'
-            'arq.jobs: dft  ran in  0.1XXs ! MockRedisDemoActor.sleeper(0.2): CancelledError\n') in log
+    assert ('arq.jobs: dft  queued  0.0XXs → __id__ MockRedisDemoActor.sleeper(0.2)\n'
+            'arq.jobs: dft  queued  0.0XXs → __id__ MockRedisDemoActor.sleeper(0.05)\n'
+            'arq.jobs: dft  ran in  0.0XXs ← __id__ MockRedisDemoActor.sleeper ● 0.05\n'
+            'arq.jobs: task timed out <Job __id__ MockRedisDemoActor.sleeper(0.2) on dft>\n'
+            'arq.jobs: dft  ran in  0.1XXs ! __id__ MockRedisDemoActor.sleeper(0.2): CancelledError\n') in log
     assert ('concurrent.futures._base.CancelledError\n'
             'arq.work: shutting down worker after 0.1XXs ◆ 2 jobs done ◆ 1 failed ◆ 1 timed out\n') in log
 

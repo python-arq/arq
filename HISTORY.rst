@@ -3,10 +3,11 @@
 History
 -------
 
-v0.9.1 (2017-08-16)
-...................
+v0.10.0 (2017-08-16)
+....................
 * log redis version when starting worker, fix #64
 * log "connection success" when connecting to redis after connection failures, fix #67
+* add job ids, for now they're just used in logging, fix #53
 
 v0.9.0 (2017-06-23)
 ...................
