@@ -5,8 +5,9 @@ History
 
 v0.10.2 (2017-XX-XX)
 ....................
-* only save job on task in drain if reenqueing
+* only save job on task in drain if re-enqueuing
 * add semaphore timeout to drains
+* add key count to ``log_redis_info``
 
 v0.10.1 (2017-08-16)
 ....................
