@@ -91,8 +91,8 @@ async def test_redis_log(loop):
     await r.close()
     print(log_msgs)
     assert len(log_msgs) == 1
-    assert 'redis version: 3.' in log_msgs[0]
-    assert log_msgs[0].endswith(', clients connected: 1, keys in db: 2')
+    assert 'redis_version=3.' in log_msgs[0]
+    assert log_msgs[0].endswith(' clients_connected=1 db_keys=2')
 
 
 @pytest.mark.parametrize('previous,expected,kwargs', [

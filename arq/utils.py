@@ -109,10 +109,10 @@ class RedisMixin:
         async with pool.get() as redis:
             info, key_count = await asyncio.gather(redis.info(), redis.dbsize())
             log_func(
-                f'redis version: {info["server"]["redis_version"]}, '
-                f'mem. usage: {info["memory"]["used_memory_human"]}, '
-                f'clients connected: {info["clients"]["connected_clients"]}, '
-                f'keys in db: {key_count}'
+                f'redis_version={info["server"]["redis_version"]} '
+                f'mem_usage={info["memory"]["used_memory_human"]} '
+                f'clients_connected={info["clients"]["connected_clients"]} '
+                f'db_keys={key_count}'
             )
 
     async def close(self):
