@@ -117,7 +117,8 @@ class Drain:
         :param re_enqueue: whether or not to re-enqueue the job on finish if the job won't finish in time.
         """
         task = self.loop.create_task(coro(job))
-        task.job = job
+        if re_enqueue:
+            task.job = job
         task.re_enqueue = re_enqueue
 
         task.add_done_callback(self._job_callback)
