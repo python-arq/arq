@@ -3,6 +3,11 @@
 History
 -------
 
+v0.10.2 (2017-XX-XX)
+....................
+* only save job on task in drain if reenqueing
+* add semaphore timeout to drains
+
 v0.10.1 (2017-08-16)
 ....................
 * correct format of ``log_redis_info``

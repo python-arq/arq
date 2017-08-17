@@ -9,6 +9,7 @@ import logging
 from typing import Set  # noqa
 
 from aioredis import RedisPool
+from async_timeout import timeout
 
 from arq.utils import gen_random
 
@@ -34,7 +35,8 @@ class Drain:
                  shutdown_delay: float=6,
                  timeout_seconds: int=60,
                  burst_mode: bool=True,
-                 raise_task_exception: bool=False) -> None:
+                 raise_task_exception: bool=False,
+                 semaphore_timeout: float=60) -> None:
         """
         :param redis_pool: redis pool to get connection from to pop items from list, also used to optionally
             re-enqueue pending jobs on termination
@@ -54,6 +56,7 @@ class Drain:
         self.raise_task_exception = raise_task_exception
         self.pending_tasks: Set[asyncio.futures.Future] = set()
         self.task_exception: Exception = None
+        self.semaphore_timeout = semaphore_timeout
 
         self.jobs_complete, self.jobs_failed, self.jobs_timed_out = 0, 0, 0
         self.running = False
@@ -94,7 +97,13 @@ class Drain:
             await self.redis.rpush(quit_queue, b'1')
             raw_queues = tuple(raw_queues) + (quit_queue,)
         while True:
-            await self.task_semaphore.acquire()
+            try:
+                with timeout(self.semaphore_timeout):
+                    await self.task_semaphore.acquire()
+            except asyncio.TimeoutError:
+                work_logger.warning('task semaphore acquisition timed after %0.1fs', self.semaphore_timeout)
+                continue
+
             if not self.running:
                 break
             msg = await self.redis.blpop(*raw_queues, timeout=pop_timeout)
