@@ -66,6 +66,7 @@ class RedisMixin:
         self.loop = loop or getattr(self, 'loop', None) or asyncio.get_event_loop()
         self.redis_settings = redis_settings or getattr(self, 'redis_settings', None) or RedisSettings()
         self._redis_pool = existing_pool
+        self._create_pool_lock = asyncio.Lock(loop=self.loop)
 
     async def create_redis_pool(self, *, _retry=0) -> RedisPool:
         """
@@ -93,8 +94,9 @@ class RedisMixin:
         """
         Get the redis pool, if a pool is already initialised it's returned, else one is crated.
         """
-        if self._redis_pool is None:
-            self._redis_pool = await self.create_redis_pool()
+        async with self._create_pool_lock:
+            if self._redis_pool is None:
+                self._redis_pool = await self.create_redis_pool()
         return self._redis_pool
 
     async def get_redis_conn(self):

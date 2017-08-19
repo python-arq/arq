@@ -17,6 +17,7 @@ from .jobs import ArqError
 
 __all__ = ['Drain']
 
+# these loggers could do with more sensible names
 work_logger = logging.getLogger('arq.work')
 jobs_logger = logging.getLogger('arq.jobs')
 
@@ -97,6 +98,7 @@ class Drain:
             await self.redis.rpush(quit_queue, b'1')
             raw_queues = tuple(raw_queues) + (quit_queue,)
         while True:
+            work_logger.debug('task semaphore locked: %r', self.task_semaphore.locked())
             try:
                 with timeout(self.semaphore_timeout):
                     await self.task_semaphore.acquire()
@@ -115,7 +117,7 @@ class Drain:
             if self.burst_mode and raw_queue == quit_queue:
                 work_logger.debug('got job from the quit queue, stopping')
                 break
-            work_logger.debug('jobs in progress %d', self.jobs_in_progress)
+            work_logger.debug('yielding job, jobs in progress %d', self.jobs_in_progress)
             yield raw_queue, raw_data
 
     def add(self, coro, job, re_enqueue=False):

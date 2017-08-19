@@ -3,7 +3,12 @@
 History
 -------
 
-v0.10.2 (2017-XX-XX)
+v0.10.3 (2017-08-19)
+....................
+* fix bug with ``RedisMixin.get_redis_pool`` creating multiple queues
+* tweak drain logs
+
+v0.10.2 (2017-08-17)
 ....................
 * only save job on task in drain if re-enqueuing
 * add semaphore timeout to drains
