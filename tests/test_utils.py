@@ -15,6 +15,8 @@ from arq.utils import next_cron, timestamp
 def test_settings_changed():
     settings = RedisSettings(port=123)
     assert settings.port == 123
+    assert ('<RedisSettings host=localhost port=123 database=0 password=None conn_retries=5 '
+            'conn_timeout=1 conn_retry_delay=1>') == str(settings)
 
 
 @pytest.mark.skipif(os.getenv('TZ') is None, reason='TZ=Asia/Singapore must be set')

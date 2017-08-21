@@ -13,7 +13,6 @@ from typing import Tuple, Union
 
 import aioredis
 from aioredis.pool import RedisPool
-from async_timeout import timeout
 
 __all__ = ['RedisSettings', 'RedisMixin', 'next_cron']
 logger = logging.getLogger('arq.utils')
@@ -47,6 +46,9 @@ class RedisSettings:
         self.conn_retries = conn_retries
         self.conn_retry_delay = conn_retry_delay
 
+    def __repr__(self):
+        return '<RedisSettings {}>'.format(' '.join(f'{s}={getattr(self, s)}' for s in self.__slots__))
+
 
 class RedisMixin:
     """
@@ -74,9 +76,10 @@ class RedisMixin:
         """
         addr = self.redis_settings.host, self.redis_settings.port
         try:
-            with timeout(self.redis_settings.conn_timeout):
-                pool = await aioredis.create_pool(addr, loop=self.loop, db=self.redis_settings.database,
-                                                  password=self.redis_settings.password)
+            pool = await aioredis.create_pool(
+                addr, loop=self.loop, db=self.redis_settings.database, password=self.redis_settings.password,
+                create_connection_timeout=self.redis_settings.conn_timeout
+            )
         except (ConnectionError, OSError, aioredis.RedisError, asyncio.TimeoutError) as e:
             if _retry < self.redis_settings.conn_retries:
                 logger.warning('redis connection error %s %s, %d retries remaining...',

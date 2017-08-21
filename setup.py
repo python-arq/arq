@@ -48,7 +48,7 @@ setup(
     """,
     install_requires=[
         'async-timeout>=1.2.1',
-        'aioredis>=0.3.1',
+        'aioredis>=0.3.3',
         'click>=6.7',
         'msgpack-python>=0.4.8',
     ],

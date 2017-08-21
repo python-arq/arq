@@ -3,6 +3,11 @@
 History
 -------
 
+v0.10.4 (2017-08-22)
+....................
+* ``RedisSettings`` repr method
+* add ``create_connection_timeout`` to connection pool
+
 v0.10.3 (2017-08-19)
 ....................
 * fix bug with ``RedisMixin.get_redis_pool`` creating multiple queues
