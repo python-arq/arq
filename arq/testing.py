@@ -134,17 +134,17 @@ class MockRedisMixin(RedisMixin):
     Dependent of RedisMixin which uses MockRedis rather than real redis to enqueue jobs.
     """
     async def create_redis_pool(self):
-        return self._redis_pool or MockRedisPool(self.loop)
+        return self.redis_pool or MockRedisPool(self.loop)
 
     @property
     def mock_data(self):
-        self._redis_pool = self._redis_pool or MockRedisPool(self.loop)
-        return self._redis_pool.data
+        self.redis_pool = self.redis_pool or MockRedisPool(self.loop)
+        return self.redis_pool.data
 
     @mock_data.setter
     def mock_data(self, data):
-        self._redis_pool = self._redis_pool or MockRedisPool(self.loop)
-        self._redis_pool.data = data
+        self.redis_pool = self.redis_pool or MockRedisPool(self.loop)
+        self.redis_pool.data = data
 
 
 class MockRedisWorker(MockRedisMixin, BaseWorker):

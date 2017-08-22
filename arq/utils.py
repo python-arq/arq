@@ -14,7 +14,7 @@ from typing import Tuple, Union
 import aioredis
 from aioredis.pool import RedisPool
 
-__all__ = ['RedisSettings', 'RedisMixin', 'next_cron']
+__all__ = ['RedisSettings', 'create_pool_lenient', 'RedisMixin', 'next_cron']
 logger = logging.getLogger('arq.utils')
 
 
@@ -50,6 +50,33 @@ class RedisSettings:
         return '<RedisSettings {}>'.format(' '.join(f'{s}={getattr(self, s)}' for s in self.__slots__))
 
 
+async def create_pool_lenient(settings: RedisSettings, loop: asyncio.AbstractEventLoop, *, _retry: int=0) -> RedisPool:
+    """
+    Create a new redis pool, retrying up to conn_retries times if the connection fails.
+    :param settings: RedisSettings instance
+    :param loop: event loop
+    :param _retry: retry attempt, this is set when the method calls itself recursively
+    """
+    addr = settings.host, settings.port
+    try:
+        pool = await aioredis.create_pool(
+            addr, loop=loop, db=settings.database, password=settings.password,
+            create_connection_timeout=settings.conn_timeout
+        )
+    except (ConnectionError, OSError, aioredis.RedisError, asyncio.TimeoutError) as e:
+        if _retry < settings.conn_retries:
+            logger.warning('redis connection error %s %s, %d retries remaining...',
+                           e.__class__.__name__, e, settings.conn_retries - _retry)
+            await asyncio.sleep(settings.conn_retry_delay)
+            return await create_pool_lenient(settings, loop, _retry=_retry + 1)
+        else:
+            raise
+    else:
+        if _retry > 0:
+            logger.warning('redis connection successful')
+        return pool
+
+
 class RedisMixin:
     """
     Mixin used to fined a redis pool and access it.
@@ -67,40 +94,21 @@ class RedisMixin:
         # loop or redis_settings before calling super().__init__ and don't pass those parameters.
         self.loop = loop or getattr(self, 'loop', None) or asyncio.get_event_loop()
         self.redis_settings = redis_settings or getattr(self, 'redis_settings', None) or RedisSettings()
-        self._redis_pool = existing_pool
+        self.redis_pool = existing_pool
         self._create_pool_lock = asyncio.Lock(loop=self.loop)
 
-    async def create_redis_pool(self, *, _retry=0) -> RedisPool:
-        """
-        Create a new redis pool.
-        """
-        addr = self.redis_settings.host, self.redis_settings.port
-        try:
-            pool = await aioredis.create_pool(
-                addr, loop=self.loop, db=self.redis_settings.database, password=self.redis_settings.password,
-                create_connection_timeout=self.redis_settings.conn_timeout
-            )
-        except (ConnectionError, OSError, aioredis.RedisError, asyncio.TimeoutError) as e:
-            if _retry < self.redis_settings.conn_retries:
-                logger.warning('redis connection error %s %s, %d retries remaining...',
-                               e.__class__.__name__, e, self.redis_settings.conn_retries - _retry)
-                await asyncio.sleep(self.redis_settings.conn_retry_delay)
-                return await self.create_redis_pool(_retry=_retry + 1)
-            else:
-                raise
-        else:
-            if _retry > 0:
-                logger.warning('redis connection successful')
-            return pool
+    async def create_redis_pool(self):
+        # defined here for easy mocking
+        return await create_pool_lenient(self.redis_settings, self.loop)
 
     async def get_redis_pool(self) -> RedisPool:
         """
         Get the redis pool, if a pool is already initialised it's returned, else one is crated.
         """
         async with self._create_pool_lock:
-            if self._redis_pool is None:
-                self._redis_pool = await self.create_redis_pool()
-        return self._redis_pool
+            if self.redis_pool is None:
+                self.redis_pool = await self.create_redis_pool()
+        return self.redis_pool
 
     async def get_redis_conn(self):
         """
@@ -124,10 +132,10 @@ class RedisMixin:
         """
         Close the pool and wait for all connections to close.
         """
-        if self._redis_pool:
-            self._redis_pool.close()
-            await self._redis_pool.wait_closed()
-            await self._redis_pool.clear()
+        if self.redis_pool:
+            self.redis_pool.close()
+            await self.redis_pool.wait_closed()
+            await self.redis_pool.clear()
 
 
 def create_tz(utcoffset=0) -> timezone:

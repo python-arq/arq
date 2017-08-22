@@ -6,7 +6,7 @@ from random import random
 import pytest
 
 import arq.utils
-from arq import RedisMixin, RedisSettings
+from arq import RedisMixin, RedisSettings, create_pool_lenient
 from arq.logs import ColourHandler
 from arq.testing import MockRedis
 from arq.utils import next_cron, timestamp
@@ -65,13 +65,13 @@ async def test_redis_timeout(loop, mocker):
 
 
 async def test_redis_success_log(loop, caplog):
-    r = RedisMixin(loop=loop)
-    pool = await r.create_redis_pool()
+    settings = RedisSettings()
+    pool = await create_pool_lenient(settings, loop)
     assert 'redis connection successful' not in caplog
     pool.close()
     await pool.wait_closed()
 
-    pool = await r.create_redis_pool(_retry=1)
+    pool = await create_pool_lenient(settings, loop, _retry=1)
     assert 'redis connection successful' not in caplog
     pool.close()
     await pool.wait_closed()
