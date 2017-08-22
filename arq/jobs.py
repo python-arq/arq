@@ -107,7 +107,7 @@ class Job:
     def decode_raw(cls, data: bytes):
         return msgpack.unpackb(data, object_hook=cls.msgpack_object_hook, encoding='utf8')
 
-    def to_string(self, args_curtail=DEFAULT_CURTAIL):
+    def to_string(self, args_curtail: int=DEFAULT_CURTAIL) -> str:
         arguments = ''
         if self.args:
             arguments = ', '.join(map(str, self.args))
@@ -118,13 +118,13 @@ class Job:
 
         return '{s.id:.6} {s.class_name}.{s.func_name}({args})'.format(s=self, args=truncate(arguments, args_curtail))
 
-    def short_ref(self):
+    def short_ref(self) -> str:
         return '{s.id:.6} {s.class_name}.{s.func_name}'.format(s=self)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.to_string()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'<Job {self} on {self.queue}>'
 
 

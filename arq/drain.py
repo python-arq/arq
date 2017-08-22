@@ -151,8 +151,8 @@ class Drain:
                 if pending:
                     pipe = self.redis.pipeline()
                     for task in pending:
-                        if task.re_enqueue:
-                            pipe.rpush(task.job.raw_queue, task.job.raw_data)
+                        if task.re_enqueue:  # type: ignore
+                            pipe.rpush(task.job.raw_queue, task.job.raw_data)  # type: ignore
                         task.cancel()
                     if pipe._results:
                         await pipe.execute()

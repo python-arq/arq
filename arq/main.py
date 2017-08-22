@@ -81,7 +81,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         self.is_shadow = bool(worker)
         self.con_jobs: List[CronJob] = list(self._bind_decorators())
         self._concurrency_enabled = concurrency_enabled
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)  # type: ignore
 
     async def startup(self):
         """

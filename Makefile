@@ -16,7 +16,7 @@ lint:
 	python setup.py check -rms
 	flake8 arq/ tests/
 	pytest arq -p no:sugar -q
-	mypy --ignore-missing-imports arq/
+	mypy --check-untyped-defs --disallow-untyped-defs --ignore-missing-imports arq/
 
 .PHONY: test
 test:

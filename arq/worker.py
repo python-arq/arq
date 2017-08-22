@@ -14,7 +14,7 @@ from datetime import datetime
 from importlib import import_module, reload
 from multiprocessing import Process
 from signal import Signals
-from typing import Dict, List, Type  # noqa
+from typing import Any, Dict, List, Type, Tuple  # noqa
 
 from async_timeout import timeout
 
@@ -83,7 +83,7 @@ class BaseWorker(RedisMixin):
     drain_class = Drain
     _shadow_factory_timeout = 10
 
-    def __init__(self, *,
+    def __init__(self, *,  # type: ignore
                  burst: bool=False,
                  shadows: list=None,
                  queues: list=None,
@@ -106,7 +106,7 @@ class BaseWorker(RedisMixin):
         self._shadow_lookup:  Dict[str, Actor] = {}
         self.start: float = None
         self.last_health_check = 0
-        self._last_health_check_log = None
+        self._last_health_check_log: str = None
         self._closed = False
         self.drain: Drain = None
         self.job_class: Type[Job] = None
@@ -129,7 +129,7 @@ class BaseWorker(RedisMixin):
         await asyncio.gather(*[s.startup() for s in shadows], loop=self.loop)
         return shadows
 
-    async def shadow_kwargs(self):
+    async def shadow_kwargs(self) -> Dict[str, Any]:
         """
         Prepare the keyword arguments for initialising all shadows.
 
@@ -143,7 +143,7 @@ class BaseWorker(RedisMixin):
         )
 
     @classmethod
-    def logging_config(cls, verbose) -> dict:
+    def logging_config(cls, verbose: bool) -> dict:
         """
         Override to customise the logging setup for the arq worker.
         By default just uses :func:`arq.logs.default_log_config`.
@@ -154,11 +154,11 @@ class BaseWorker(RedisMixin):
         return default_log_config(verbose)
 
     @property
-    def shadow_names(self):
+    def shadow_names(self) -> str:
         return ', '.join(self._shadow_lookup.keys())
 
-    def get_redis_queues(self):
-        q_lookup = {}
+    def get_redis_queues(self) -> Tuple[List[bytes], Dict[bytes, str]]:
+        q_lookup: Dict[str, bytes] = {}
         for s in self._shadow_lookup.values():
             q_lookup.update(s.queue_lookup)
         try:
@@ -168,10 +168,10 @@ class BaseWorker(RedisMixin):
                            f'queues: {self.queues}, combined shadow queue lookups: {q_lookup}') from e
         return [r for r, q in queues], dict(queues)
 
-    def run_until_complete(self, log_redis_version=False):
+    def run_until_complete(self, log_redis_version: bool=False) -> None:
         self.loop.run_until_complete(self.run(log_redis_version))
 
-    async def run(self, log_redis_version=False):
+    async def run(self, log_redis_version: bool=False) -> None:
         """
         Main entry point for the the worker which initialises shadows, checks they look ok then runs ``work`` to
         perform jobs.
@@ -224,7 +224,7 @@ class BaseWorker(RedisMixin):
                 work_logger.error('Found task exception "%s"', self.drain.task_exception)
                 raise self.drain.task_exception
 
-    async def work(self):
+    async def work(self) -> None:
         """
         Pop job definitions from the lists associated with the queues and perform the jobs.
 
@@ -244,12 +244,12 @@ class BaseWorker(RedisMixin):
                     self.drain.add(self.run_job, job, re_enqueue)
                 await self.heart_beat(original_redis_queues, queue_lookup)
 
-    async def heart_beat(self, redis_queues, queue_lookup):
+    async def heart_beat(self, redis_queues: List[bytes], queue_lookup: Dict[bytes, str]) -> None:
         await self.record_health(redis_queues, queue_lookup)
         for shadow in self._shadow_lookup.values():
             await shadow.run_cron()
 
-    async def record_health(self, redis_queues, queue_lookup):
+    async def record_health(self, redis_queues: List[bytes], queue_lookup: Dict[bytes, str]) -> None:
         now_ts = timestamp()
         if (now_ts - self.last_health_check) < self.health_check_interval:
             return
@@ -267,7 +267,7 @@ class BaseWorker(RedisMixin):
             jobs_logger.info('recording health: %s', info)
             self._last_health_check_log = log_suffix
 
-    async def _check_health(self):
+    async def _check_health(self) -> int:
         r = 1
         async with await self.get_redis_conn() as redis:
             data = await redis.get(self.health_check_key)
@@ -281,7 +281,7 @@ class BaseWorker(RedisMixin):
         return r
 
     @classmethod
-    def check_health(cls, **kwargs):
+    def check_health(cls, **kwargs) -> int:  # type: ignore
         """
         Run a health check on the worker return the appropriate exit code.
 
@@ -320,26 +320,26 @@ class BaseWorker(RedisMixin):
             self.log_job_result(started_at, result, j)
             return 0
 
-    def log_job_start(self, started_at: float, j: Job):
+    def log_job_start(self, started_at: float, j: Job) -> None:
         if jobs_logger.isEnabledFor(logging.INFO):
             job_str = j.to_string(self.log_curtail)
             jobs_logger.info('%-4s queued%7.3fs → %s', j.queue, started_at - j.queued_at, job_str)
 
-    def log_job_result(self, started_at: float, result, j: Job):
+    def log_job_result(self, started_at: float, result: Any, j: Job) -> None:
         if not jobs_logger.isEnabledFor(logging.INFO):
             return
         job_time = timestamp() - started_at
         sr = '' if result is None else truncate(repr(result), self.log_curtail)
         jobs_logger.info('%-4s ran in%7.3fs ← %s ● %s', j.queue, job_time, j.short_ref(), sr)
 
-    def handle_prepare_exc(self, msg: str):
+    def handle_prepare_exc(self, msg: str) -> int:
         self.drain.jobs_failed += 1
         jobs_logger.error(msg)
         # exit with zero so we don't increment jobs_failed twice
         return 0
 
     @classmethod
-    def handle_stop_job(cls, started_at: float, exc: StopJob, j: Job):
+    def handle_stop_job(cls, started_at: float, exc: StopJob, j: Job) -> None:
         if exc.warning:
             msg, logger = '%-4s ran in%7.3fs ■ %s ● Stopped Warning %s', jobs_logger.warning
         else:
@@ -347,18 +347,18 @@ class BaseWorker(RedisMixin):
         logger(msg, j.queue, timestamp() - started_at, j.short_ref(), exc)
 
     @classmethod
-    def handle_execute_exc(cls, started_at: float, exc: BaseException, j: Job):
+    def handle_execute_exc(cls, started_at: float, exc: BaseException, j: Job) -> None:
         exc_type = exc.__class__.__name__
         jobs_logger.exception('%-4s ran in%7.3fs ! %s: %s', j.queue, timestamp() - started_at, j, exc_type)
 
-    async def close(self):
+    async def close(self) -> None:
         if not self._closed:
             if self._shadow_lookup:
                 await asyncio.gather(*[s.close(True) for s in self._shadow_lookup.values()], loop=self.loop)
             await super().close()
             self._closed = True
 
-    def handle_proxy_signal(self, signum, frame):
+    def handle_proxy_signal(self, signum: int, frame: Any) -> None:
         self.running = False
         work_logger.info('pid=%d, got signal proxied from main process, stopping...', os.getpid())
         signal.signal(signal.SIGINT, self.handle_sig_force)
@@ -367,7 +367,7 @@ class BaseWorker(RedisMixin):
         signal.alarm(self.shutdown_delay)
         raise HandledExit()
 
-    def handle_sig(self, signum, frame):
+    def handle_sig(self, signum: int, frame: Any) -> None:
         self.running = False
         work_logger.info('pid=%d, got signal: %s, stopping...', os.getpid(), Signals(signum).name)
         signal.signal(SIG_PROXY, signal.SIG_IGN)
@@ -377,7 +377,7 @@ class BaseWorker(RedisMixin):
         signal.alarm(self.shutdown_delay)
         raise HandledExit()
 
-    def handle_sig_force(self, signum, frame):
+    def handle_sig_force(self, signum: int, frame: Any) -> None:
         work_logger.warning('pid=%d, got signal: %s again, forcing exit', os.getpid(), Signals(signum).name)
         raise ImmediateExit('force exit')
 
@@ -386,16 +386,16 @@ class BaseWorker(RedisMixin):
     jobs_timed_out = property(lambda self: self.drain.jobs_timed_out)
 
     @property
-    def running(self):
+    def running(self) -> bool:
         return self.drain and self.drain.running
 
     @running.setter
-    def running(self, v):
+    def running(self, v: bool) -> None:
         if self.drain:
             self.drain.running = v
 
 
-def import_string(file_path, attr_name):
+def import_string(file_path: str, attr_name: str) -> Any:
     """
     Import attribute/class from from a python module. Raise ``ImportError`` if the import failed.
     Approximately stolen from django.
@@ -418,7 +418,7 @@ def import_string(file_path, attr_name):
     return attr
 
 
-def start_worker(worker_path: str, worker_class: str, burst: bool, loop: asyncio.AbstractEventLoop=None):
+def start_worker(worker_path: str, worker_class: str, burst: bool, loop: asyncio.AbstractEventLoop=None) -> None:
     """
     Run from within the subprocess to load the worker class and execute jobs.
 
@@ -448,40 +448,40 @@ class RunWorkerProcess:
     """
     Responsible for starting a process to run the worker, monitoring it and possibly killing it.
     """
-    def __init__(self, worker_path, worker_class, burst=False):
+    def __init__(self, worker_path: str, worker_class: str, burst: bool=False) -> None:
         signal.signal(signal.SIGINT, self.handle_sig)
         signal.signal(signal.SIGTERM, self.handle_sig)
-        self.process = None
+        self.process: Process = None
         self.run_worker(worker_path, worker_class, burst)
 
-    def run_worker(self, worker_path, worker_class, burst):
+    def run_worker(self, worker_path: str, worker_class: str, burst: bool=False) -> None:
         name = 'WorkProcess'
         ctrl_logger.info('starting work process "%s"', name)
         self.process = Process(target=start_worker, args=(worker_path, worker_class, burst), name=name)
         self.process.start()
         self.process.join()
-        if self.process.exitcode == 0:
+        if self.process.exitcode == 0:  # type: ignore
             ctrl_logger.info('worker process exited ok')
             return
         ctrl_logger.critical('worker process %s exited badly with exit code %s',
-                             self.process.pid, self.process.exitcode)
+                             self.process.pid, self.process.exitcode)  # type: ignore
         sys.exit(3)
         # could restart worker here, but better to leave it up to the real manager eg. docker restart: always
 
-    def handle_sig(self, signum, frame):
+    def handle_sig(self, signum: int, frame: Any) -> None:
         signal.signal(signal.SIGINT, self.handle_sig_force)
         signal.signal(signal.SIGTERM, self.handle_sig_force)
         ctrl_logger.info('got signal: %s, waiting for worker pid=%s to finish...', Signals(signum).name,
-                         self.process and self.process.pid)
+                         self.process and self.process.pid)  # type: ignore
         # sleep to make sure worker.handle_sig above has executed if it's going to and detached handle_proxy_signal
         time.sleep(0.01)
         if self.process and self.process.is_alive():
             ctrl_logger.debug("sending custom shutdown signal to worker in case it didn't receive the signal")
-            os.kill(self.process.pid, SIG_PROXY)
+            os.kill(self.process.pid, SIG_PROXY)  # type: ignore
 
-    def handle_sig_force(self, signum, frame):
+    def handle_sig_force(self, signum: int, frame: Any) -> None:
         ctrl_logger.warning('got signal: %s again, forcing exit', Signals(signum).name)
         if self.process and self.process.is_alive():
-            ctrl_logger.error('sending worker %d SIGTERM', self.process.pid)
-            os.kill(self.process.pid, signal.SIGTERM)
+            ctrl_logger.error('sending worker %d SIGTERM', self.process.pid)  # type: ignore
+            os.kill(self.process.pid, signal.SIGTERM)  # type: ignore
         raise ImmediateExit('force exit')

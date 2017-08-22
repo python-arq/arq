@@ -36,7 +36,7 @@ class MockRedis:
     def __init__(self, *, loop=None, data=None):
         self.loop = loop or asyncio.get_event_loop()
         self.data = {} if data is None else data
-        self._expiry = {}
+        self._expiry: dict = {}
         logger.info('initialising MockRedis, data id: %s', None if data is None else id(data))
 
     async def rpush(self, list_name, data):
@@ -94,11 +94,11 @@ class MockRedis:
 
 
 class MockRedisPoolContextManager:
-    def __init__(self, loop, data):
+    def __init__(self, loop, data) -> None:
         self.loop = loop
         self.data = data
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> MockRedis:
         return MockRedis(loop=self.loop, data=self.data)
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -108,15 +108,15 @@ class MockRedisPoolContextManager:
 class MockRedisPool:
     def __init__(self, loop=None):
         self._loop = loop or asyncio.get_event_loop()
-        self.data = {}
+        self.data: dict = {}
 
-    async def acquire(self):
+    async def acquire(self) -> MockRedis:
         return MockRedis(loop=self._loop, data=self.data)
 
     def release(self, conn):
         pass
 
-    def get(self):
+    def get(self) -> MockRedisPoolContextManager:
         return MockRedisPoolContextManager(self._loop, self.data)
 
     def close(self):

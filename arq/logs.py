@@ -3,20 +3,22 @@
 ===========
 """
 import logging
+from typing import Dict, Union
+
 import re
 
 import click
 
 __all__ = ['ColourHandler', 'default_log_config']
 
-LOG_FORMATS = {
+LOG_FORMATS: Dict[int, Dict[str, Union[str, bool]]] = {
     logging.DEBUG: {'fg': 'white', 'dim': True},
     logging.INFO: {'fg': 'green'},
     logging.WARN: {'fg': 'yellow'},
 }
 
 
-def get_log_format(record):
+def get_log_format(record: logging.LogRecord) -> Dict[str, Union[str, bool]]:
     return LOG_FORMATS.get(record.levelno, {'fg': 'red'})
 
 
@@ -26,15 +28,15 @@ class ColourHandler(logging.StreamHandler):
 
     Date times (anything before the first colon) is magenta.
     """
-    def emit(self, record):
+    def emit(self, record: logging.LogRecord) -> None:
         log_entry = self.format(record)
         m = re.match('^(.*?: )', log_entry)
         if m:
             prefix = click.style(m.groups()[0], fg='magenta')
-            msg = click.style(log_entry[m.end():], **get_log_format(record))
+            msg = click.style(log_entry[m.end():], **get_log_format(record))  # type: ignore
             click.echo(prefix + msg)
         else:
-            click.secho(log_entry, **get_log_format(record))
+            click.secho(log_entry, **get_log_format(record))  # type: ignore
 
 
 def default_log_config(verbose: bool) -> dict:
