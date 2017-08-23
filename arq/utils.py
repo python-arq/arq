@@ -68,13 +68,16 @@ async def create_pool_lenient(settings: RedisSettings, loop: asyncio.AbstractEve
             logger.warning('redis connection error %s %s, %d retries remaining...',
                            e.__class__.__name__, e, settings.conn_retries - _retry)
             await asyncio.sleep(settings.conn_retry_delay)
-            return await create_pool_lenient(settings, loop, _retry=_retry + 1)
         else:
             raise
     else:
         if _retry > 0:
-            logger.warning('redis connection successful')
+            logger.info('redis connection successful')
         return pool
+
+    # recursively attempt to create the pool outside the except block to avoid
+    # "During handling of the above exception..." madness
+    return await create_pool_lenient(settings, loop, _retry=_retry + 1)
 
 
 class RedisMixin:
@@ -91,7 +94,7 @@ class RedisMixin:
         :param existing_pool: existing pool, if set no new pool is created, instead this one is used
         """
         # the "or getattr(...) or" seems odd but it allows the mixin to work with subclasses which initialise
-        # loop or redis_settings before calling super().__init__ and don't pass those parameters.
+        # loop or redis_settings before calling super().__init__ and don't pass those parameters through in kwargs.
         self.loop = loop or getattr(self, 'loop', None) or asyncio.get_event_loop()
         self.redis_settings = redis_settings or getattr(self, 'redis_settings', None) or RedisSettings()
         self.redis_pool = existing_pool
