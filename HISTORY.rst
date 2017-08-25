@@ -3,7 +3,7 @@
 History
 -------
 
-v0.11.0 (2017-08-XX)
+v0.11.0 (2017-08-25)
 ....................
 * extract ``create_pool_lenient`` from ``RedixMixin``
 * improve redis connection traceback
