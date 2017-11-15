@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from datetime import datetime, timedelta
 from random import random
 
@@ -93,7 +94,7 @@ async def test_redis_log(loop):
     await r.close()
     print(log_msgs)
     assert len(log_msgs) == 1
-    assert 'redis_version=3.' in log_msgs[0]
+    assert re.search(r'redis_version=\d\.', log_msgs[0]), log_msgs
     assert log_msgs[0].endswith(' clients_connected=1 db_keys=2')
 
 
