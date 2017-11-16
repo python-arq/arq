@@ -5,7 +5,8 @@ History
 
 v0.12.0 (2017-11-XX)
 ....................
-* better signal handling, support ``uvloop``, fix #73
+* better signal handling, support ``uvloop`` #73
+* drain pending tasks and drain task cancellation #74
 
 v0.11.0 (2017-08-25)
 ....................
