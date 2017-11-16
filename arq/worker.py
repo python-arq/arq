@@ -366,7 +366,7 @@ class BaseWorker(RedisMixin):
         signal.signal(SIG_PROXY, signal.SIG_IGN)
         self._set_force_handler()
 
-    def handle_sig_force(self, signum):
+    def handle_sig_force(self, signum, frame):
         work_logger.warning('pid=%d, got signal: %s again, forcing exit', os.getpid(), Signals(signum).name)
         raise ImmediateExit('force exit')
 
