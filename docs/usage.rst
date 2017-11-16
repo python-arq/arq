@@ -33,6 +33,17 @@ In other words: if you need these coroutines to be called when using an actor in
 For example, in the above example there's no need for ``self.session`` when using the actor in "default" mode,
 eg. called with ``python demo.py``, so neither ``startup`` or ``shutdown`` are called.
 
+Usage with aiohttp
+..................
+
+Assuming you have ``Downloader`` already defined as per above.
+
+.. literalinclude:: examples/aiohttp.py
+
+(Won’t run as ``Downloader`` is not defined)
+
+For a full example *arq* usage with aiohttp and docker see the `demo`_ app.
+
 Health checks
 .............
 
@@ -114,3 +125,5 @@ provided ``Downloader`` and ``FooBar`` are defined and imported it should run "a
 See :meth:`arq.worker.BaseWorker` for more customisation options.
 
 For more information on logging see :meth:`arq.logs.default_log_config`.
+
+.. _demo: https://github.com/samuelcolvin/arq/tree/master/arq/demo

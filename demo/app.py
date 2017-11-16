@@ -50,9 +50,7 @@ html_template = """
 <h1>arq demo</h1>
 
 {{#message}}
-<div>
-  {{ message }}
-</div>
+<div>{{ message }}</div>
 {{/message}}
 
 <form method="post" action="/start-job/">
@@ -71,7 +69,7 @@ html_template = """
 
 <h2>Results:</h2>
 {{#results}}
-<p>{{ . }} </p>
+<p>{{ . }}</p>
 {{/results}}
 """
 
@@ -119,7 +117,7 @@ def create_app():
 
 
 class Worker(BaseWorker):
-    # used by arq app.py command
+    # used by `arq app.py` command
     shadows = [Downloader]
     # set to small value so we can play with timeouts
     timeout_seconds = 10

@@ -19,3 +19,8 @@ To run the compose example:
 You'll want to then connect to logspout to view the log with something like
 
     curl -q -s http://localhost:5001/logs
+
+You can then stop and start the worker and watch jobs get cancelled and re-enqueued
+
+    docker-compose stop worker
+    docker-compose start worker
