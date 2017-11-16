@@ -3,6 +3,10 @@
 History
 -------
 
+v0.12.0 (2017-11-XX)
+....................
+* better signal handling, support ``uvloop``, fix #73
+
 v0.11.0 (2017-08-25)
 ....................
 * extract ``create_pool_lenient`` from ``RedixMixin``

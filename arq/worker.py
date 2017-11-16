@@ -11,6 +11,7 @@ import signal
 import sys
 import time
 from datetime import datetime
+from functools import partial
 from importlib import import_module, reload
 from multiprocessing import Process
 from signal import Signals
@@ -31,11 +32,7 @@ ctrl_logger = logging.getLogger('arq.control')
 jobs_logger = logging.getLogger('arq.jobs')
 
 
-class HandledExit(ArqError):
-    pass
-
-
-class ImmediateExit(ArqError):
+class ImmediateExit(BaseException):
     pass
 
 
@@ -110,10 +107,10 @@ class BaseWorker(RedisMixin):
         self._closed = False
         self.drain: Drain = None
         self.job_class: Type[Job] = None
-        signal.signal(signal.SIGINT, self.handle_sig)
-        signal.signal(signal.SIGTERM, self.handle_sig)
-        signal.signal(SIG_PROXY, self.handle_proxy_signal)
         super().__init__(**kwargs)
+        self._add_signal_handler(signal.SIGINT, self.handle_sig)
+        self._add_signal_handler(signal.SIGTERM, self.handle_sig)
+        self._add_signal_handler(SIG_PROXY, self.handle_proxy_signal)
         self._shutdown_lock = asyncio.Lock(loop=self.loop)
 
     async def shadow_factory(self) -> list:
@@ -358,28 +355,29 @@ class BaseWorker(RedisMixin):
             await super().close()
             self._closed = True
 
-    def handle_proxy_signal(self, signum, frame):
+    def handle_proxy_signal(self, signum):
         self.running = False
         work_logger.info('pid=%d, got signal proxied from main process, stopping...', os.getpid())
-        signal.signal(signal.SIGINT, self.handle_sig_force)
-        signal.signal(signal.SIGTERM, self.handle_sig_force)
-        signal.signal(signal.SIGALRM, self.handle_sig_force)
-        signal.alarm(self.shutdown_delay)
-        raise HandledExit()
+        self._set_force_handler()
 
-    def handle_sig(self, signum, frame):
+    def handle_sig(self, signum):
         self.running = False
         work_logger.info('pid=%d, got signal: %s, stopping...', os.getpid(), Signals(signum).name)
         signal.signal(SIG_PROXY, signal.SIG_IGN)
-        signal.signal(signal.SIGINT, self.handle_sig_force)
-        signal.signal(signal.SIGTERM, self.handle_sig_force)
-        signal.signal(signal.SIGALRM, self.handle_sig_force)
-        signal.alarm(self.shutdown_delay)
-        raise HandledExit()
+        self._set_force_handler()
 
     def handle_sig_force(self, signum, frame):
         work_logger.warning('pid=%d, got signal: %s again, forcing exit', os.getpid(), Signals(signum).name)
         raise ImmediateExit('force exit')
+
+    def _set_force_handler(self):
+        signal.signal(signal.SIGINT, self.handle_sig_force)
+        signal.signal(signal.SIGTERM, self.handle_sig_force)
+        signal.signal(signal.SIGALRM, self.handle_sig_force)
+        signal.alarm(self.shutdown_delay)
+
+    def _add_signal_handler(self, signal, handler):
+        self.loop.add_signal_handler(signal, partial(handler, signal))
 
     jobs_complete = property(lambda self: self.drain.jobs_complete)
     jobs_failed = property(lambda self: self.drain.jobs_failed)
@@ -432,10 +430,7 @@ def start_worker(worker_path: str, worker_class: str, burst: bool, loop: asyncio
     worker = worker_cls(burst=burst, loop=loop)
     try:
         worker.run_until_complete(log_redis_version=True)
-    except HandledExit:
-        work_logger.debug('worker exited with well handled exception')
-        pass
-    except Exception as e:
+    except BaseException as e:
         work_logger.exception('Worker exiting after an unhandled error: %s', e.__class__.__name__)
         # could raise here instead of sys.exit but that causes the traceback to be printed twice,
         # if it's needed "raise_exc" would need to be added a new argument to the function

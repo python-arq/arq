@@ -201,7 +201,7 @@ def test_run_sigint_twice(tmpworkdir, redis_conn, loop, caplog):
     loop.run_until_complete(actor.close())
 
     tmpworkdir.join('test.py').write(EXAMPLE_FILE)
-    with pytest.raises(SystemExit):
+    with pytest.raises(BaseException):
         start_worker('test.py', 'WorkerSignalTwiceQuit', False, loop=loop)
     assert tmpworkdir.join('foo').exists()
     assert tmpworkdir.join('foo').read() == '1'
@@ -219,8 +219,7 @@ async def test_run_proxy_signal(actor, monkeypatch):
     assert mock_signal_signal.call_count == 3
     assert mock_signal_alarm.call_count == 0
 
-    with pytest.raises(arq.worker.HandledExit):
-        worker.handle_proxy_signal(arq.worker.SIG_PROXY, None)
+    worker.handle_proxy_signal(arq.worker.SIG_PROXY)
 
     assert worker.running is None
     assert mock_signal_signal.call_count == 6
