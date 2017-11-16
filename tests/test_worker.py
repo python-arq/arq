@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import arq.worker
+from arq.drain import TaskError
 from arq.testing import RaiseWorker
 from arq.worker import import_string, start_worker
 
@@ -401,7 +402,8 @@ async def test_does_re_enqueue_job(loop, redis_conn):
     await actor.sleeper(0.2)
     await actor.close(True)
 
-    await worker.run()
+    with pytest.raises(TaskError):
+        await worker.run()
     assert 1 == await redis_conn.llen(b'arq:q:dft')
 
 
@@ -412,5 +414,6 @@ async def test_does_not_re_enqueue_job(loop, redis_conn):
     await actor.sleeper(0.2)
     await actor.close(True)
 
-    await worker.run()
+    with pytest.raises(TaskError):
+        await worker.run()
     assert 0 == await redis_conn.llen(b'arq:q:dft')

@@ -69,10 +69,12 @@ class Drain:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.finish()
+        cancelled_tasks = await self.finish()
         self.redis_pool.release(self.redis)
         self.redis = None
-        if self.raise_task_exception and self.task_exception:
+        if cancelled_tasks:
+            raise TaskError(f'finishing the drain required {cancelled_tasks} tasks to be cancelled')
+        elif self.raise_task_exception and self.task_exception:
             e = self.task_exception
             raise TaskError(f'A processed task failed: {e.__class__.__name__}, {e}') from e
 
@@ -144,6 +146,7 @@ class Drain:
         """
         timeout = timeout or self.shutdown_delay
         self.running = False
+        cancelled_tasks = 0
         if self.pending_tasks:
             with await self._finish_lock:
                 work_logger.info('drain waiting %0.1fs for %d tasks to finish', timeout, len(self.pending_tasks))
@@ -154,9 +157,11 @@ class Drain:
                         if task.re_enqueue:
                             pipe.rpush(task.job.raw_queue, task.job.raw_data)
                         task.cancel()
+                        cancelled_tasks += 1
                     if pipe._results:
                         await pipe.execute()
                 self.pending_tasks = set()
+        return cancelled_tasks
 
     def _job_callback(self, task):
         self.task_semaphore.release()
