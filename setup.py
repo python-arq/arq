@@ -3,9 +3,12 @@ from pathlib import Path
 from importlib.machinery import SourceFileLoader
 from setuptools import setup
 
-with Path(__file__).resolve().parent.joinpath('README.rst').open() as f:
-    long_description = f.read()
-
+readme = Path(__file__).parent.joinpath('README.rst')
+if readme.exists():
+    with readme.open() as f:
+        long_description = f.read()
+else:
+    long_description = '-'
 # avoid loading the package before requirements are installed:
 version = SourceFileLoader('version', 'arq/version.py').load_module()
 

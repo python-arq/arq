@@ -3,10 +3,11 @@
 History
 -------
 
-v0.12.0 (2017-11-XX)
+v0.12.0 (2017-11-16)
 ....................
 * better signal handling, support ``uvloop`` #73
 * drain pending tasks and drain task cancellation #74
+* add aiohttp and docker demo ``/demo`` #75
 
 v0.11.0 (2017-08-25)
 ....................
