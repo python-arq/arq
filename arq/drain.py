@@ -172,7 +172,7 @@ class Drain:
             self.task_exception = task_exception
         elif task.result():
             self.jobs_failed += 1
-        self.pending_tasks.remove(task)
+        self._remove_task(task)
         jobs_logger.debug('task complete, %d jobs done, %d failed', self.jobs_complete, self.jobs_failed)
 
     def _cancel_job(self, task, job):
@@ -180,4 +180,10 @@ class Drain:
             return
         self.jobs_timed_out += 1
         jobs_logger.error('task timed out %r', job)
-        self.pending_tasks.remove(task)
+        self._remove_task(task)
+
+    def _remove_task(self, task):
+        try:
+            self.pending_tasks.remove(task)
+        except KeyError:
+            pass

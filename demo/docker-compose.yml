@@ -1,0 +1,46 @@
+version: '3.2'
+
+volumes:
+  redis: {}
+
+services:
+  logs:
+    image: gliderlabs/logspout
+    environment:
+      SYSLOG_HOSTNAME: 'arq'
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+    - 5001:80
+
+  redis:
+    image: redis:4.0-alpine
+    volumes:
+    - redis:/data
+    ports:
+    # redis-cli -p 63790
+    - 63790:6379
+    restart: always
+    depends_on:
+    - logs
+
+  web:
+    image: arq-demo
+    restart: always
+    ports:
+    - 8000:8000
+    environment:
+      REDIS_HOST: redis
+    depends_on:
+    - redis
+    - logs
+
+  worker:
+    image: arq-demo
+    entrypoint: ['arq', 'app.py']
+    environment:
+      REDIS_HOST: redis
+    restart: always
+    depends_on:
+    - redis
+    - logs

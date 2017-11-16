@@ -1,0 +1,4 @@
+aiohttp==2.3.2
+aiohttp-session==1.2.0
+chevron==0.11.1
+uvloop==0.8.1
