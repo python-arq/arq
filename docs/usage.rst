@@ -126,4 +126,4 @@ See :meth:`arq.worker.BaseWorker` for more customisation options.
 
 For more information on logging see :meth:`arq.logs.default_log_config`.
 
-.. _demo: https://github.com/samuelcolvin/arq/tree/master/arq/demo
+.. _demo: https://github.com/samuelcolvin/arq/tree/master/demo
