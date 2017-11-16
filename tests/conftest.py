@@ -20,7 +20,10 @@ def redis_conn(loop):
     yield conn
 
     conn.close()
-    loop.run_until_complete(conn.wait_closed())
+    try:
+        loop.run_until_complete(conn.wait_closed())
+    except RuntimeError:
+        pass
 
 
 @pytest.yield_fixture

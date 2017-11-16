@@ -23,7 +23,7 @@ class WorkerSignalQuit(Worker):
     async def run_job(self, *args):
         await super().run_job(*args)
         if self.jobs_complete >= 2:
-            self.handle_sig(2, None)
+            self.handle_sig(2)
 
 
 class WorkerSignalTwiceQuit(Worker):
@@ -33,4 +33,4 @@ class WorkerSignalTwiceQuit(Worker):
     async def run_job(self, *args):
         await super().run_job(*args)
         if self.jobs_complete >= 2:
-            self.handle_sig_force(2, None)
+            self.handle_sig_force(2)
