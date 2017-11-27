@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Tuple, Union
 
 import aioredis
-from aioredis.pool import RedisPool
+from aioredis import ConnectionsPool
 
 __all__ = ['RedisSettings', 'create_pool_lenient', 'RedisMixin', 'next_cron']
 logger = logging.getLogger('arq.utils')
@@ -50,7 +50,8 @@ class RedisSettings:
         return '<RedisSettings {}>'.format(' '.join(f'{s}={getattr(self, s)}' for s in self.__slots__))
 
 
-async def create_pool_lenient(settings: RedisSettings, loop: asyncio.AbstractEventLoop, *, _retry: int=0) -> RedisPool:
+async def create_pool_lenient(settings: RedisSettings, loop: asyncio.AbstractEventLoop, *,
+                              _retry: int=0) -> ConnectionsPool:
     """
     Create a new redis pool, retrying up to conn_retries times if the connection fails.
     :param settings: RedisSettings instance
@@ -59,9 +60,9 @@ async def create_pool_lenient(settings: RedisSettings, loop: asyncio.AbstractEve
     """
     addr = settings.host, settings.port
     try:
-        pool = await aioredis.create_pool(
+        pool = await aioredis.create_redis_pool(
             addr, loop=loop, db=settings.database, password=settings.password,
-            create_connection_timeout=settings.conn_timeout
+            timeout=settings.conn_timeout
         )
     except (ConnectionError, OSError, aioredis.RedisError, asyncio.TimeoutError) as e:
         if _retry < settings.conn_retries:
@@ -87,7 +88,7 @@ class RedisMixin:
     def __init__(self, *,
                  loop: asyncio.AbstractEventLoop=None,
                  redis_settings: RedisSettings=None,
-                 existing_pool: RedisPool=None) -> None:
+                 existing_pool: ConnectionsPool=None) -> None:
         """
         :param loop: asyncio loop to use for the redis pool
         :param redis_settings: connection settings to use for the pool
@@ -104,7 +105,7 @@ class RedisMixin:
         # defined here for easy mocking
         return await create_pool_lenient(self.redis_settings, self.loop)
 
-    async def get_redis_pool(self) -> RedisPool:
+    async def get_redis_pool(self) -> ConnectionsPool:
         """
         Get the redis pool, if a pool is already initialised it's returned, else one is crated.
         """
@@ -117,19 +118,17 @@ class RedisMixin:
         """
         :return: redis connection context manager
         """
-        pool = await self.get_redis_pool()
-        return pool.get()
+        return await self.get_redis_pool()
 
     async def log_redis_info(self, log_func):
-        pool = await self.get_redis_pool()
-        async with pool.get() as redis:
-            info, key_count = await asyncio.gather(redis.info(), redis.dbsize())
-            log_func(
-                f'redis_version={info["server"]["redis_version"]} '
-                f'mem_usage={info["memory"]["used_memory_human"]} '
-                f'clients_connected={info["clients"]["connected_clients"]} '
-                f'db_keys={key_count}'
-            )
+        redis = await self.get_redis_conn()
+        info, key_count = await asyncio.gather(redis.info(), redis.dbsize())
+        log_func(
+            f'redis_version={info["server"]["redis_version"]} '
+            f'mem_usage={info["memory"]["used_memory_human"]} '
+            f'clients_connected={info["clients"]["connected_clients"]} '
+            f'db_keys={key_count}'
+        )
 
     async def close(self):
         """
@@ -138,7 +137,6 @@ class RedisMixin:
         if self.redis_pool:
             self.redis_pool.close()
             await self.redis_pool.wait_closed()
-            await self.redis_pool.clear()
 
 
 def create_tz(utcoffset=0) -> timezone:

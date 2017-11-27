@@ -80,10 +80,10 @@ async def test_redis_success_log(loop, caplog):
 
 async def test_redis_log(loop):
     r = RedisMixin(loop=loop)
-    async with await r.get_redis_conn() as redis:
-        await redis.flushall()
-        await redis.set(b'a', b'1')
-        await redis.set(b'b', b'2')
+    redis = await r.get_redis_conn()
+    await redis.flushall()
+    await redis.set(b'a', b'1')
+    await redis.set(b'b', b'2')
 
     log_msgs = []
 

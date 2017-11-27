@@ -92,6 +92,15 @@ class MockRedis:
     async def get(self, key):
         return self._get(key)
 
+    def close(self):
+        pass
+
+    async def wait_closed(self):
+        pass
+
+    async def clear(self):
+        self.data = {}
+
 
 class MockRedisPoolContextManager:
     def __init__(self, loop, data):
@@ -134,16 +143,16 @@ class MockRedisMixin(RedisMixin):
     Dependent of RedisMixin which uses MockRedis rather than real redis to enqueue jobs.
     """
     async def create_redis_pool(self):
-        return self.redis_pool or MockRedisPool(self.loop)
+        return self.redis_pool or MockRedis(loop=self.loop)
 
     @property
     def mock_data(self):
-        self.redis_pool = self.redis_pool or MockRedisPool(self.loop)
+        self.redis_pool = self.redis_pool or MockRedis(loop=self.loop)
         return self.redis_pool.data
 
     @mock_data.setter
     def mock_data(self, data):
-        self.redis_pool = self.redis_pool or MockRedisPool(self.loop)
+        self.redis_pool = self.redis_pool or MockRedis(loop=self.loop)
         self.redis_pool.data = data
 
 

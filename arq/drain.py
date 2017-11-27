@@ -8,7 +8,7 @@ import asyncio
 import logging
 from typing import Set  # noqa
 
-from aioredis import RedisPool
+from aioredis import ConnectionsPool
 from async_timeout import timeout
 
 from arq.utils import gen_random
@@ -31,7 +31,7 @@ class Drain:
     Drains popping jobs from redis lists and managing a set of tasks with a limited size to execute those jobs.
     """
     def __init__(self, *,
-                 redis_pool: RedisPool,
+                 redis_pool: ConnectionsPool,
                  max_concurrent_tasks: int=50,
                  shutdown_delay: float=6,
                  timeout_seconds: int=60,
@@ -48,7 +48,7 @@ class Drain:
         :param raise_task_exception: whether or not to raise an exception which occurs in a processed task
         """
         self.redis_pool = redis_pool
-        self.loop = redis_pool._loop
+        self.loop = asyncio.get_event_loop()
         self.max_concurrent_tasks = max_concurrent_tasks
         self.task_semaphore = asyncio.Semaphore(value=max_concurrent_tasks, loop=self.loop)
         self.shutdown_delay = max(shutdown_delay, 0.1)
@@ -65,12 +65,12 @@ class Drain:
 
     async def __aenter__(self):
         self.running = True
-        self.redis = await self.redis_pool.acquire()
+        self.redis = self.redis_pool  # await self.redis_pool.acquire()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         cancelled_tasks = await self.finish()
-        self.redis_pool.release(self.redis)
+        # self.redis_pool.release(self.redis)
         self.redis = None
         if cancelled_tasks:
             raise TaskError(f'finishing the drain required {cancelled_tasks} tasks to be cancelled')

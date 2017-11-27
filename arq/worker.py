@@ -266,13 +266,13 @@ class BaseWorker(RedisMixin):
 
     async def _check_health(self):
         r = 1
-        async with await self.get_redis_conn() as redis:
-            data = await redis.get(self.health_check_key)
-            if not data:
-                work_logger.warning('Health check failed: no health check sentinel value found')
-            else:
-                work_logger.info('Health check successful: %s', data.decode())
-                r = 0
+        redis = await self.get_redis_conn()
+        data = await redis.get(self.health_check_key)
+        if not data:
+            work_logger.warning('Health check failed: no health check sentinel value found')
+        else:
+            work_logger.info('Health check successful: %s', data.decode())
+            r = 0
         # only need to close redis not deal with queues etc., hence super close
         await super().close()
         return r
