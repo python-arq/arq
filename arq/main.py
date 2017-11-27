@@ -118,11 +118,9 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         """
         queue = queue or self.DEFAULT_QUEUE
         if self._concurrency_enabled:
-            # use the pool directly rather than get_redis_conn to avoid one extra await
-            pool = self.redis_pool or await self.get_redis_pool()
+            redis = self.redis or await self.get_redis()
             main_logger.debug('%s.%s → %s', self.name, func_name, queue)
-            async with pool.get() as redis:
-                await self.job_future(redis, queue, func_name, *args, **kwargs)
+            await self.job_future(redis, queue, func_name, *args, **kwargs)
         else:
             main_logger.debug('%s.%s → %s (called directly)', self.name, func_name, queue)
             data = self.job_class.encode(class_name=self.name, func_name=func_name, args=args, kwargs=kwargs)
@@ -141,7 +139,6 @@ class Actor(RedisMixin, metaclass=ActorMeta):
 
     async def run_cron(self):
         n = self._now()
-        pool = self.redis_pool or await self.get_redis_pool()
         to_run = set()
 
         for cron_job in self.con_jobs:
@@ -153,8 +150,9 @@ class Actor(RedisMixin, metaclass=ActorMeta):
             return
 
         main_logger.debug('cron, %d jobs to run', len(to_run))
-        async with pool.get() as redis:
-            job_futures = set()
+        job_futures = set()
+        redis_ = self.redis or await self.get_redis()
+        with await redis_ as redis:
             for cron_job, run_at in to_run:
                 if cron_job.unique:
                     sentinel_key = self.CRON_SENTINEL_PREFIX + f'{self.name}.{cron_job.__name__}'.encode()

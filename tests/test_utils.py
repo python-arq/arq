@@ -61,7 +61,7 @@ async def test_redis_timeout(loop, mocker):
     mocker.spy(arq.utils.asyncio, 'sleep')
     r = RedisMixin(redis_settings=RedisSettings(port=0, conn_retry_delay=0), loop=loop)
     with pytest.raises(OSError):
-        await r.get_redis_pool()
+        await r.get_redis()
     assert arq.utils.asyncio.sleep.call_count == 5
 
 
@@ -80,10 +80,10 @@ async def test_redis_success_log(loop, caplog):
 
 async def test_redis_log(loop):
     r = RedisMixin(loop=loop)
-    async with await r.get_redis_conn() as redis:
-        await redis.flushall()
-        await redis.set(b'a', b'1')
-        await redis.set(b'b', b'2')
+    redis = await r.get_redis()
+    await redis.flushall()
+    await redis.set(b'a', b'1')
+    await redis.set(b'b', b'2')
 
     log_msgs = []
 

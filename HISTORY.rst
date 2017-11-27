@@ -3,6 +3,12 @@
 History
 -------
 
+
+v0.13.0 (2017-11-27)
+....................
+* **Braking Change:** integration with aioredis >= 1.0, basic usage hasn't changed but
+  look at aioredis's migration docs for changes in redis API #76
+
 v0.12.0 (2017-11-16)
 ....................
 * better signal handling, support ``uvloop`` #73

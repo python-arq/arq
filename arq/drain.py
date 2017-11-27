@@ -8,7 +8,7 @@ import asyncio
 import logging
 from typing import Set  # noqa
 
-from aioredis import RedisPool
+from aioredis import Redis
 from async_timeout import timeout
 
 from arq.utils import gen_random
@@ -31,7 +31,7 @@ class Drain:
     Drains popping jobs from redis lists and managing a set of tasks with a limited size to execute those jobs.
     """
     def __init__(self, *,
-                 redis_pool: RedisPool,
+                 redis: Redis,
                  max_concurrent_tasks: int=50,
                  shutdown_delay: float=6,
                  timeout_seconds: int=60,
@@ -39,7 +39,7 @@ class Drain:
                  raise_task_exception: bool=False,
                  semaphore_timeout: float=60) -> None:
         """
-        :param redis_pool: redis pool to get connection from to pop items from list, also used to optionally
+        :param redis: redis pool to get connection from to pop items from list, also used to optionally
             re-enqueue pending jobs on termination
         :param max_concurrent_tasks: maximum number of jobs which can be execute at the same time by the event loop
         :param shutdown_delay: number of seconds to wait for tasks to finish
@@ -47,8 +47,8 @@ class Drain:
         :param burst_mode: break the iter loop as soon as no more jobs are available by adding an sentinel quit queue
         :param raise_task_exception: whether or not to raise an exception which occurs in a processed task
         """
-        self.redis_pool = redis_pool
-        self.loop = redis_pool._loop
+        self.redis = redis
+        self.loop = redis._pool_or_conn._loop
         self.max_concurrent_tasks = max_concurrent_tasks
         self.task_semaphore = asyncio.Semaphore(value=max_concurrent_tasks, loop=self.loop)
         self.shutdown_delay = max(shutdown_delay, 0.1)
@@ -65,13 +65,10 @@ class Drain:
 
     async def __aenter__(self):
         self.running = True
-        self.redis = await self.redis_pool.acquire()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         cancelled_tasks = await self.finish()
-        self.redis_pool.release(self.redis)
-        self.redis = None
         if cancelled_tasks:
             raise TaskError(f'finishing the drain required {cancelled_tasks} tasks to be cancelled')
         elif self.raise_task_exception and self.task_exception:
@@ -110,7 +107,8 @@ class Drain:
 
             if not self.running:
                 break
-            msg = await self.redis.blpop(*raw_queues, timeout=pop_timeout)
+            with await self.redis as r:
+                msg = await r.blpop(*raw_queues, timeout=pop_timeout)
             if msg is None:
                 yield None, None
                 self.task_semaphore.release()
