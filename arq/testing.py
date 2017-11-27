@@ -43,7 +43,7 @@ class MockRedis:
         self.loop = loop or asyncio.get_event_loop()
         self.data = {} if data is None else data
         self._expiry = {}
-        self._pool_or_conn = type('MockConnection', (object,), {'_loop': self.loop})
+        self._pool_or_conn = type('MockConnection', (), {'_loop': self.loop})
         logger.info('initialising MockRedis, data id: %s', None if data is None else id(data))
 
     def __await__(self):

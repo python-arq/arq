@@ -136,7 +136,7 @@ class BaseWorker(RedisMixin):
             redis_settings=self.redis_settings,
             worker=self,
             loop=self.loop,
-            existing_pool=await self.get_redis(),
+            existing_redis=await self.get_redis(),
         )
 
     @classmethod

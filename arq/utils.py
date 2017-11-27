@@ -88,17 +88,17 @@ class RedisMixin:
     def __init__(self, *,
                  loop: asyncio.AbstractEventLoop=None,
                  redis_settings: RedisSettings=None,
-                 existing_pool: Redis=None) -> None:
+                 existing_redis: Redis=None) -> None:
         """
         :param loop: asyncio loop to use for the redis pool
         :param redis_settings: connection settings to use for the pool
-        :param existing_pool: existing pool, if set no new pool is created, instead this one is used
+        :param existing_redis: existing pool, if set no new pool is created, instead this one is used
         """
         # the "or getattr(...) or" seems odd but it allows the mixin to work with subclasses which initialise
         # loop or redis_settings before calling super().__init__ and don't pass those parameters through in kwargs.
         self.loop = loop or getattr(self, 'loop', None) or asyncio.get_event_loop()
         self.redis_settings = redis_settings or getattr(self, 'redis_settings', None) or RedisSettings()
-        self.redis = existing_pool
+        self.redis = existing_redis
         self._create_pool_lock = asyncio.Lock(loop=self.loop)
 
     async def create_redis_pool(self):
