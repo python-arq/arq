@@ -48,7 +48,7 @@ class Drain:
         :param raise_task_exception: whether or not to raise an exception which occurs in a processed task
         """
         self.redis = redis
-        self.loop = asyncio.get_event_loop()
+        self.loop = redis._pool_or_conn._loop
         self.max_concurrent_tasks = max_concurrent_tasks
         self.task_semaphore = asyncio.Semaphore(value=max_concurrent_tasks, loop=self.loop)
         self.shutdown_delay = max(shutdown_delay, 0.1)
@@ -108,7 +108,7 @@ class Drain:
             if not self.running:
                 break
             with await self.redis as r:
-                msg = await self.redis.blpop(*raw_queues, timeout=pop_timeout)
+                msg = await r.blpop(*raw_queues, timeout=pop_timeout)
             if msg is None:
                 yield None, None
                 self.task_semaphore.release()

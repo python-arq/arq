@@ -38,8 +38,7 @@ class Downloader(Actor):
         output = f'{time() - start:0.2f}s, {count} downloads, total size: {total_size}'
         if errors:
             output += ', errors: ' + ', '.join(errors)
-        async with self.redis.get() as redis:
-            await redis.rpush(R_OUTPUT, output.encode())
+        await self.redis.rpush(R_OUTPUT, output.encode())
         return total_size
 
     async def shutdown(self):

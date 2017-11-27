@@ -118,7 +118,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         """
         queue = queue or self.DEFAULT_QUEUE
         if self._concurrency_enabled:
-            redis = await self.get_redis()
+            redis = self.redis or await self.get_redis()
             main_logger.debug('%s.%s → %s', self.name, func_name, queue)
             await self.job_future(redis, queue, func_name, *args, **kwargs)
         else:
@@ -139,7 +139,6 @@ class Actor(RedisMixin, metaclass=ActorMeta):
 
     async def run_cron(self):
         n = self._now()
-        redis = await self.get_redis()
         to_run = set()
 
         for cron_job in self.con_jobs:
@@ -152,20 +151,22 @@ class Actor(RedisMixin, metaclass=ActorMeta):
 
         main_logger.debug('cron, %d jobs to run', len(to_run))
         job_futures = set()
-        for cron_job, run_at in to_run:
-            if cron_job.unique:
-                sentinel_key = self.CRON_SENTINEL_PREFIX + f'{self.name}.{cron_job.__name__}'.encode()
-                sentinel_value = str(to_unix_ms(run_at)).encode()
-                v, _ = await asyncio.gather(
-                    redis.getset(sentinel_key, sentinel_value),
-                    redis.expire(sentinel_key, 3600),
-                )
-                if v == sentinel_value:
-                    # if v is equal to sentinel value, another worker has already set it and is doing this cron run
-                    continue
-            job_futures.add(self.job_future(redis, cron_job.dft_queue or self.DEFAULT_QUEUE, cron_job.__name__))
+        redis_ = self.redis or await self.get_redis()
+        with await redis_ as redis:
+            for cron_job, run_at in to_run:
+                if cron_job.unique:
+                    sentinel_key = self.CRON_SENTINEL_PREFIX + f'{self.name}.{cron_job.__name__}'.encode()
+                    sentinel_value = str(to_unix_ms(run_at)).encode()
+                    v, _ = await asyncio.gather(
+                        redis.getset(sentinel_key, sentinel_value),
+                        redis.expire(sentinel_key, 3600),
+                    )
+                    if v == sentinel_value:
+                        # if v is equal to sentinel value, another worker has already set it and is doing this cron run
+                        continue
+                job_futures.add(self.job_future(redis, cron_job.dft_queue or self.DEFAULT_QUEUE, cron_job.__name__))
 
-        job_futures and await asyncio.gather(*job_futures)
+            job_futures and await asyncio.gather(*job_futures)
 
     async def close(self, shutdown=False):
         """

@@ -39,18 +39,16 @@ class MockRedis:
     Very simple mock of aioredis > Redis which allows jobs to be enqueued and executed without
     redis.
     """
-    def __init__(self, pool_or_conn=None, *, loop=None, data=None):
+    def __init__(self, *, loop=None, data=None):
         self.loop = loop or asyncio.get_event_loop()
-        if pool_or_conn:
-            self.data = pool_or_conn.data
-        else:
-            self.data = {} if data is None else data
+        self.data = {} if data is None else data
         self._expiry = {}
+        self._pool_or_conn = type('MockConnection', (object,), {'_loop': self.loop})
         logger.info('initialising MockRedis, data id: %s', None if data is None else id(data))
 
     def __await__(self):
         return redis_context_manager(self)
-        yield
+        yield  # pragma: no cover
 
     async def rpush(self, list_name, data):
         logger.info('rpushing %s to %s', data, list_name)
