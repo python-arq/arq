@@ -83,7 +83,7 @@ class DemoActor(Actor):
                 'class': self.settings.__class__.__name__
             },
         }
-        async with await self.get_redis_conn() as redis:
+        async with await self.get_redis() as redis:
             await redis.set('actor_info' + key_suffix, json.dumps(data, indent=2))
         return data
 

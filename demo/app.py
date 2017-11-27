@@ -38,7 +38,7 @@ class Downloader(Actor):
         output = f'{time() - start:0.2f}s, {count} downloads, total size: {total_size}'
         if errors:
             output += ', errors: ' + ', '.join(errors)
-        async with self.redis_pool.get() as redis:
+        async with self.redis.get() as redis:
             await redis.rpush(R_OUTPUT, output.encode())
         return total_size
 
@@ -75,9 +75,9 @@ html_template = """
 
 
 async def index(request):
-    async with await request.app['downloader'].get_redis_conn() as redis:
-        data = await redis.lrange(R_OUTPUT, 0, -1)
-        results = [r.decode() for r in data]
+    redis = await request.app['downloader'].get_redis()
+    data = await redis.lrange(R_OUTPUT, 0, -1)
+    results = [r.decode() for r in data]
 
     session = await get_session(request)
     html = chevron.render(html_template, {'message': session.get('message'), 'results': results})

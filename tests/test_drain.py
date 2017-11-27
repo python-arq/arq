@@ -17,7 +17,7 @@ async def test_drain(redis):
         nonlocal total
         total += int(job.decode())
 
-    drain = Drain(redis_pool=redis)
+    drain = Drain(redis=redis)
     async with drain:
         async for raw_queue, raw_data in drain.iter(b'foobar'):
             assert raw_queue == b'foobar'
@@ -31,7 +31,7 @@ async def test_drain_error(redis):
     async def run(job):
         raise RuntimeError('snap')
 
-    drain = Drain(redis_pool=redis, raise_task_exception=True)
+    drain = Drain(redis=redis, raise_task_exception=True)
     with pytest.raises(TaskError) as exc_info:
         async with drain:
             async for raw_queue, raw_data in drain.iter(b'foobar'):
@@ -49,7 +49,7 @@ async def test_drain_timeout(redis, caplog):
         assert v == b'1'
         await asyncio.sleep(0.2)
 
-    drain = Drain(redis_pool=redis, max_concurrent_tasks=1, semaphore_timeout=0.11)
+    drain = Drain(redis=redis, max_concurrent_tasks=1, semaphore_timeout=0.11)
     async with drain:
         async for raw_queue, raw_data in drain.iter(b'foobar'):
             drain.add(run, raw_data)

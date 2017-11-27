@@ -8,6 +8,7 @@ See arq's own tests for examples of usage.
 """
 import asyncio
 import logging
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 
 from .utils import RedisMixin, timestamp
@@ -28,16 +29,28 @@ class RaiseWorker(BaseWorker):
         raise RuntimeError(msg)
 
 
+@contextmanager
+def redis_context_manager(r):
+    yield r
+
+
 class MockRedis:
     """
     Very simple mock of aioredis > Redis which allows jobs to be enqueued and executed without
     redis.
     """
-    def __init__(self, *, loop=None, data=None):
+    def __init__(self, pool_or_conn=None, *, loop=None, data=None):
         self.loop = loop or asyncio.get_event_loop()
-        self.data = {} if data is None else data
+        if pool_or_conn:
+            self.data = pool_or_conn.data
+        else:
+            self.data = {} if data is None else data
         self._expiry = {}
         logger.info('initialising MockRedis, data id: %s', None if data is None else id(data))
+
+    def __await__(self):
+        return redis_context_manager(self)
+        yield
 
     async def rpush(self, list_name, data):
         logger.info('rpushing %s to %s', data, list_name)
@@ -98,62 +111,24 @@ class MockRedis:
     async def wait_closed(self):
         pass
 
-    async def clear(self):
-        self.data = {}
-
-
-class MockRedisPoolContextManager:
-    def __init__(self, loop, data):
-        self.loop = loop
-        self.data = data
-
-    async def __aenter__(self):
-        return MockRedis(loop=self.loop, data=self.data)
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        pass
-
-
-class MockRedisPool:
-    def __init__(self, loop=None):
-        self._loop = loop or asyncio.get_event_loop()
-        self.data = {}
-
-    async def acquire(self):
-        return MockRedis(loop=self._loop, data=self.data)
-
-    def release(self, conn):
-        pass
-
-    def get(self):
-        return MockRedisPoolContextManager(self._loop, self.data)
-
-    def close(self):
-        pass
-
-    async def wait_closed(self):
-        pass
-
-    async def clear(self):
-        self.data = {}
-
 
 class MockRedisMixin(RedisMixin):
     """
     Dependent of RedisMixin which uses MockRedis rather than real redis to enqueue jobs.
     """
+
     async def create_redis_pool(self):
-        return self.redis_pool or MockRedis(loop=self.loop)
+        return self.redis or MockRedis(loop=self.loop)
 
     @property
     def mock_data(self):
-        self.redis_pool = self.redis_pool or MockRedis(loop=self.loop)
-        return self.redis_pool.data
+        self.redis = self.redis or MockRedis(loop=self.loop)
+        return self.redis.data
 
     @mock_data.setter
     def mock_data(self, data):
-        self.redis_pool = self.redis_pool or MockRedis(loop=self.loop)
-        self.redis_pool.data = data
+        self.redis = self.redis or MockRedis(loop=self.loop)
+        self.redis.data = data
 
 
 class MockRedisWorker(MockRedisMixin, BaseWorker):

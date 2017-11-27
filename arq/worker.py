@@ -136,7 +136,7 @@ class BaseWorker(RedisMixin):
             redis_settings=self.redis_settings,
             worker=self,
             loop=self.loop,
-            existing_pool=await self.get_redis_pool(),
+            existing_pool=await self.get_redis(),
         )
 
     @classmethod
@@ -202,7 +202,7 @@ class BaseWorker(RedisMixin):
         work_logger.info('shadows: %s | queues: %s', self.shadow_names, ', '.join(self.queues))
 
         self.drain = self.drain_class(
-            redis_pool=await self.get_redis_pool(),
+            redis=await self.get_redis(),
             max_concurrent_tasks=self.max_concurrent_tasks,
             shutdown_delay=self.shutdown_delay - 1,
             timeout_seconds=self.timeout_seconds,
@@ -266,7 +266,7 @@ class BaseWorker(RedisMixin):
 
     async def _check_health(self):
         r = 1
-        redis = await self.get_redis_conn()
+        redis = await self.get_redis()
         data = await redis.get(self.health_check_key)
         if not data:
             work_logger.warning('Health check failed: no health check sentinel value found')

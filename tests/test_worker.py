@@ -362,7 +362,7 @@ def test_check_fails(redis_conn, loop):
 async def test_health_check_repeats(redis_conn, loop, caplog):
     worker = Worker(burst=True, loop=loop)
     worker.repeat_health_check_logs = True
-    worker.drain = worker.drain_class(redis_pool=await worker.get_redis_pool())
+    worker.drain = worker.drain_class(redis=await worker.get_redis())
     async with worker.drain:
         await worker.record_health([b'a', b'b'], {b'a': 'A', b'b': 'B'})
         worker.last_health_check = 0
@@ -376,7 +376,7 @@ async def test_health_check_repeats(redis_conn, loop, caplog):
 async def test_health_check_repeats_hidden(redis_conn, loop, caplog):
     worker = Worker(burst=True, loop=loop)
     worker.repeat_health_check_logs = False
-    worker.drain = worker.drain_class(redis_pool=await worker.get_redis_pool())
+    worker.drain = worker.drain_class(redis=await worker.get_redis())
     async with worker.drain:
         await worker.record_health([b'a', b'b'], {b'a': 'A', b'b': 'B'})
         worker.last_health_check = 0

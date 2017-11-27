@@ -118,8 +118,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         """
         queue = queue or self.DEFAULT_QUEUE
         if self._concurrency_enabled:
-            # use the pool directly rather than get_redis_conn to avoid one extra await
-            redis = self.redis_pool or await self.get_redis_pool()
+            redis = await self.get_redis()
             main_logger.debug('%s.%s → %s', self.name, func_name, queue)
             await self.job_future(redis, queue, func_name, *args, **kwargs)
         else:
@@ -140,7 +139,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
 
     async def run_cron(self):
         n = self._now()
-        redis = self.redis_pool or await self.get_redis_pool()
+        redis = await self.get_redis()
         to_run = set()
 
         for cron_job in self.con_jobs:
