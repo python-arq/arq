@@ -1,4 +1,4 @@
-coverage==4.4.1
+coverage==4.4.2
 docutils==0.14
 flake8==3.5.0
 isort==4.2.15
