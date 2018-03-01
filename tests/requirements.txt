@@ -13,4 +13,4 @@ pytest-mock==1.7.1
 pytest-sugar==0.9.1
 pytest-timeout==1.2.1
 pytest-toolbox==0.2
-pytz==2017.3
+pytz==2018.3
