@@ -10,7 +10,7 @@ pytest-aiohttp==0.3.0
 pytest-cov==2.5.1
 pytest-isort==0.1.0
 pytest-mock==1.7.1
-pytest-sugar==0.9.0
+pytest-sugar==0.9.1
 pytest-timeout==1.2.1
 pytest-toolbox==0.2
 pytz==2017.3
