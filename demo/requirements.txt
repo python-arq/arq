@@ -1,4 +1,4 @@
-aiohttp==2.3.7
+aiohttp==3.1.1
 aiohttp-session==2.1.0
 chevron==0.11.1
 uvloop==0.9.1
