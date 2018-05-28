@@ -50,10 +50,10 @@ setup(
         arq=arq.cli:cli
     """,
     install_requires=[
-        'async-timeout>=1.2.1',
-        'aioredis>=1.0',
+        'async-timeout>=3.0.0',
+        'aioredis>=1.1.0',
         'click>=6.7',
-        'msgpack-python>=0.4.8',
+        'msgpack>=0.5.6',
     ],
     extras_require={
         'testing': ['pytest>=3.1.0'],
