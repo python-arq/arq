@@ -4,6 +4,10 @@ History
 -------
 
 
+v0.14.0 (2018-05-28)
+....................
+* package updates, particularly compatibility for ``msgpack 0.5.6``
+
 v0.13.0 (2017-11-27)
 ....................
 * **Braking Change:** integration with aioredis >= 1.0, basic usage hasn't changed but
