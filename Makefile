@@ -2,7 +2,7 @@
 
 .PHONY: install
 install:
-	pip install -U pip setuptools
+	pip install -U pip setuptools wheel cython
 	pip install -r requirements.txt
 	pip install -e .
 
@@ -13,7 +13,6 @@ isort:
 
 .PHONY: lint
 lint:
-	python setup.py check -rms
 	flake8 arq/ tests/
 	pytest arq -p no:sugar -q
 	mypy --ignore-missing-imports arq/
