@@ -21,7 +21,7 @@ async def test_simple_job_dispatch(tmpworkdir, loop, debug):
     assert list(actor.mock_data.keys())[0] == b'arq:q:dft'
     v = actor.mock_data[b'arq:q:dft']
     assert len(v) == 1
-    data = msgpack.unpackb(v[0], encoding='utf8')
+    data = msgpack.unpackb(v[0], raw=False)
     # timestamp
     assert 1e12 < data.pop(0) < 3e12
     assert data == ['MockRedisDemoActor', 'add_numbers', [1, 2], {}, '__id__']
@@ -41,7 +41,7 @@ async def test_enqueue_redis_job(actor, redis_conn):
     assert await redis_conn.exists(b'arq:q:dft')
     dft_queue = await redis_conn.lrange(b'arq:q:dft', 0, -1)
     assert len(dft_queue) == 1
-    data = msgpack.unpackb(dft_queue[0], encoding='utf8')
+    data = msgpack.unpackb(dft_queue[0], raw=False)
     # timestamp
     assert 1e12 < data.pop(0) < 3e12
     assert data == ['DemoActor', 'add_numbers', [1, 2], {}, '__id__']

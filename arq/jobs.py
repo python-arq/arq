@@ -105,7 +105,7 @@ class Job:
 
     @classmethod
     def decode_raw(cls, data: bytes):
-        return msgpack.unpackb(data, object_hook=cls.msgpack_object_hook, encoding='utf8')
+        return msgpack.unpackb(data, object_hook=cls.msgpack_object_hook, raw=False)
 
     def to_string(self, args_curtail=DEFAULT_CURTAIL):
         arguments = ''
