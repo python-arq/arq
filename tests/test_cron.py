@@ -16,7 +16,7 @@ datetimes = [
 ]
 
 
-async def test_run_cron_start(tmpworkdir, redis_conn, actor, debug):
+async def test_run_cron_start(tmpworkdir, redis_conn, actor):
     worker = CronWorker(burst=True, loop=actor.loop)
 
     assert not tmpworkdir.join('foobar').exists()
