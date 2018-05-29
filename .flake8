@@ -1,0 +1,32 @@
+[flake8]
+max-line-length = 100
+ignore =
+    E125,E121,E266,
+    # Django id is a commen convention
+    A002,A003,
+    # print is allowed
+    T001, T003,
+    C901
+exclude =
+    .git
+    # __pycache__
+    __pycache__
+    # virtual environment
+    .venv/
+    venv/
+    env/
+    # old api
+    api/
+    # __init__s usually have pre-imported modules
+    core/**/__init__.py
+    nlu/**/__init__.py
+    # migration files are auto-generated
+    core/migrations/*
+    # snippets
+    snippets/
+    # benchmark code
+    benchmark/
+    benchmark.py
+    docs/source/conf.py
+max_complexity = 10
+statistics = true

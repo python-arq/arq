@@ -9,8 +9,16 @@ from arq import Actor, BaseWorker, Job, concurrent
 from arq.jobs import ArqError
 from arq.testing import MockRedisWorker as MockRedisBaseWorker
 
-from .fixtures import (ChildActor, DemoActor, FoobarActor, MockRedisDemoActor, MockRedisWorker, ParentActor,
-                       ParentChildActorWorker, Worker)
+from .fixtures import (
+    ChildActor,
+    DemoActor,
+    FoobarActor,
+    MockRedisDemoActor,
+    MockRedisWorker,
+    ParentActor,
+    ParentChildActorWorker,
+    Worker,
+)
 
 
 async def test_simple_job_dispatch(tmpworkdir, loop):

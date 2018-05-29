@@ -14,3 +14,5 @@ __pycache__/
 /docs/_build/
 /.mypy_cache/
 /demo/tmp/
+.venv/
+.vscode/

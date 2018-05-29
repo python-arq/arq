@@ -97,7 +97,8 @@ class BaseWorker(RedisMixin):
         """
         self._burst_mode = burst
         self.shadows = shadows or self.shadows
-        self.queues: List[str] = queues
+        # self.queues: List[str] = queues
+        self.queues = queues
         self.timeout_seconds = timeout_seconds or self.timeout_seconds
 
         self._shadow_lookup:  Dict[str, Actor] = {}
