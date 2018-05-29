@@ -8,8 +8,8 @@ install:
 
 .PHONY: isort
 isort:
-	isort -rc -w 120 arq
-	isort -rc -w 120 tests
+	isort -rc -w 100 arq
+	isort -rc -w 100 tests
 
 .PHONY: lint
 lint:
