@@ -87,7 +87,7 @@ async def test_wrong_worker(mock_actor_worker, loop, caplog):
     actor, worker = mock_actor_worker
     actor2 = FoobarActor(loop=loop)
     actor2.mock_data = worker.mock_data
-    assert None is await actor2.concat('a', 'b')
+    await actor2.concat('a', 'b')
     await worker.run()
     assert worker.jobs_failed == 1
     assert 'Job Error: unable to find shadow for <Job __id__ foobar.concat(a, b) on dft>' in caplog
@@ -106,7 +106,7 @@ async def test_mock_timeout(loop, caplog):
     actor = MockRedisDemoActor(loop=loop)
     worker.mock_data = actor.mock_data
 
-    assert None is await actor.concat('a', 'b')
+    await actor.concat('a', 'b')
 
     await worker.run()
     assert worker.jobs_complete == 1
@@ -259,8 +259,8 @@ async def test_shutdown_without_work(loop):
 async def test_job_timeout(loop, caplog):
     caplog.set_loggers()
     actor = MockRedisDemoActor(loop=loop)
-    assert None is await actor.sleeper(0.2)
-    assert None is await actor.sleeper(0.05)
+    await actor.sleeper(0.2)
+    await actor.sleeper(0.05)
     worker = MockRedisWorker(burst=True, loop=loop, timeout_seconds=0.1)
     worker.mock_data = actor.mock_data
     await worker.run()

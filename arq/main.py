@@ -103,7 +103,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
                 if isinstance(v, CronJob):
                     yield new_v
 
-    async def enqueue_job(self, func_name: str, *args, queue: str=None, **kwargs):
+    async def enqueue_job(self, func_name: str, *args, queue: str=None, **kwargs) -> Job:
         """
         Enqueue a job by pushing the encoded job information into the redis list specified by the queue.
 
@@ -219,7 +219,8 @@ class Bindable:
         return await self.defer(*args, **kwargs)
 
     async def defer(self, *args, queue_name=None, **kwargs):
-        await self._self_obj.enqueue_job(self._func.__name__, *args, queue=queue_name or self._dft_queue, **kwargs)
+        return await self._self_obj.enqueue_job(self._func.__name__, *args, queue=queue_name or self._dft_queue,
+                                                **kwargs)
 
     async def direct(self, *args, **kwargs):
         return await self._func(self._self_obj, *args, **kwargs)
