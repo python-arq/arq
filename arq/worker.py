@@ -15,7 +15,7 @@ from functools import partial
 from importlib import import_module, reload
 from multiprocessing import Process
 from signal import Signals
-from typing import Dict, List, Type  # noqa
+from typing import Dict, List, Optional, Type  # noqa
 
 from async_timeout import timeout
 
@@ -97,16 +97,16 @@ class BaseWorker(RedisMixin):
         """
         self._burst_mode = burst
         self.shadows = shadows or self.shadows
-        self.queues: List[str] = queues
+        self.queues: Optional[List[str]] = queues
         self.timeout_seconds = timeout_seconds or self.timeout_seconds
 
         self._shadow_lookup:  Dict[str, Actor] = {}
-        self.start: float = None
+        self.start: Optional[float] = None
         self.last_health_check = 0
         self._last_health_check_log = None
         self._closed = False
-        self.drain: Drain = None
-        self.job_class: Type[Job] = None
+        self.drain: Optional[Drain] = None
+        self.job_class: Optional[Type[Job]] = None
         super().__init__(**kwargs)
         self._add_signal_handler(signal.SIGINT, self.handle_sig)
         self._add_signal_handler(signal.SIGTERM, self.handle_sig)
@@ -330,7 +330,7 @@ class BaseWorker(RedisMixin):
         jobs_logger.info('%-4s ran in%7.3fs ← %s ● %s', j.queue, job_time, j.short_ref(), sr)
 
     def handle_prepare_exc(self, msg: str):
-        self.drain.jobs_failed += 1
+        self.drain.jobs_failed += 1  # type: ignore
         jobs_logger.error(msg)
         # exit with zero so we don't increment jobs_failed twice
         return 0
