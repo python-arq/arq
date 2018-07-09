@@ -10,7 +10,7 @@ import asyncio
 import inspect
 import logging
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Union  # noqa
+from typing import Any, Callable, Dict, List, Optional, Union, cast  # noqa
 
 from .jobs import Job
 from .utils import RedisMixin, next_cron, to_unix_ms
@@ -54,7 +54,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
 
     #: if not None this name is used instead of the class name when encoding and referencing jobs,
     #: if None the class's name is used
-    name: str = None
+    name: Optional[str] = None
 
     #: job class to use when encoding and decoding jobs from this actor
     job_class = Job
@@ -123,14 +123,14 @@ class Actor(RedisMixin, metaclass=ActorMeta):
             await self.job_future(redis, queue, func_name, *args, **kwargs)
         else:
             main_logger.debug('%s.%s → %s (called directly)', self.name, func_name, queue)
-            data = self.job_class.encode(class_name=self.name, func_name=func_name, args=args, kwargs=kwargs)
+            data = self.job_class.encode(class_name=cast(str, self.name), func_name=func_name, args=args, kwargs=kwargs)
             j = self.job_class(data, queue_name=queue)
             await getattr(self, j.func_name).direct(*j.args, **j.kwargs)
 
     def job_future(self, redis, queue: str, func_name: str, *args, **kwargs):
         return redis.rpush(
             self.queue_lookup[queue],
-            self.job_class.encode(class_name=self.name, func_name=func_name, args=args, kwargs=kwargs),
+            self.job_class.encode(class_name=cast(str, self.name), func_name=func_name, args=args, kwargs=kwargs),
         )
 
     def _now(self):

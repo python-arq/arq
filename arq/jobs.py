@@ -7,6 +7,7 @@ Defines the ``Job`` class and descendants which deal with encoding and decoding 
 import base64
 import os
 from datetime import datetime
+from typing import cast
 
 import msgpack
 
@@ -54,8 +55,8 @@ class Job:
         self.raw_data = raw_data
         if queue_name is None and raw_queue is None:
             raise ArqError('either queue_name or raw_queue are required')
-        self.queue = queue_name or raw_queue.decode()
-        self.raw_queue = raw_queue or queue_name.encode()
+        self.queue = queue_name or cast(bytes, raw_queue).decode()
+        self.raw_queue = raw_queue or cast(str, queue_name).encode()
         self.queued_at, self.class_name, self.func_name, self.args, self.kwargs, self.id = self.decode_raw(raw_data)
         self.queued_at /= 1000
 

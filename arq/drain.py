@@ -6,7 +6,7 @@ Drain class used by :class:`arq.worker.BaseWorker` and reusable elsewhere.
 """
 import asyncio
 import logging
-from typing import Set  # noqa
+from typing import Optional, Set  # noqa
 
 from aioredis import Redis
 from async_timeout import timeout
@@ -56,7 +56,7 @@ class Drain:
         self.burst_mode = burst_mode
         self.raise_task_exception = raise_task_exception
         self.pending_tasks: Set[asyncio.futures.Future] = set()
-        self.task_exception: Exception = None
+        self.task_exception: Optional[Exception] = None
         self.semaphore_timeout = semaphore_timeout
 
         self.jobs_complete, self.jobs_failed, self.jobs_timed_out = 0, 0, 0
