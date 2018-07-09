@@ -234,7 +234,7 @@ class BaseWorker(RedisMixin):
             await self.heart_beat(original_redis_queues, queue_lookup)
             async for raw_queue, raw_data in self.drain.iter(*redis_queues):
                 if raw_queue is not None:
-                    job = self.job_class(raw_data, queue_name=queue_lookup[raw_queue], raw_queue=raw_queue)
+                    job = self.job_class.decode(raw_data, queue_name=queue_lookup[raw_queue], raw_queue=raw_queue)
                     shadow = self._shadow_lookup.get(job.class_name)
                     re_enqueue = shadow and getattr(shadow, 're_enqueue_jobs', False)
                     work_logger.debug('scheduling job %r, re-enqueue: %r', job, re_enqueue)

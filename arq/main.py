@@ -123,14 +123,21 @@ class Actor(RedisMixin, metaclass=ActorMeta):
             await self.job_future(redis, queue, func_name, *args, **kwargs)
         else:
             main_logger.debug('%s.%s → %s (called directly)', self.name, func_name, queue)
-            data = self.job_class.encode(class_name=self.name, func_name=func_name, args=args, kwargs=kwargs)
-            j = self.job_class(data, queue_name=queue)
-            await getattr(self, j.func_name).direct(*j.args, **j.kwargs)
+            job = self.job_class(class_name=self.name, func_name=func_name, args=args, kwargs=kwargs, queue_name=queue)
+            await getattr(self, job.func_name).direct(*job.args, **job.kwargs)
 
-    def job_future(self, redis, queue: str, func_name: str, *args, **kwargs):
-        return redis.rpush(
+    async def job_future(self, redis, queue: str, func_name: str, *args, **kwargs):
+        job = self.job_class(
+            class_name=self.name,
+            func_name=func_name,
+            args=args,
+            kwargs=kwargs,
+            queue_name=queue,
+            raw_queue=self.queue_lookup[queue],
+        )
+        await redis.rpush(
             self.queue_lookup[queue],
-            self.job_class.encode(class_name=self.name, func_name=func_name, args=args, kwargs=kwargs),
+            job.encode(),
         )
 
     def _now(self):
