@@ -13,7 +13,7 @@ from arq.testing import MockRedisMixin
 
 class JobConstID(Job):
     @classmethod
-    def generate_id(cls, given_id):
+    def generate_id(cls):
         return '__id__'
 
 
