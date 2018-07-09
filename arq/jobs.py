@@ -59,7 +59,7 @@ class Job:
         self.func_name = func_name
         self.args = args
         self.kwargs = kwargs
-        self.id = job_id or self.generate_id()
+        self.id = self.generate_id(job_id)
         self.queue = queue
         self.raw_queue = raw_queue
         self.queued_at = queued_at
@@ -75,8 +75,7 @@ class Job:
         :param raw_queue: raw name of the queue the job was taken from
         """
         queued_at, class_name, func_name, args, kwargs, job_id = cls.decode_raw(raw_data)
-
-        j = cls(
+        return cls(
             class_name=class_name,
             func_name=func_name,
             args=args,
@@ -87,7 +86,6 @@ class Job:
             queued_at=queued_at / 1000,
             raw_data=raw_data,
         )
-        return j
 
     def encode(self):
         """
@@ -107,8 +105,9 @@ class Job:
         except TypeError as e:
             raise JobSerialisationError(str(e)) from e
 
-    def generate_id(self):
-        return gen_random()
+    @classmethod
+    def generate_id(cls, given_id):
+        return given_id or gen_random()
 
     @classmethod
     def msgpack_encoder(cls, obj):
