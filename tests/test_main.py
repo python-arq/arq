@@ -5,8 +5,7 @@ from asyncio import Future
 import msgpack
 import pytest
 
-from arq import Actor, BaseWorker, Job, concurrent
-from arq.jobs import ArqError
+from arq import Actor, BaseWorker, concurrent
 from arq.testing import MockRedisWorker as MockRedisBaseWorker
 
 from .fixtures import (ChildActor, DemoActor, FoobarActor, MockRedisDemoActor, MockRedisWorker, ParentActor,
@@ -160,6 +159,7 @@ async def test_call_direct(mock_actor_worker, caplog):
     assert worker.jobs_failed == 0
     assert worker.jobs_complete == 1
     log = re.sub('0.0\d\ds', '0.0XXs', caplog.log)
+    print(log)
     assert ('arq.jobs: dft  queued  0.0XXs → __id__ MockRedisDemoActor.direct_method(1, 2)\n'
             'arq.jobs: dft  ran in  0.0XXs ← __id__ MockRedisDemoActor.direct_method ● 3') in log
 
@@ -250,12 +250,6 @@ async def test_bind_replication(tmpdir, loop):
     await worker.run()
     assert file1.read() == 'Parent'
     assert file2.read() == 'Child'
-
-
-def test_job_no_queue():
-    with pytest.raises(ArqError) as exc_info:
-        Job(b'foo')
-    assert 'either queue_name or raw_queue are required' in str(exc_info)
 
 
 async def test_encode_set(tmpworkdir, loop, redis_conn):

@@ -7,6 +7,7 @@ Defines the ``Job`` class and descendants which deal with encoding and decoding 
 import base64
 import os
 from datetime import datetime
+from typing import Tuple
 
 import msgpack
 
@@ -41,9 +42,20 @@ class Job:
     Main Job class responsible for encoding and decoding jobs as they go
     into and come out of redis.
     """
-    __slots__ = 'id', 'queue', 'queued_at', 'class_name', 'func_name', 'args', 'kwargs', 'raw_queue', 'raw_data'
+    __slots__ = 'id', 'queue', 'queued_at', 'class_name', 'func_name', 'args', 'kwargs', 'raw_queue'
 
-    def __init__(self, raw_data: bytes, *, queue_name: str=None, raw_queue: bytes=None) -> None:
+    def __init__(
+        self,
+        class_name: str,
+        func_name: str,
+        args: tuple,
+        kwargs: dict,
+        *,
+        queued_at: float = None,
+        job_id: str = None,
+        queue_name: str = None,
+        raw_queue: bytes = None,
+    ) -> None:
         """
         Create a job instance be decoding a job definition eg. from redis.
 
@@ -51,17 +63,31 @@ class Job:
         :param raw_queue: raw name of the queue the job was taken from
         :param queue_name: name of the queue the job was dequeued from
         """
-        self.raw_data = raw_data
+        self.queue, self.raw_queue = self.init_queue_name(queue_name, raw_queue)
+
+        self.queued_at = queued_at or int(timestamp() * 1000)
+        self.queued_at = self.queued_at / 1000
+        self.class_name = class_name
+        self.func_name = func_name
+        self.args = args
+        self.kwargs = kwargs
+        self.id = self.generate_id(job_id)
+
+    @staticmethod
+    def init_queue_name(queue_name: str, raw_queue: bytes) -> Tuple[str, bytes]:
         if queue_name is None and raw_queue is None:
             raise ArqError('either queue_name or raw_queue are required')
-        self.queue = queue_name or raw_queue.decode()
-        self.raw_queue = raw_queue or queue_name.encode()
-        self.queued_at, self.class_name, self.func_name, self.args, self.kwargs, self.id = self.decode_raw(raw_data)
-        self.queued_at /= 1000
 
-    @classmethod
-    def encode(cls, *, job_id: str=None, queued_at: int=None, class_name: str, func_name: str,
-               args: tuple, kwargs: dict) -> bytes:
+        final_queue = queue_name or raw_queue.decode()
+        final_raw_queue = raw_queue or queue_name.encode()
+
+        return final_queue, final_raw_queue
+
+    @property
+    def raw_data(self):
+        return self.encode()
+
+    def encode(self) -> bytes:
         """
         Create a byte string suitable for pushing into redis which contains all
         required information about a job to be performed.
@@ -73,11 +99,33 @@ class Job:
         :param args: arguments to pass to the function
         :param kwargs: key word arguments to pass to the function
         """
-        queued_at = queued_at or int(timestamp() * 1000)
+        to_be_encoded = [
+            self.queued_at * 1000,
+            self.class_name,
+            self.func_name,
+            self.args,
+            self.kwargs,
+            self.id,
+        ]
         try:
-            return cls.encode_raw([queued_at, class_name, func_name, args, kwargs, cls.generate_id(job_id)])
+            return self.encode_raw(to_be_encoded)
         except TypeError as e:
             raise JobSerialisationError(str(e)) from e
+
+    @classmethod
+    def decode(cls, raw_data: bytes, queue_name: str=None, raw_queue: bytes=None):
+        queue, raw_queue = cls.init_queue_name(queue_name, raw_queue)
+        queued_at, class_name, func_name, args, kwargs, job_id = cls.decode_raw(raw_data)
+        return cls(
+            queued_at=queued_at,
+            class_name=class_name,
+            func_name=func_name,
+            args=args,
+            kwargs=kwargs,
+            job_id=job_id,
+            queue_name=queue_name,
+            raw_queue=raw_queue,
+        )
 
     @classmethod
     def generate_id(cls, given_id):
