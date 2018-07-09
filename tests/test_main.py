@@ -203,7 +203,8 @@ async def test_dynamic_worker_custom_queue(tmpworkdir, loop):
     class CustomActor(MockRedisDemoActor):
         queues = ['foobar']
     actor = CustomActor(loop=loop)
-    await actor.enqueue_job('add_numbers', 1, 1, queue='foobar')
+    job = await actor.enqueue_job('add_numbers', 1, 1, queue='foobar')
+    assert isinstance(job, Job)
     assert not tmpworkdir.join('add_numbers').exists()
     worker = MockRedisBaseWorker(loop=loop, burst=True, queues=['foobar'], shadows=[CustomActor])
     worker.mock_data = actor.mock_data
