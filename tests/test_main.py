@@ -6,7 +6,6 @@ import msgpack
 import pytest
 
 from arq import Actor, BaseWorker, Job, concurrent
-from arq.jobs import ArqError
 from arq.testing import MockRedisWorker as MockRedisBaseWorker
 
 from .fixtures import (ChildActor, DemoActor, FoobarActor, MockRedisDemoActor, MockRedisWorker, ParentActor,
@@ -15,7 +14,9 @@ from .fixtures import (ChildActor, DemoActor, FoobarActor, MockRedisDemoActor, M
 
 async def test_simple_job_dispatch(tmpworkdir, loop):
     actor = MockRedisDemoActor(loop=loop)
-    assert None is await actor.add_numbers(1, 2)
+    j = await actor.add_numbers(1, 2)
+    assert isinstance(j, Job)
+    assert j.id == '__id__'
     assert not tmpworkdir.join('add_numbers').exists()
     assert len(actor.mock_data) == 1
     assert list(actor.mock_data.keys())[0] == b'arq:q:dft'
@@ -29,14 +30,14 @@ async def test_simple_job_dispatch(tmpworkdir, loop):
 
 async def test_concurrency_disabled_job_dispatch(tmpworkdir, loop):
     actor = MockRedisDemoActor(loop=loop, concurrency_enabled=False)
-    assert None is await actor.add_numbers(1, 2)
+    await actor.add_numbers(1, 2)
     assert tmpworkdir.join('add_numbers').read_text('utf8') == '3'
     assert len(actor.mock_data) == 0
 
 
 async def test_enqueue_redis_job(actor, redis_conn):
     assert not await redis_conn.exists(b'arq:q:dft')
-    assert None is await actor.add_numbers(1, 2)
+    await actor.add_numbers(1, 2)
 
     assert await redis_conn.exists(b'arq:q:dft')
     dft_queue = await redis_conn.lrange(b'arq:q:dft', 0, -1)
@@ -50,8 +51,8 @@ async def test_enqueue_redis_job(actor, redis_conn):
 async def test_dispatch_work(tmpworkdir, loop, caplog, redis_conn):
     caplog.set_loggers(level=logging.DEBUG, fmt='%(message)s')
     actor = MockRedisDemoActor(loop=loop)
-    assert None is await actor.add_numbers(1, 2)
-    assert None is await actor.high_add_numbers(3, 4, c=5)
+    await actor.add_numbers(1, 2)
+    await actor.high_add_numbers(3, 4, c=5)
     assert len(actor.mock_data[b'arq:q:dft']) == 1
     assert len(actor.mock_data[b'arq:q:high']) == 1
     assert caplog.log == ('MockRedisDemoActor.add_numbers → dft\n'
@@ -97,7 +98,7 @@ async def test_handle_exception(loop, caplog):
     caplog.set_loggers(fmt='%(message)s')
     actor = MockRedisDemoActor(loop=loop)
     assert caplog.log == ''
-    assert None is await actor.boom()
+    await actor.boom()
     worker = MockRedisWorker(burst=True, loop=actor.loop)
     worker.mock_data = actor.mock_data
     await worker.run()
@@ -144,7 +145,7 @@ async def test_repeat_queue():
 async def test_custom_name(loop, caplog):
     actor = FoobarActor(loop=loop)
     assert re.match('^<FoobarActor\(foobar\) at 0x[a-f0-9]{12}>$', str(actor))
-    assert None is await actor.concat('123', '456')
+    await actor.concat('123', '456')
     worker = MockRedisWorker(burst=True, loop=actor.loop, shadows=[FoobarActor])
     worker.mock_data = actor.mock_data
     await worker.run()
@@ -167,7 +168,7 @@ async def test_call_direct(mock_actor_worker, caplog):
 async def test_direct_binding(mock_actor_worker, caplog):
     caplog.set_level(logging.INFO)
     actor, worker = mock_actor_worker
-    assert None is await actor.concat('a', 'b')
+    await actor.concat('a', 'b')
     assert 'a + b' == await actor.concat.direct('a', 'b')
     await worker.run()
     assert worker.jobs_failed == 0
@@ -252,12 +253,6 @@ async def test_bind_replication(tmpdir, loop):
     assert file2.read() == 'Child'
 
 
-def test_job_no_queue():
-    with pytest.raises(ArqError) as exc_info:
-        Job(b'foo')
-    assert 'either queue_name or raw_queue are required' in str(exc_info)
-
-
 async def test_encode_set(tmpworkdir, loop, redis_conn):
     actor = DemoActor(loop=loop)
     await actor.subtract({1, 2, 3, 4}, {4, 5})
@@ -270,3 +265,21 @@ async def test_encode_set(tmpworkdir, loop, redis_conn):
     assert tmpworkdir.join('subtract').read() == '{1, 2, 3}'
 
     await worker.close()
+
+
+async def test_job_args(tmpworkdir, loop):
+    actor = MockRedisDemoActor(loop=loop)
+    j = await actor.add_numbers(1, b=2)
+    assert isinstance(j, Job)
+    assert j.args == (1,)
+    assert j.kwargs == {'b': 2}
+    assert j.id == '__id__'
+    assert j.class_name == 'MockRedisDemoActor'
+    assert j.func_name == 'add_numbers'
+    assert j.args == (1,)
+    assert j.kwargs == {'b': 2}
+    assert j.id == '__id__'
+    assert j.queue is None
+    assert j.raw_queue is None
+    assert isinstance(j.queued_at, int)
+    assert j.raw_data is None

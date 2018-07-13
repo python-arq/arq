@@ -7,7 +7,6 @@ Defines the ``Job`` class and descendants which deal with encoding and decoding 
 import base64
 import os
 from datetime import datetime
-from typing import cast
 
 import msgpack
 
@@ -24,7 +23,7 @@ class JobSerialisationError(ArqError):
     pass
 
 
-def gen_random():
+def gen_random() -> str:
     """
     generate a lowercase alpha-numeric random string of length 24.
 
@@ -44,25 +43,51 @@ class Job:
     """
     __slots__ = 'id', 'queue', 'queued_at', 'class_name', 'func_name', 'args', 'kwargs', 'raw_queue', 'raw_data'
 
-    def __init__(self, raw_data: bytes, *, queue_name: str=None, raw_queue: bytes=None) -> None:
+    def __init__(self, *, class_name: str, func_name: str, args: tuple, kwargs: dict,
+                 job_id: str=None, queue: str=None, raw_queue: str=None,
+                 queued_at: int=0, raw_data: bytes=None) -> None:
         """
-        Create a job instance be decoding a job definition eg. from redis.
+        Create a new job instance.
 
-        :param raw_data: data to decode, as created by :meth:`arq.jobs.Job.encode`
-        :param raw_queue: raw name of the queue the job was taken from
-        :param queue_name: name of the queue the job was dequeued from
+        :param class_name: name (see :attr:`arq.main.Actor.name`) of the actor class where the job is defined
+        :param func_name: name of the function be called
+        :param args: arguments to pass to the function
+        :param kwargs: key word arguments to pass to the function
+        :param job_id: id to use for the job, leave blank to generate a uuid
         """
+        self.class_name = class_name
+        self.func_name = func_name
+        self.args = args
+        self.kwargs = kwargs
+        self.id = self.generate_id(job_id)
+        self.queue = queue
+        self.raw_queue = raw_queue
+        self.queued_at = queued_at
         self.raw_data = raw_data
-        if queue_name is None and raw_queue is None:
-            raise ArqError('either queue_name or raw_queue are required')
-        self.queue = queue_name or cast(bytes, raw_queue).decode()
-        self.raw_queue = raw_queue or cast(str, queue_name).encode()
-        self.queued_at, self.class_name, self.func_name, self.args, self.kwargs, self.id = self.decode_raw(raw_data)
-        self.queued_at /= 1000
 
     @classmethod
-    def encode(cls, *, job_id: str=None, queued_at: int=None, class_name: str, func_name: str,
-               args: tuple, kwargs: dict) -> bytes:
+    def decode(cls, raw_data: bytes, *, queue_name: str=None, raw_queue: str=None) -> 'Job':
+        """
+        Create a job instance by decoding a job definition eg. from redis.
+
+        :param raw_data: data to decode, as created by :meth:`arq.jobs.Job.encode`
+        :param queue_name: name of the queue the job was dequeued from
+        :param raw_queue: raw name of the queue the job was taken from
+        """
+        queued_at, class_name, func_name, args, kwargs, job_id = cls.decode_raw(raw_data)
+        return cls(
+            class_name=class_name,
+            func_name=func_name,
+            args=args,
+            kwargs=kwargs,
+            job_id=job_id,
+            queue=queue_name,
+            raw_queue=raw_queue,
+            queued_at=queued_at / 1000,
+            raw_data=raw_data,
+        )
+
+    def encode(self):
         """
         Create a byte string suitable for pushing into redis which contains all
         required information about a job to be performed.
@@ -74,9 +99,9 @@ class Job:
         :param args: arguments to pass to the function
         :param kwargs: key word arguments to pass to the function
         """
-        queued_at = queued_at or int(timestamp() * 1000)
+        self.queued_at = self.queued_at or int(timestamp() * 1000)
         try:
-            return cls.encode_raw([queued_at, class_name, func_name, args, kwargs, cls.generate_id(job_id)])
+            return self.encode_raw([self.queued_at, self.class_name, self.func_name, self.args, self.kwargs, self.id])
         except TypeError as e:
             raise JobSerialisationError(str(e)) from e
 

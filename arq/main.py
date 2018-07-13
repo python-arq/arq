@@ -103,7 +103,7 @@ class Actor(RedisMixin, metaclass=ActorMeta):
                 if isinstance(v, CronJob):
                     yield new_v
 
-    async def enqueue_job(self, func_name: str, *args, queue: str=None, **kwargs):
+    async def enqueue_job(self, func_name: str, *args, queue: str=None, **kwargs) -> Job:
         """
         Enqueue a job by pushing the encoded job information into the redis list specified by the queue.
 
@@ -117,20 +117,22 @@ class Actor(RedisMixin, metaclass=ActorMeta):
         :param kwargs: key word arguments to pass to the function
         """
         queue = queue or self.DEFAULT_QUEUE
+        job = self.job_class(class_name=cast(str, self.name), func_name=func_name, args=args, kwargs=kwargs)
         if self._concurrency_enabled:
             redis = self.redis or await self.get_redis()
             main_logger.debug('%s.%s → %s', self.name, func_name, queue)
-            await self.job_future(redis, queue, func_name, *args, **kwargs)
+            await self.job_future(redis, queue, job)
         else:
             main_logger.debug('%s.%s → %s (called directly)', self.name, func_name, queue)
-            data = self.job_class.encode(class_name=cast(str, self.name), func_name=func_name, args=args, kwargs=kwargs)
-            j = self.job_class(data, queue_name=queue)
-            await getattr(self, j.func_name).direct(*j.args, **j.kwargs)
+            # encode and decode the job again to make sure it works properly
+            job = self.job_class.decode(job.encode(), queue_name=queue, raw_queue=self.queue_lookup[queue])
+            await getattr(self, job.func_name).direct(*job.args, **job.kwargs)
+        return job
 
-    def job_future(self, redis, queue: str, func_name: str, *args, **kwargs):
+    def job_future(self, redis, queue: str, job):
         return redis.rpush(
             self.queue_lookup[queue],
-            self.job_class.encode(class_name=cast(str, self.name), func_name=func_name, args=args, kwargs=kwargs),
+            job.encode(),
         )
 
     def _now(self):
@@ -164,7 +166,8 @@ class Actor(RedisMixin, metaclass=ActorMeta):
                     if v == sentinel_value:
                         # if v is equal to sentinel value, another worker has already set it and is doing this cron run
                         continue
-                job_futures.add(self.job_future(redis, cron_job.dft_queue or self.DEFAULT_QUEUE, cron_job.__name__))
+                job = self.job_class(class_name=cast(str, self.name), func_name=cron_job.__name__, args=(), kwargs={})
+                job_futures.add(self.job_future(redis, cron_job.dft_queue or self.DEFAULT_QUEUE, job))
 
             job_futures and await asyncio.gather(*job_futures)
 
@@ -216,7 +219,8 @@ class Bindable:
         return await self.defer(*args, **kwargs)
 
     async def defer(self, *args, queue_name=None, **kwargs):
-        await self._self_obj.enqueue_job(self._func.__name__, *args, queue=queue_name or self._dft_queue, **kwargs)
+        return await self._self_obj.enqueue_job(self._func.__name__, *args, queue=queue_name or self._dft_queue,
+                                                **kwargs)
 
     async def direct(self, *args, **kwargs):
         return await self._func(self._self_obj, *args, **kwargs)
