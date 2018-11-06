@@ -100,8 +100,16 @@ class MockRedis:
         self.data[key] = value
         self._expiry[key] = datetime.now() + timedelta(seconds=expires)
 
+    async def expire(self, key, expires):
+        self._expiry[key] = datetime.now() + timedelta(seconds=expires)
+
     async def get(self, key):
         return self._get(key)
+
+    async def getset(self, key, value):
+        old_value = self._get(key)
+        await self.set(key, value)
+        return old_value
 
     def close(self):
         pass
