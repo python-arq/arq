@@ -11,7 +11,7 @@ class Downloader(Actor):
     async def download_content(self, url):
         async with self.session.get(url) as response:
             content = await response.read()
-            print('{}: {:.80}...'.format(url, content.decode()))
+            print(f'{url}: {content.decode():.80}...')
         return len(content)
 
     async def shutdown(self):
