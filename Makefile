@@ -20,11 +20,11 @@ lint:
 
 .PHONY: test
 test:
-	TZ=Asia/Singapore pytest --cov=arq && coverage combine
+	TZ=Asia/Singapore pytest --cov=arq
 
 .PHONY: testcov
 testcov:
-	TZ=Asia/Singapore pytest --cov=arq && (echo "building coverage html"; coverage combine; coverage html)
+	TZ=Asia/Singapore pytest --cov=arq && (echo "building coverage html"; coverage html)
 
 .PHONY: all
 all: testcov lint
