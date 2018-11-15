@@ -62,8 +62,8 @@ async def test_dispatch_work(tmpworkdir, loop, caplog, redis_conn):
     assert not tmpworkdir.join('add_numbers').exists()
     await worker.run()
     assert tmpworkdir.join('add_numbers').read() == '3'
-    log = re.sub('0.0\d\ds', '0.0XXs', caplog.log)
-    log = re.sub("arq:quit-.*", "arq:quit-<random>", log)
+    log = re.sub(r'0.0\d\ds', '0.0XXs', caplog.log)
+    log = re.sub(r"arq:quit-.*", "arq:quit-<random>", log)
     log = re.sub(r'\d{4}-\d+-\d+ \d+:\d+:\d+', '<date time>', log)
     log = re.sub(r'\w{3}-\d+ \d+:\d+:\d+', '<date time2>', log)
     print(log)
@@ -102,9 +102,9 @@ async def test_handle_exception(loop, caplog):
     worker = MockRedisWorker(burst=True, loop=actor.loop)
     worker.mock_data = actor.mock_data
     await worker.run()
-    log = re.sub('0.0\d\ds', '0.0XXs', caplog.log)
-    log = re.sub(', line \d+,', ', line <no>,', log)
-    log = re.sub('"/.*?/(\w+/\w+)\.py"', r'"/path/to/\1.py"', log)
+    log = re.sub(r'0.0\d\ds', '0.0XXs', caplog.log)
+    log = re.sub(r', line \d+,', ', line <no>,', log)
+    log = re.sub(r'"/.*?/(\w+/\w+)\.py"', r'"/path/to/\1.py"', log)
     log = re.sub(r'\d{4}-\d+-\d+ \d+:\d+:\d+', '<date time>', log)
     log = re.sub(r'\w{3}-\d+ \d+:\d+:\d+', '<date time2>', log)
     print(log)
@@ -144,7 +144,7 @@ async def test_repeat_queue():
 
 async def test_custom_name(loop, caplog):
     actor = FoobarActor(loop=loop)
-    assert re.match('^<FoobarActor\(foobar\) at 0x[a-f0-9]{12}>$', str(actor))
+    assert re.match(r'^<FoobarActor\(foobar\) at 0x[a-f0-9]{12}>$', str(actor))
     await actor.concat('123', '456')
     worker = MockRedisWorker(burst=True, loop=actor.loop, shadows=[FoobarActor])
     worker.mock_data = actor.mock_data
@@ -160,7 +160,7 @@ async def test_call_direct(mock_actor_worker, caplog):
     await worker.run()
     assert worker.jobs_failed == 0
     assert worker.jobs_complete == 1
-    log = re.sub('0.0\d\ds', '0.0XXs', caplog.log)
+    log = re.sub(r'0.0\d\ds', '0.0XXs', caplog.log)
     assert ('arq.jobs: dft  queued  0.0XXs → __id__ MockRedisDemoActor.direct_method(1, 2)\n'
             'arq.jobs: dft  ran in  0.0XXs ← __id__ MockRedisDemoActor.direct_method ● 3') in log
 

@@ -21,7 +21,7 @@ def test_simple_burst(tmpworkdir, monkeypatch):
     runner = CliRunner()
     result = runner.invoke(cli, ['--burst', 'test.py'])
     assert result.exit_code == 0
-    output = re.sub('\d+:\d+:\d+', 'TIME', result.output)
+    output = re.sub(r'\d+:\d+:\d+', 'TIME', result.output)
     assert output == ('TIME MainProcess: starting work process "WorkProcess"\n'
                       'TIME MainProcess: worker process exited ok\n')
 
@@ -37,7 +37,7 @@ def test_worker_exited_badly(tmpworkdir, monkeypatch):
     runner = CliRunner()
     result = runner.invoke(cli, ['--burst', 'test.py'])
     assert result.exit_code == 3
-    output = re.sub('\d+:\d+:\d+', 'TIME', result.output)
+    output = re.sub(r'\d+:\d+:\d+', 'TIME', result.output)
     assert ('TIME MainProcess: starting work process "WorkProcess"\n'
             'TIME MainProcess: worker process 123 exited badly with exit code 42\n') == output
 
