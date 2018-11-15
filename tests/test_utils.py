@@ -37,6 +37,14 @@ def test_arbitrary_logger(capsys):
     assert [out, err] == ['this is a test\n', '']
 
 
+async def test_mock_redis_getset(loop):
+    r = MockRedis(loop=loop)
+    await r.set('foo', 'bar')
+    assert 'bar' == await r.get('foo')
+    assert 'bar' == await r.getset('foo', 'baz')
+    assert 'baz' == await r.get('foo')
+
+
 async def test_mock_redis_expiry_ok(loop):
     r = MockRedis(loop=loop)
     await r.setex('foo', 10, 'bar')
@@ -46,6 +54,13 @@ async def test_mock_redis_expiry_ok(loop):
 async def test_mock_redis_expiry_expired(loop):
     r = MockRedis(loop=loop)
     await r.setex('foo', -10, 'bar')
+    assert None is await r.get('foo')
+
+
+async def test_mock_redis_expire_expired(loop):
+    r = MockRedis(loop=loop)
+    await r.set('foo', 'bar')
+    await r.expire('foo', -10)
     assert None is await r.get('foo')
 
 
