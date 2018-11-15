@@ -3,11 +3,11 @@
 History
 -------
 
-v0.15.0 (2018-XX-XX)
+v0.15.0 (2018-11-15)
 ....................
 * update dependencies
 * reconfigure ``Job``, return a job instance when enqueuing tasks #93
-
+* tweaks to docs #106
 
 v0.14.0 (2018-05-28)
 ....................
