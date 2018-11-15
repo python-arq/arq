@@ -100,7 +100,7 @@ class BaseWorker(RedisMixin):
         self.queues: Optional[List[str]] = queues
         self.timeout_seconds = timeout_seconds or self.timeout_seconds
 
-        self._shadow_lookup:  Dict[str, Actor] = {}
+        self._shadow_lookup: Dict[str, Actor] = {}
         self.start: Optional[float] = None
         self.last_health_check = 0
         self._last_health_check_log = None

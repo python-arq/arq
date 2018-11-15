@@ -92,7 +92,7 @@ async def test_wrong_queues(loop):
     worker = DatetimeWorker(loop=loop, burst=True, shadows=[DemoActor, DemoActor, DifferentQueuesActor])
     with pytest.raises(TypeError) as excinfo:
         await worker.run()
-    msg = re.sub('0x\w+>', '0x123>', excinfo.value.args[0])
+    msg = re.sub(r'0x\w+>', '0x123>', excinfo.value.args[0])
     assert msg == ("<DifferentQueuesActor(DifferentQueuesActor) at 0x123> has a different "
                    "list of queues to the first shadow: ('dft', 'foobar') != ('high', 'dft', 'low')")
     await worker.close()

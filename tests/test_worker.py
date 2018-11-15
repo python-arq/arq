@@ -31,7 +31,7 @@ async def test_long_args(mock_actor_worker, caplog):
     v = ','.join(map(str, range(20)))
     await actor.concat(a=v, b=v)
     await worker.run()
-    log = caplog(('0.0\d\ds', '0.0XXs'))
+    log = caplog((r'0.0\d\ds', '0.0XXs'))
     print(log)
     assert ("dft  queued  0.0XXs → __id__ MockRedisDemoActor.concat"
             "(a='0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19', b='0,1,2,3,4,5,6,7,8,9,1…)\n") in log
@@ -45,7 +45,7 @@ async def test_longer_args(mock_actor_worker, caplog):
     v = ','.join(map(str, range(20)))
     await actor.concat(a=v, b=v)
     await worker.run()
-    log = caplog(('0.0\d\ds', '0.0XXs'))
+    log = caplog((r'0.0\d\ds', '0.0XXs'))
     assert ("dft  queued  0.0XXs → __id__ MockRedisDemoActor.concat"
             "(a='0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19', b='0,1,2,3,4,5,6,7,8,9,10,11,12,13…)\n") in log
     assert ("dft  ran in  0.0XXs ← __id__ MockRedisDemoActor.concat ● "
@@ -58,7 +58,7 @@ async def test_stop_job_normal(mock_actor_worker, caplog):
     await actor.stop_job_normal()
     await worker.run()
     assert ('arq.jobs INFO: dft  ran in  0.0XXs ■ __id__ MockRedisDemoActor.stop_job_normal ● Stopped '
-            'stopping job normally') in caplog(('0.0\d\ds', '0.0XXs'))
+            'stopping job normally') in caplog((r'0.0\d\ds', '0.0XXs'))
 
 
 async def test_stop_job_warning(mock_actor_worker, caplog):
@@ -67,7 +67,7 @@ async def test_stop_job_warning(mock_actor_worker, caplog):
     await actor.stop_job_warning()
     await worker.run()
     assert ('arq.jobs WARNING: dft  ran in  0.0XXs ■ __id__ MockRedisDemoActor.stop_job_warning ● Stopped Warning '
-            'stopping job with warning') in caplog(('0.0\d\ds', '0.0XXs'))
+            'stopping job with warning') in caplog((r'0.0\d\ds', '0.0XXs'))
 
 
 async def test_separate_log_levels(mock_actor_worker, caplog):
@@ -75,7 +75,7 @@ async def test_separate_log_levels(mock_actor_worker, caplog):
     actor, worker = mock_actor_worker
     await actor.concat(a='1', b='2')
     await worker.run()
-    log = caplog(('0.0\d\ds', '0.0XXs'))
+    log = caplog((r'0.0\d\ds', '0.0XXs'))
     assert ('arq.work: Initialising work manager, burst mode: True, creating shadows...\n'
             'arq.work: Running worker with 1 shadow listening to 3 queues\n'
             'arq.work: shadows: MockRedisDemoActor | queues: high, dft, low\n'
