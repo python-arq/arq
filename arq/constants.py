@@ -9,3 +9,7 @@ default_timeout = 300_000
 default_max_jobs = 10
 default_keep_result = 3_600_000
 default_max_tries = 5
+
+
+health_check_key = 'arq:health-check'
+health_check_interval = 6000

@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := all
-black = black -S -l 120 --py36
-isort = isort -rc
+isort = isort -rc arq tests
+black = black -S -l 120 --py36 arq tests
 
 .PHONY: install
 install:
@@ -10,25 +10,23 @@ install:
 
 .PHONY: isort
 format:
-	$(isort) arq
-#	$(isort) tests
-	$(black) arq
-#	$(black) tests
+	$(isort)
+	$(black)
 
 .PHONY: lint
 lint:
 	python setup.py check -rms
 	flake8 arq/ tests/
-	$(isort) --check-only arq tests
-	$(black) --check arq tests
+	$(isort) --check-only
+	$(black) --check arq
 
 .PHONY: test
 test:
-	TZ=Asia/Singapore pytest --cov=arq
+	pytest --cov=arq
 
 .PHONY: testcov
 testcov:
-	TZ=Asia/Singapore pytest --cov=arq && (echo "building coverage html"; coverage html)
+	pytest --cov=arq && (echo "building coverage html"; coverage html)
 
 .PHONY: all
 all: testcov lint

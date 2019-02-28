@@ -53,6 +53,7 @@ async def poll(step: float = 0.5):
         wait = max([0, step - after + before])
         await asyncio.sleep(wait)
 
+
 DEFAULT_CURTAIL = 80
 
 
@@ -64,7 +65,7 @@ def truncate(s: str, length: int = DEFAULT_CURTAIL) -> str:
     :param length: length to truncate the string to
     """
     if len(s) > length:
-        s = s[:length - 1] + '…'
+        s = s[: length - 1] + '…'
     return s
 
 

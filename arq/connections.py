@@ -1,18 +1,17 @@
 import asyncio
 import logging
 import pickle
-from datetime import datetime, timedelta
 from dataclasses import dataclass
-
-from typing import Optional, Any, Union
+from datetime import datetime, timedelta
+from typing import Any, Optional, Union
 from uuid import uuid4
 
 import aioredis
-from aioredis import Redis, MultiExecError
+from aioredis import MultiExecError, Redis
 
+from .constants import job_key_prefix, queue_name, result_key_prefix
 from .jobs import Job
-from .constants import job_key_prefix, result_key_prefix, queue_name
-from .utils import as_int, to_unix_ms, timestamp
+from .utils import as_int, timestamp, to_unix_ms
 
 logger = logging.getLogger('arq.connections')
 
@@ -22,6 +21,7 @@ class RedisSettings:
     """
     No-Op class used to hold redis connection redis_settings.
     """
+
     host: str = 'localhost'
     port: int = 6379
     database: int = 0
@@ -31,7 +31,7 @@ class RedisSettings:
     conn_retry_delay: int = 1
 
     def __repr__(self):
-        return f'<RedisSettings {self.__dict__}>'
+        return '<RedisSettings {}>'.format(' '.join(f'{k}={v}' for k, v in self.__dict__.items()))
 
 
 class ArqRedis(Redis):
@@ -58,11 +58,7 @@ class ArqRedis(Redis):
             _expires = as_int(_expires.total_seconds() * 1000)
 
         with await self as conn:
-            r = await asyncio.gather(
-                conn.unwatch(),
-                conn.watch(job_key),
-                conn.exists(job_key)
-            )
+            r = await asyncio.gather(conn.unwatch(), conn.watch(job_key), conn.exists(job_key))
             if r[2]:
                 return
 
@@ -90,13 +86,21 @@ async def create_pool(settings: RedisSettings = None, *, _retry: int = 0) -> Arq
     addr = settings.host, settings.port
     try:
         pool = await aioredis.create_redis_pool(
-            addr, db=settings.database, password=settings.password,
-            timeout=settings.conn_timeout, encoding='utf8', commands_factory=ArqRedis
+            addr,
+            db=settings.database,
+            password=settings.password,
+            timeout=settings.conn_timeout,
+            encoding='utf8',
+            commands_factory=ArqRedis,
         )
     except (ConnectionError, OSError, aioredis.RedisError, asyncio.TimeoutError) as e:
         if _retry < settings.conn_retries:
-            logger.warning('redis connection error %s %s, %d retries remaining...',
-                           e.__class__.__name__, e, settings.conn_retries - _retry)
+            logger.warning(
+                'redis connection error %s %s, %d retries remaining...',
+                e.__class__.__name__,
+                e,
+                settings.conn_retries - _retry,
+            )
             await asyncio.sleep(settings.conn_retry_delay)
         else:
             raise

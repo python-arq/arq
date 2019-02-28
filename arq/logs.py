@@ -1,4 +1,3 @@
-
 def default_log_config(verbose: bool) -> dict:
     """
     Setup default config. for dictConfig.
@@ -11,22 +10,8 @@ def default_log_config(verbose: bool) -> dict:
         'version': 1,
         'disable_existing_loggers': False,
         'handlers': {
-            'arq.standard': {
-                'level': log_level,
-                'class': 'logging.StreamHandler',
-                'formatter': 'arq.standard'
-            },
+            'arq.standard': {'level': log_level, 'class': 'logging.StreamHandler', 'formatter': 'arq.standard'}
         },
-        'formatters': {
-            'arq.standard': {
-                'format': '%(asctime)s: %(message)s',
-                'datefmt': '%H:%M:%S',
-            },
-        },
-        'loggers': {
-            'arq': {
-                'handlers': ['arq.standard'],
-                'level': log_level,
-            }
-        },
+        'formatters': {'arq.standard': {'format': '%(asctime)s: %(message)s', 'datefmt': '%H:%M:%S'}},
+        'loggers': {'arq': {'handlers': ['arq.standard'], 'level': log_level}},
     }

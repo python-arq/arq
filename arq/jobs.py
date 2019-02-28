@@ -3,8 +3,8 @@ import pickle
 from enum import Enum
 from typing import TYPE_CHECKING, Optional
 
-from .constants import result_key_prefix, job_key_prefix, queue_name, in_progress_key_prefix
-from .utils import timestamp, ms_to_datetime, ms_to_timedelta, poll
+from .constants import in_progress_key_prefix, job_key_prefix, queue_name, result_key_prefix
+from .utils import ms_to_datetime, ms_to_timedelta, poll, timestamp
 
 if TYPE_CHECKING:
     from .connections import ArqRedis

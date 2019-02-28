@@ -6,15 +6,14 @@ from pydantic.utils import import_string
 
 from .logs import default_log_config
 from .version import VERSION
-from .worker import BaseWorkerSettings, run_worker
-
+from .worker import BaseWorkerSettings, check_health, run_worker
 
 burst_help = 'Batch mode: exit once no jobs are found in any queue.'
 health_check_help = 'Health Check: run a health check and exit'
 verbose_help = 'Enable verbose output.'
 
 
-@click.command()
+@click.command('arq')
 @click.version_option(VERSION, '-V', '--version', prog_name='arq')
 @click.argument('worker-settings', type=str, required=True)
 @click.option('--check', is_flag=True, help=health_check_help)
@@ -28,7 +27,7 @@ def cli(*, worker_settings, check, verbose):
     worker_settings: Type[BaseWorkerSettings] = import_string(worker_settings)
     logging.config.dictConfig(default_log_config(verbose))
 
-    # if check:
-    #     exit(worker.check_health())
-    # else:
-    run_worker(worker_settings)
+    if check:
+        exit(check_health(worker_settings))
+    else:
+        run_worker(worker_settings)

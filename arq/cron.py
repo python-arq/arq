@@ -11,15 +11,7 @@ from .utils import to_unix_ms
 
 logger = logging.getLogger('arq.cron')
 
-_dt_fields = [
-    'month',
-    'day',
-    'weekday',
-    'hour',
-    'minute',
-    'second',
-    'microsecond',
-]
+_dt_fields = ['month', 'day', 'weekday', 'hour', 'minute', 'second', 'microsecond']
 
 
 async def run_cron(redis_pool: ArqRedis, con_jobs):
@@ -41,11 +33,7 @@ async def run_cron(redis_pool: ArqRedis, con_jobs):
             key = cron_key_prefix + cron_job.name
             value = str(to_unix_ms(run_at))
             with await redis_pool as conn:
-                _, _, existing_value = await asyncio.gather(
-                    conn.unwatch(),
-                    conn.watch(key),
-                    conn.get(key),
-                )
+                _, _, existing_value = await asyncio.gather(conn.unwatch(), conn.watch(key), conn.get(key))
                 if existing_value == value:
                     # another worker has already set it and is doing this cron job
                     continue
@@ -85,8 +73,11 @@ def _get_next_dt(dt_, options):  # noqa: C901
                 else:
                     return datetime(dt_.year, dt_.month + 1, 1)
             elif field in ('day', 'weekday'):
-                return dt_ + timedelta(days=1) - timedelta(hours=dt_.hour, minutes=dt_.minute, seconds=dt_.second,
-                                                           microseconds=micro)
+                return (
+                    dt_
+                    + timedelta(days=1)
+                    - timedelta(hours=dt_.hour, minutes=dt_.minute, seconds=dt_.second, microseconds=micro)
+                )
             elif field == 'hour':
                 return dt_ + timedelta(hours=1) - timedelta(minutes=dt_.minute, seconds=dt_.second, microseconds=micro)
             elif field == 'minute':
@@ -98,14 +89,17 @@ def _get_next_dt(dt_, options):  # noqa: C901
                 return dt_ + timedelta(microseconds=options['microsecond'] - dt_.microsecond)
 
 
-def next_cron(preview_dt: datetime, *,
-              month: Union[None, set, int] = None,
-              day: Union[None, set, int] = None,
-              weekday: Union[None, set, int, str] = None,
-              hour: Union[None, set, int] = None,
-              minute: Union[None, set, int] = None,
-              second: Union[None, set, int] = 0,
-              microsecond: int = 123456):
+def next_cron(
+    preview_dt: datetime,
+    *,
+    month: Union[None, set, int] = None,
+    day: Union[None, set, int] = None,
+    weekday: Union[None, set, int, str] = None,
+    hour: Union[None, set, int] = None,
+    minute: Union[None, set, int] = None,
+    second: Union[None, set, int] = 0,
+    microsecond: int = 123_456,
+):
     """
     Find the next datetime matching the given parameters.
     """
@@ -113,13 +107,7 @@ def next_cron(preview_dt: datetime, *,
     if isinstance(weekday, str):
         weekday = ['mon', 'tues', 'wed', 'thurs', 'fri', 'sat', 'sun'].index(weekday.lower())
     options = dict(
-        month=month,
-        day=day,
-        weekday=weekday,
-        hour=hour,
-        minute=minute,
-        second=second,
-        microsecond=microsecond,
+        month=month, day=day, weekday=weekday, hour=hour, minute=minute, second=second, microsecond=microsecond
     )
 
     while True:
