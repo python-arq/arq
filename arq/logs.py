@@ -44,7 +44,7 @@ def default_log_config(verbose: bool) -> dict:
         },
         'formatters': {
             'arq.standard': {
-                'format': '%(asctime)s %(processName)11s: %(message)s',
+                'format': '%(asctime)s: %(message)s',
                 'datefmt': '%H:%M:%S',
             },
         },

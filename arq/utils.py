@@ -43,7 +43,7 @@ def timedelta_to_ms(td: Union[None, int, timedelta]) -> int:
         return as_int(td.total_seconds() * 1000)
 
 
-async def poll(step: Union[int, float] = 1):
+async def poll(step: float = 0.5):
     loop = asyncio.get_event_loop()
     start = loop.time()
     while True:
@@ -66,3 +66,14 @@ def truncate(s: str, length: int = DEFAULT_CURTAIL) -> str:
     if len(s) > length:
         s = s[:length - 1] + '…'
     return s
+
+
+def args_to_string(args, kwargs):
+    arguments = ''
+    if args:
+        arguments = ', '.join(map(repr, args))
+    if kwargs:
+        if arguments:
+            arguments += ', '
+        arguments += ', '.join(f'{k}={v!r}' for k, v in sorted(kwargs.items()))
+    return truncate(arguments)
