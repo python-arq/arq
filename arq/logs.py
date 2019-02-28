@@ -1,28 +1,3 @@
-"""
-:mod:`logs`
-===========
-"""
-import logging
-import re
-
-import click
-
-__all__ = ['ColourHandler', 'default_log_config']
-
-LOG_FORMATS = {
-    logging.DEBUG: {'fg': 'white', 'dim': True},
-    logging.INFO: {'fg': 'green'},
-    logging.WARN: {'fg': 'yellow'},
-}
-
-
-def get_log_format(record):
-    return LOG_FORMATS.get(record.levelno, {'fg': 'red'})
-
-
-class ColourHandler(logging.StreamHandler):
-    pass
-
 
 def default_log_config(verbose: bool) -> dict:
     """
@@ -36,9 +11,9 @@ def default_log_config(verbose: bool) -> dict:
         'version': 1,
         'disable_existing_loggers': False,
         'handlers': {
-            'arq.colour': {
+            'arq.standard': {
                 'level': log_level,
-                'class': 'arq.logs.ColourHandler',
+                'class': 'logging.StreamHandler',
                 'formatter': 'arq.standard'
             },
         },
@@ -50,7 +25,7 @@ def default_log_config(verbose: bool) -> dict:
         },
         'loggers': {
             'arq': {
-                'handlers': ['arq.colour'],
+                'handlers': ['arq.standard'],
                 'level': log_level,
             }
         },

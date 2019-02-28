@@ -105,7 +105,7 @@ class Worker:
         for f in self.on_startup:
             await f(self.ctx)
 
-        async for _ in poll():
+        async for _ in poll():  # noqa F841
             async with self.sem:  # don't both with zrangebyscore until we have "space" to run the jobs
                 now = timestamp()
                 job_ids = await self.pool.zrangebyscore(queue_name, max=now, withscores=True)
@@ -120,8 +120,8 @@ class Worker:
     async def _run_jobs(self, job_ids):
         for job_id, score in job_ids:
             await self.sem.acquire()
+            in_progress_key = in_progress_key_prefix + job_id
             with await self.pool as conn:
-                in_progress_key = in_progress_key_prefix + job_id
                 _, _, ongoing_exists, in_queue = await asyncio.gather(
                     conn.unwatch(),
                     conn.watch(in_progress_key),

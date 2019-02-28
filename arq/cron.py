@@ -1,6 +1,13 @@
+import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import Union
+
+from aioredis import MultiExecError
+
+from .connections import ArqRedis
+from .constants import cron_key_prefix
+from .utils import to_unix_ms
 
 logger = logging.getLogger('arq.cron')
 
@@ -15,11 +22,11 @@ _dt_fields = [
 ]
 
 
-async def run_cron(self):
-    n = self._now()
+async def run_cron(redis_pool: ArqRedis, con_jobs):
+    n = datetime.now()
     to_run = set()
 
-    for cron_job in self.con_jobs:
+    for cron_job in con_jobs:
         if n >= cron_job.next_run:
             to_run.add((cron_job, cron_job.next_run))
             cron_job.set_next(n)
@@ -27,25 +34,32 @@ async def run_cron(self):
     if not to_run:
         return
 
-    main_logger.debug('cron, %d jobs to run', len(to_run))
+    logger.debug('cron, %d jobs to run', len(to_run))
     job_futures = set()
-    redis_ = self.redis or await self.get_redis()
-    with await redis_ as redis:
-        for cron_job, run_at in to_run:
-            if cron_job.unique:
-                sentinel_key = self.CRON_SENTINEL_PREFIX + f'{self.name}.{cron_job.__name__}'.encode()
-                sentinel_value = str(to_unix_ms(run_at)).encode()
-                v, _ = await asyncio.gather(
-                    redis.getset(sentinel_key, sentinel_value),
-                    redis.expire(sentinel_key, 3600),
+    for cron_job, run_at in to_run:
+        if cron_job.unique:
+            key = cron_key_prefix + cron_job.name
+            value = str(to_unix_ms(run_at))
+            with await redis_pool as conn:
+                _, _, existing_value = await asyncio.gather(
+                    conn.unwatch(),
+                    conn.watch(key),
+                    conn.get(key),
                 )
-                if v == sentinel_value:
-                    # if v is equal to sentinel value, another worker has already set it and is doing this cron run
+                if existing_value == value:
+                    # another worker has already set it and is doing this cron job
                     continue
-            job = self.job_class(class_name=cast(str, self.name), func_name=cron_job.__name__, args=(), kwargs={})
-            job_futures.add(self.job_future(redis, cron_job.dft_queue or self.DEFAULT_QUEUE, job))
 
-        job_futures and await asyncio.gather(*job_futures)
+                tr = conn.multi_exec()
+                tr.setex(key, 3600, b'1')
+                try:
+                    await tr.execute()
+                except MultiExecError:
+                    continue
+
+        job_futures.add(redis_pool.enqueue_job(cron_job.name))
+
+    job_futures and await asyncio.gather(*job_futures)
 
 
 def _get_next_dt(dt_, options):  # noqa: C901

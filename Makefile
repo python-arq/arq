@@ -1,4 +1,6 @@
 .DEFAULT_GOAL := all
+black = black -S -l 120 --py36
+isort = isort -rc
 
 .PHONY: install
 install:
@@ -7,16 +9,18 @@ install:
 	pip install -e .
 
 .PHONY: isort
-isort:
-	isort -rc -w 120 arq
-	isort -rc -w 120 tests
+format:
+	$(isort) arq
+#	$(isort) tests
+	$(black) arq
+#	$(black) tests
 
 .PHONY: lint
 lint:
 	python setup.py check -rms
 	flake8 arq/ tests/
-	pytest arq -p no:sugar -q
-	mypy --ignore-missing-imports --warn-unused-ignores arq/
+	$(isort) --check-only arq tests
+	$(black) --check arq tests
 
 .PHONY: test
 test:
