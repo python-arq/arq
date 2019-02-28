@@ -10,7 +10,8 @@ from uuid import uuid4
 import aioredis
 from aioredis import Redis, MultiExecError
 
-from .keys import job_key_prefix, result_key_prefix, queue_name
+from .jobs import Job
+from .constants import job_key_prefix, result_key_prefix, queue_name
 from .utils import as_int, to_unix_ms, timestamp
 
 logger = logging.getLogger('arq.connections')
@@ -81,15 +82,16 @@ class ArqRedis(Redis):
         return Job(job_id, self)
 
 
-async def create_pool_lenient(settings: RedisSettings, *, _retry: int = 0) -> Redis:
+async def create_pool(settings: RedisSettings = None, *, _retry: int = 0) -> ArqRedis:
     """
     Create a new redis pool, retrying up to conn_retries times if the connection fails.
     """
+    settings = settings or RedisSettings()
     addr = settings.host, settings.port
     try:
         pool = await aioredis.create_redis_pool(
             addr, db=settings.database, password=settings.password,
-            timeout=settings.conn_timeout
+            timeout=settings.conn_timeout, encoding='utf8', commands_factory=ArqRedis
         )
     except (ConnectionError, OSError, aioredis.RedisError, asyncio.TimeoutError) as e:
         if _retry < settings.conn_retries:
@@ -105,7 +107,7 @@ async def create_pool_lenient(settings: RedisSettings, *, _retry: int = 0) -> Re
 
     # recursively attempt to create the pool outside the except block to avoid
     # "During handling of the above exception..." madness
-    return await create_pool_lenient(settings, _retry=_retry + 1)
+    return await create_pool(settings, _retry=_retry + 1)
 
 
 async def log_redis_info(redis, log_func):

@@ -21,20 +21,7 @@ def get_log_format(record):
 
 
 class ColourHandler(logging.StreamHandler):
-    """
-    Coloured log handler. Levels: debug: white, info: green, warning: yellow, else: red.
-
-    Date times (anything before the first colon) is magenta.
-    """
-    def emit(self, record):
-        log_entry = self.format(record)
-        m = re.match('^(.*?: )', log_entry)
-        if m:
-            prefix = click.style(m.groups()[0], fg='magenta')
-            msg = click.style(log_entry[m.end():], **get_log_format(record))
-            click.echo(prefix + msg)
-        else:
-            click.secho(log_entry, **get_log_format(record))
+    pass
 
 
 def default_log_config(verbose: bool) -> dict:

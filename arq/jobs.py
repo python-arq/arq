@@ -1,18 +1,10 @@
-"""
-:mod:`jobs`
-===========
-
-Defines the ``Job`` class and descendants which deal with encoding and decoding job data.
-"""
 import asyncio
 import pickle
-from datetime import timedelta
 from enum import Enum
 from typing import Optional
 
-from .keys import result_key_prefix, job_key_prefix, queue_name, in_progress_key_prefix
-from .utils import timestamp, to_datetime, poll
-from .connections import ArqRedis
+from .constants import result_key_prefix, job_key_prefix, queue_name, in_progress_key_prefix
+from .utils import timestamp, ms_to_datetime, ms_to_timedelta, poll
 
 
 class JobStatues(str, Enum):
@@ -26,7 +18,7 @@ class JobStatues(str, Enum):
 class Job:
     __slots__ = 'job_id', '_redis'
 
-    def __init__(self, job_id: str, redis: ArqRedis):
+    def __init__(self, job_id: str, redis: 'ArqRedis'):
         self.job_id = job_id
         self._redis = redis
 
@@ -35,14 +27,14 @@ class Job:
         if v:
             enqueue_time_ms, defer_ms, function, args, kwargs, result, start_time_ms, finish_time_ms = pickle.loads(v)
             return dict(
-                enqueue_time=to_datetime(enqueue_time_ms),
-                defer_time=timedelta(seconds=defer_ms / 1000),
+                enqueue_time=ms_to_datetime(enqueue_time_ms),
+                defer_time=ms_to_timedelta(defer_ms),
                 function=function,
                 args=args,
                 kwargs=kwargs,
                 result=result,
-                start_time=to_datetime(start_time_ms),
-                finish_time=to_datetime(finish_time_ms),
+                start_time=ms_to_datetime(start_time_ms),
+                finish_time=ms_to_datetime(finish_time_ms),
             )
 
     async def result(self, timeout: Optional[float] = None, *, pole_delay: float = 0.5):
@@ -64,8 +56,8 @@ class Job:
             if v:
                 enqueue_time_ms, defer_ms, function, args, kwargs = pickle.loads(v)
                 info = dict(
-                    enqueue_time=to_datetime(enqueue_time_ms),
-                    defer_time=timedelta(seconds=defer_ms / 1000),
+                    enqueue_time=ms_to_datetime(enqueue_time_ms),
+                    defer_time=ms_to_timedelta(defer_ms),
                     function=function,
                     args=args,
                     kwargs=kwargs,

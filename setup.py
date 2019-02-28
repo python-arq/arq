@@ -15,7 +15,7 @@ version = SourceFileLoader('version', 'arq/version.py').load_module()
 setup(
     name='arq',
     version=str(version.VERSION),
-    description='Job queues in python with asyncio, redis and msgpack.',
+    description='Job queues in python with asyncio and redis.',
     long_description=long_description,
     classifiers=[
         'Development Status :: 4 - Beta',
@@ -30,7 +30,7 @@ setup(
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3 :: Only',
-        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
         'Topic :: Internet',
         'Topic :: Software Development :: Libraries :: Python Modules',
         'Topic :: System :: Clustering',
@@ -53,7 +53,7 @@ setup(
         'async-timeout>=3.0.0',
         'aioredis>=1.1.0',
         'click>=6.7',
-        'msgpack>=0.5.6',
+        'pydantic>=0.20',
     ],
     extras_require={
         'testing': ['pytest>=3.1.0'],

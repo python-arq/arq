@@ -7,8 +7,8 @@ from typing import Union
 logger = logging.getLogger('arq.utils')
 
 
-EPOCH = datetime(1970, 1, 1)
-EPOCH_TZ = EPOCH.replace(tzinfo=timezone.utc)
+epoch = datetime(1970, 1, 1)
+epoch_tz = epoch.replace(tzinfo=timezone.utc)
 
 
 def as_int(f: float) -> int:
@@ -24,12 +24,23 @@ def to_unix_ms(dt: datetime) -> int:
     convert a datetime to number of milliseconds since 1970 and calculate timezone offset
     """
     utcoffset = dt.utcoffset()
-    ep = EPOCH if utcoffset is None else EPOCH_TZ
+    ep = epoch if utcoffset is None else epoch_tz
     return as_int((dt - ep).total_seconds() * 1000)
 
 
-def to_datetime(unix_ms: int) -> datetime:
-    return EPOCH + timedelta(seconds=unix_ms / 1000)
+def ms_to_datetime(unix_ms: int) -> datetime:
+    return epoch + timedelta(seconds=unix_ms / 1000)
+
+
+def ms_to_timedelta(ms: int) -> timedelta:
+    return timedelta(seconds=ms / 1000)
+
+
+def timedelta_to_ms(td: Union[None, int, timedelta]) -> int:
+    if isinstance(td, int):
+        return td
+    elif isinstance(td, timedelta):
+        return as_int(td.total_seconds() * 1000)
 
 
 async def poll(step: Union[int, float] = 1):
