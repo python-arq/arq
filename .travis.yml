@@ -6,13 +6,11 @@ services:
 - redis-server
 
 python:
-- '3.6'
-- '3.6-dev'
+- '3.7'
 - 'nightly'
 
 matrix:
   allow_failures:
-  - python: '3.6-dev'
   - python: 'nightly'
 
 install:
@@ -21,7 +19,7 @@ install:
 script:
 - make lint
 - make test
-- make docs
+#- make docs
 - ./tests/check_tag.py
 
 after_success:
@@ -40,9 +38,9 @@ deploy:
   skip_upload_docs: true
   on:
     tags: true
-    python: 3.6
+    python: 3.7
 - provider: script
   script: make deploy-docs
   on:
     tags: true
-    python: 3.6
+    python: 3.7
