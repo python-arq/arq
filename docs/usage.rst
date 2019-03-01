@@ -18,6 +18,8 @@ To execute the jobs, either after running ``demo.py`` or before/during::
 
     arq demo.WorkerSettings
 
+Append (``--burst``) to stop the worker once all jobs have finished.
+
 For details on the *arq* CLI::
 
     arq --help
