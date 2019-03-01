@@ -50,6 +50,7 @@ def func(
         return coroutine
 
     if isinstance(coroutine, str):
+        name = name or coroutine
         coroutine = import_string(coroutine)
 
     assert asyncio.iscoroutinefunction(coroutine), f'{coroutine} is not a coroutine function'
@@ -68,6 +69,9 @@ class RetryJob(RuntimeError):
 
     def __repr__(self):
         return f'<RetryJob defer {(self.defer_score or 0) / 1000:0.2f}s>'
+
+    def __str__(self):
+        return repr(self)
 
 
 class Worker:
@@ -135,7 +139,7 @@ class Worker:
         async for _ in poll(self.poll_delay_s):  # noqa F841
             async with self.sem:  # don't both with zrangebyscore until we have "space" to run the jobs
                 now = timestamp_ms()
-                job_ids = await self.pool.zrangebyscore(queue_name, max=now, withscores=True)
+                job_ids = await self.pool.zrangebyscore(queue_name, max=now)
             await self.run_jobs(job_ids)
 
             # required to make sure errors in run_job get propagated
@@ -152,17 +156,17 @@ class Worker:
                     return
 
     async def run_jobs(self, job_ids):
-        for job_id, score in job_ids:
+        for job_id in job_ids:
             await self.sem.acquire()
             in_progress_key = in_progress_key_prefix + job_id
             with await self.pool as conn:
-                _, _, ongoing_exists, in_queue = await asyncio.gather(
+                _, _, ongoing_exists, score = await asyncio.gather(
                     conn.unwatch(),
                     conn.watch(in_progress_key),
                     conn.exists(in_progress_key),
                     conn.zscore(queue_name, job_id),
                 )
-                if ongoing_exists or not in_queue:
+                if ongoing_exists or not score:
                     # job already started elsewhere, or already finished and removed from queue
                     self.sem.release()
                     continue

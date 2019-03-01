@@ -40,7 +40,7 @@ async def arq_redis(loop):
 async def worker(arq_redis):
     worker_: Worker = None
 
-    def create(functions, burst=True, poll_delay=0.01, **kwargs):
+    def create(functions, burst=True, poll_delay=0, **kwargs):
         nonlocal worker_
         worker_ = Worker(functions=functions, redis_pool=arq_redis, burst=burst, poll_delay=poll_delay, **kwargs)
         return worker_
