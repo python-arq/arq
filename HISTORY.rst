@@ -3,6 +3,10 @@
 History
 -------
 
+v0.16.0a1 (2010-03-01)
+......................
+* **Breaking Change:** **COMPLETE REWRITE!!!** see docs for details, #110
+
 v0.15.0 (2018-11-15)
 ....................
 * update dependencies
@@ -15,7 +19,7 @@ v0.14.0 (2018-05-28)
 
 v0.13.0 (2017-11-27)
 ....................
-* **Braking Change:** integration with aioredis >= 1.0, basic usage hasn't changed but
+* **Breaking Change:** integration with aioredis >= 1.0, basic usage hasn't changed but
   look at aioredis's migration docs for changes in redis API #76
 
 v0.12.0 (2017-11-16)

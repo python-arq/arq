@@ -1,4 +1,6 @@
 .DEFAULT_GOAL := all
+isort = isort -rc arq tests
+black = black -S -l 120 --py36 arq tests
 
 .PHONY: install
 install:
@@ -7,24 +9,24 @@ install:
 	pip install -e .
 
 .PHONY: isort
-isort:
-	isort -rc -w 120 arq
-	isort -rc -w 120 tests
+format:
+	$(isort)
+	$(black)
 
 .PHONY: lint
 lint:
 	python setup.py check -rms
 	flake8 arq/ tests/
-	pytest arq -p no:sugar -q
-	mypy --ignore-missing-imports --warn-unused-ignores arq/
+	$(isort) --check-only
+	$(black) --check arq
 
 .PHONY: test
 test:
-	TZ=Asia/Singapore pytest --cov=arq
+	pytest --cov=arq
 
 .PHONY: testcov
 testcov:
-	TZ=Asia/Singapore pytest --cov=arq && (echo "building coverage html"; coverage html)
+	pytest --cov=arq && (echo "building coverage html"; coverage html)
 
 .PHONY: all
 all: testcov lint
@@ -47,6 +49,9 @@ clean:
 .PHONY: docs
 docs:
 	make -C docs html
+	rm -rf docs/_build/html/old
+	unzip -q docs/old-docs.zip
+	mv old-docs docs/_build/html/old
 	@echo "open file://`pwd`/docs/_build/html/index.html"
 
 .PHONY: deploy-docs

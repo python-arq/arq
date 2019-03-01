@@ -5,15 +5,17 @@ cache: pip
 services:
 - redis-server
 
-python:
-- '3.6'
-- '3.6-dev'
-- 'nightly'
-
 matrix:
+  include:
+  - python: '3.7'
+    dist: xenial
+    sudo: required
+  - python: 3.8-dev
+    dist: xenial
+    sudo: required
+
   allow_failures:
-  - python: '3.6-dev'
-  - python: 'nightly'
+  - python: 3.8-dev
 
 install:
 - make install
@@ -40,9 +42,9 @@ deploy:
   skip_upload_docs: true
   on:
     tags: true
-    python: 3.6
+    python: 3.7
 - provider: script
   script: make deploy-docs
   on:
     tags: true
-    python: 3.6
+    python: 3.7

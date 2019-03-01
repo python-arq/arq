@@ -1,482 +1,411 @@
-"""
-:mod:`worker`
-=============
-
-Responsible for executing jobs on the worker.
-"""
 import asyncio
+import inspect
 import logging
-import os
+import pickle
 import signal
-import sys
-import time
+from dataclasses import dataclass
 from datetime import datetime
 from functools import partial
-from importlib import import_module, reload
-from multiprocessing import Process
 from signal import Signals
-from typing import Dict, List, Optional, Type  # noqa
+from time import time
+from typing import Awaitable, Callable, Dict, List, Optional, Sequence, Union
 
-from async_timeout import timeout
+import async_timeout
+from aioredis import MultiExecError
+from pydantic.utils import import_string
 
-from .drain import Drain
-from .jobs import ArqError, Job
-from .logs import default_log_config
-from .main import Actor  # noqa
-from .utils import RedisMixin, timestamp, truncate
+from arq.cron import CronJob
 
-__all__ = ['BaseWorker', 'RunWorkerProcess', 'StopJob', 'import_string']
+from .connections import ArqRedis, RedisSettings, create_pool, log_redis_info
+from .constants import (
+    health_check_interval,
+    health_check_key,
+    in_progress_key_prefix,
+    job_key_prefix,
+    queue_name,
+    result_key_prefix,
+    retry_key_prefix,
+)
+from .utils import SecondsTimedelta, args_to_string, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate
 
-work_logger = logging.getLogger('arq.work')
-ctrl_logger = logging.getLogger('arq.control')
-jobs_logger = logging.getLogger('arq.jobs')
-
-
-class ImmediateExit(BaseException):
-    pass
-
-
-class StopJob(ArqError):
-    def __init__(self, reason: str='', warning: bool=False) -> None:
-        self.warning = warning
-        super().__init__(reason)
+logger = logging.getLogger('arq.worker')
+no_result = object()
 
 
-# special signal sent by the main process in case the worker process hasn't received a signal (eg. SIGTERM or SIGINT)
-SIG_PROXY = signal.SIGUSR1
+@dataclass
+class Function:
+    name: str
+    coroutine: Callable
+    timeout_s: Optional[float]
+    keep_result_s: Optional[float]
+    max_tries: Optional[int]
 
 
-class BaseWorker(RedisMixin):
-    """
-    Base class for Workers to inherit from.
-    """
-    #: maximum number of jobs which can be execute at the same time by the event loop
-    max_concurrent_tasks = 50
+def func(
+    coroutine: Union[str, Function, Callable],
+    *,
+    name: Optional[str] = None,
+    keep_result: Optional[SecondsTimedelta] = None,
+    timeout: Optional[SecondsTimedelta] = None,
+    max_tries: Optional[int] = None,
+) -> Function:
+    if isinstance(coroutine, Function):
+        return coroutine
 
-    #: number of seconds after a termination signal (SIGINT or SIGTERM) is received to force quit the worker
-    shutdown_delay = 6
+    if isinstance(coroutine, str):
+        name = name or coroutine
+        coroutine = import_string(coroutine)
 
-    #: default maximum duration of a job
-    timeout_seconds = 60
+    assert asyncio.iscoroutinefunction(coroutine), f'{coroutine} is not a coroutine function'
+    timeout = to_seconds(timeout)
+    keep_result = to_seconds(keep_result)
 
-    #: shadow classes, a list of Actor classes for the Worker to run
-    shadows = None
+    return Function(name or coroutine.__qualname__, coroutine, timeout, keep_result, max_tries)
 
-    #: number of seconds between calls to health_check
-    health_check_interval = 60
-    health_check_key = b'arq:health-check'
 
-    #: Mostly used in tests; if true actors and the redis pool will not be closed at the end of run()
-    # allowing reuse of the worker, eg. ``worker.run()`` can be called multiple times.
-    reusable = False
+class RetryJob(RuntimeError):
+    __slots__ = ('defer_score',)
 
-    #: Adjust the length at which arguments of concurrent functions and job results are curtailed
-    # when logging job execution
-    log_curtail = 80
+    def __init__(self, defer: Optional[SecondsTimedelta] = None):
+        self.defer_score = to_ms(defer)
 
-    #: Whether or not to skip log messages from health checks where nothing has changed
-    repeat_health_check_logs = False
+    def __repr__(self):
+        return f'<RetryJob defer {(self.defer_score or 0) / 1000:0.2f}s>'
 
-    drain_class = Drain
-    _shadow_factory_timeout = 10
+    def __str__(self):
+        return repr(self)
 
-    def __init__(self, *,
-                 burst: bool=False,
-                 shadows: list=None,
-                 queues: list=None,
-                 timeout_seconds: int=None,
-                 **kwargs) -> None:
-        """
-        :param burst: if true the worker will close as soon as no new jobs are found in the queue lists
-        :param shadows: list of :class:`arq.main.Actor` classes for the worker to run,
-            overrides shadows already defined in the class definition
-        :param queues: list of queue names for the worker to listen on, if None queues is taken from the shadows
-        :param timeout_seconds: maximum duration of a job, after that the job will be cancelled by the event loop
-        :param re_queue: Whether or not to re-queue jobs if the worker quits before the job has time to finish.
-        :param kwargs: other keyword arguments, see :class:`arq.utils.RedisMixin` for all available options
-        """
-        self._burst_mode = burst
-        self.shadows = shadows or self.shadows
-        self.queues: Optional[List[str]] = queues
-        self.timeout_seconds = timeout_seconds or self.timeout_seconds
 
-        self._shadow_lookup: Dict[str, Actor] = {}
-        self.start: Optional[float] = None
-        self.last_health_check = 0
+class Worker:
+    def __init__(
+        self,
+        functions: Sequence[Function] = (),
+        *,
+        cron_jobs: Optional[Sequence[CronJob]] = None,
+        redis_settings: RedisSettings = None,
+        redis_pool: ArqRedis = None,
+        burst: bool = False,
+        on_startup: Callable[[Dict], Awaitable] = None,
+        on_shutdown: Callable[[Dict], Awaitable] = None,
+        max_jobs: int = 10,
+        job_timeout: SecondsTimedelta = 300,
+        keep_result: SecondsTimedelta = 3600,
+        poll_delay: SecondsTimedelta = 0.5,
+        max_tries: int = 5,
+    ):
+        self.functions: Dict[str, Union[Function, CronJob]] = {f.name: f for f in map(func, functions)}
+        self.cron_jobs: List[CronJob] = []
+        if cron_jobs:
+            assert all(isinstance(cj, CronJob) for cj in cron_jobs), 'cron_jobs, must be instances of CronJob'
+            self.cron_jobs = cron_jobs
+            self.functions.update({cj.name: cj for cj in self.cron_jobs})
+        assert len(self.functions) > 0, 'at least one function or cron_job must be registered'
+        self.burst = burst
+        self.on_startup = on_startup
+        self.on_shutdown = on_shutdown
+        self.sem = asyncio.BoundedSemaphore(max_jobs)
+        self.job_timeout_s = to_seconds(job_timeout)
+        self.keep_result_s = to_seconds(keep_result)
+        self.poll_delay_s = to_seconds(poll_delay)
+        self.max_tries = max_tries
+        self.pool = redis_pool
+        if self.pool is None:
+            self.redis_settings = None
+        else:
+            self.redis_settings = redis_settings or RedisSettings()
+        self.tasks = []
+        self.main_task = None
+        self.loop = asyncio.get_event_loop()
+        self.ctx = {}
+        max_timeout = max(f.timeout_s or self.job_timeout_s for f in self.functions.values())
+        self.in_progress_timeout_s = max_timeout + 10
+        self.jobs_complete = 0
+        self.jobs_retried = 0
+        self.jobs_failed = 0
+        self._last_health_check = 0
         self._last_health_check_log = None
-        self._closed = False
-        self.drain: Optional[Drain] = None
-        self.job_class: Optional[Type[Job]] = None
-        super().__init__(**kwargs)
+
+    def run(self):
         self._add_signal_handler(signal.SIGINT, self.handle_sig)
         self._add_signal_handler(signal.SIGTERM, self.handle_sig)
-        self._add_signal_handler(SIG_PROXY, self.handle_proxy_signal)
-        self._shutdown_lock = asyncio.Lock(loop=self.loop)
-
-    async def shadow_factory(self) -> list:
-        """
-        Initialise list of shadows and return them.
-
-        Override to customise the way shadows are initialised.
-        """
-        if self.shadows is None:
-            raise TypeError('shadows not defined on worker')
-        kwargs = await self.shadow_kwargs()
-        shadows = [s(**kwargs) for s in self.shadows]
-        await asyncio.gather(*[s.startup() for s in shadows], loop=self.loop)
-        return shadows
-
-    async def shadow_kwargs(self):
-        """
-        Prepare the keyword arguments for initialising all shadows.
-
-        Override to customise the kwargs used to initialise shadows.
-        """
-        return dict(
-            redis_settings=self.redis_settings,
-            worker=self,
-            loop=self.loop,
-            existing_redis=await self.get_redis(),
-        )
-
-    @classmethod
-    def logging_config(cls, verbose) -> dict:
-        """
-        Override to customise the logging setup for the arq worker.
-        By default just uses :func:`arq.logs.default_log_config`.
-
-        :param verbose: verbose flag from cli, by default log level is INFO if false and DEBUG if true
-        :return: dict suitable for ``logging.config.dictConfig``
-        """
-        return default_log_config(verbose)
-
-    @property
-    def shadow_names(self):
-        return ', '.join(self._shadow_lookup.keys())
-
-    def get_redis_queues(self):
-        q_lookup = {}
-        for s in self._shadow_lookup.values():
-            q_lookup.update(s.queue_lookup)
+        self.main_task = self.loop.create_task(self.arun())
         try:
-            queues = [(q_lookup[q], q) for q in self.queues]
-        except KeyError as e:
-            raise KeyError(f'queue not found in queue lookups from shadows, '
-                           f'queues: {self.queues}, combined shadow queue lookups: {q_lookup}') from e
-        return [r for r, q in queues], dict(queues)
-
-    def run_until_complete(self, log_redis_version=False):
-        self.loop.run_until_complete(self.run(log_redis_version))
-
-    async def run(self, log_redis_version=False):
-        """
-        Main entry point for the the worker which initialises shadows, checks they look ok then runs ``work`` to
-        perform jobs.
-        """
-        if log_redis_version:
-            await self.log_redis_info(work_logger.info)
-        self._stopped = False
-        work_logger.info('Initialising work manager, burst mode: %s, creating shadows...', self._burst_mode)
-
-        with timeout(self._shadow_factory_timeout):
-            shadows = await self.shadow_factory()
-        assert isinstance(shadows, list), 'shadow_factory should return a list not %s' % type(shadows)
-        self.job_class = shadows[0].job_class
-        work_logger.debug('Using first shadows job class "%s"', self.job_class.__name__)
-        for shadow in shadows[1:]:
-            if shadow.job_class != self.job_class:
-                raise TypeError(f"shadows don't match: {shadow} has a different job class to the first shadow, "
-                                f"{shadow.job_class} != {self.job_class}")
-
-        if not self.queues:
-            self.queues = shadows[0].queues
-            for shadow in shadows[1:]:
-                if shadow.queues != self.queues:
-                    raise TypeError(f'{shadow} has a different list of queues to the first shadow: '
-                                    f'{shadow.queues} != {self.queues}')
-
-        self._shadow_lookup = {w.name: w for w in shadows}
-
-        work_logger.info('Running worker with %s shadow%s listening to %d queues',
-                         len(self._shadow_lookup), '' if len(self._shadow_lookup) == 1 else 's', len(self.queues))
-        work_logger.info('shadows: %s | queues: %s', self.shadow_names, ', '.join(self.queues))
-
-        self.drain = self.drain_class(
-            redis=await self.get_redis(),
-            max_concurrent_tasks=self.max_concurrent_tasks,
-            shutdown_delay=self.shutdown_delay - 1,
-            timeout_seconds=self.timeout_seconds,
-            burst_mode=self._burst_mode,
-        )
-        self.start = timestamp()
-        try:
-            await self.work()
+            self.loop.run_until_complete(self.main_task)
+        except asyncio.CancelledError:
+            # happens on shutdown, fine
+            pass
         finally:
-            t = (timestamp() - self.start) if self.start else 0
-            work_logger.info('shutting down worker after %0.3fs ◆ %d jobs done ◆ %d failed ◆ %d timed out',
-                             t, self.jobs_complete, self.jobs_failed, self.jobs_timed_out)
-            if not self.reusable:
-                await self.close()
-            if self.drain.task_exception:
-                work_logger.error('Found task exception "%s"', self.drain.task_exception)
-                raise self.drain.task_exception
+            self.loop.run_until_complete(self.close())
 
-    async def work(self):
-        """
-        Pop job definitions from the lists associated with the queues and perform the jobs.
+    async def arun(self):
+        if self.pool is None:
+            self.pool = await create_pool(self.redis_settings)
 
-        Also regularly runs ``record_health``.
-        """
-        redis_queues, queue_lookup = self.get_redis_queues()
-        original_redis_queues = list(redis_queues)
+        logger.info('Starting worker for %d functions: %s', len(self.functions), ', '.join(self.functions))
+        await log_redis_info(self.pool, logger.info)
+        self.ctx['redis'] = self.pool
+        if self.on_startup:
+            await self.on_startup(self.ctx)
 
-        async with self.drain:
-            await self.heart_beat(original_redis_queues, queue_lookup)
-            async for raw_queue, raw_data in self.drain.iter(*redis_queues):
-                if raw_queue is not None:
-                    job = self.job_class.decode(raw_data, queue_name=queue_lookup[raw_queue], raw_queue=raw_queue)
-                    shadow = self._shadow_lookup.get(job.class_name)
-                    re_enqueue = shadow and getattr(shadow, 're_enqueue_jobs', False)
-                    work_logger.debug('scheduling job %r, re-enqueue: %r', job, re_enqueue)
-                    self.drain.add(self.run_job, job, re_enqueue)
-                await self.heart_beat(original_redis_queues, queue_lookup)
+        async for _ in poll(self.poll_delay_s):  # noqa F841
+            async with self.sem:  # don't both with zrangebyscore until we have "space" to run the jobs
+                now = timestamp_ms()
+                job_ids = await self.pool.zrangebyscore(queue_name, max=now)
+            await self.run_jobs(job_ids)
 
-    async def heart_beat(self, redis_queues, queue_lookup):
-        await self.record_health(redis_queues, queue_lookup)
-        for shadow in self._shadow_lookup.values():
-            await shadow.run_cron()
+            # required to make sure errors in run_job get propagated
+            for t in self.tasks:
+                if t.done():
+                    self.tasks.remove(t)
+                    t.result()
 
-    async def record_health(self, redis_queues, queue_lookup):
-        now_ts = timestamp()
-        if (now_ts - self.last_health_check) < self.health_check_interval:
+            await self.heart_beat()
+
+            if self.burst:
+                queued_jobs = await self.pool.zcard(queue_name)
+                if queued_jobs == 0:
+                    return
+
+    async def run_jobs(self, job_ids):
+        for job_id in job_ids:
+            await self.sem.acquire()
+            in_progress_key = in_progress_key_prefix + job_id
+            with await self.pool as conn:
+                _, _, ongoing_exists, score = await asyncio.gather(
+                    conn.unwatch(),
+                    conn.watch(in_progress_key),
+                    conn.exists(in_progress_key),
+                    conn.zscore(queue_name, job_id),
+                )
+                if ongoing_exists or not score:
+                    # job already started elsewhere, or already finished and removed from queue
+                    self.sem.release()
+                    continue
+
+                tr = conn.multi_exec()
+                tr.setex(in_progress_key, self.in_progress_timeout_s, b'1')
+                try:
+                    await tr.execute()
+                except MultiExecError:
+                    # job already started elsewhere since we got 'existing'
+                    self.sem.release()
+                else:
+                    self.tasks.append(asyncio.create_task(self.run_job(job_id, score)))
+
+    async def run_job(self, job_id, score):
+        v, job_try, _ = await asyncio.gather(
+            self.pool.get(job_key_prefix + job_id, encoding=None),
+            self.pool.incr(retry_key_prefix + job_id),
+            self.pool.expire(retry_key_prefix + job_id, 88400),
+        )
+        if not v:
+            logger.warning('job %s expired', job_id)
+            self.jobs_failed += 1
+            return await asyncio.shield(self.abort_job(job_id))
+
+        enqueue_time_ms, function_name, args, kwargs = pickle.loads(v)
+
+        try:
+            function: Union[Function, CronJob] = self.functions[function_name]
+        except KeyError:
+            logger.warning('job %s, function %r not found', job_id, function_name)
+            self.jobs_failed += 1
+            return await asyncio.shield(self.abort_job(job_id))
+
+        if hasattr(function, 'next_run'):
+            # cron_job
+            ref = function_name
+        else:
+            ref = f'{job_id}:{function_name}'
+
+        max_tries = self.max_tries if function.max_tries is None else function.max_tries
+        if job_try > max_tries:
+            t = (timestamp_ms() - enqueue_time_ms) / 1000
+            logger.warning('%6.2fs ! %s max retries %d exceeded', t, ref, max_tries)
+            self.jobs_failed += 1
+            return await asyncio.shield(self.abort_job(job_id))
+
+        result = no_result
+        finish = False
+        timeout_s = self.job_timeout_s if function.timeout_s is None else function.timeout_s
+        incr_score = None
+        start_ms = timestamp_ms()
+        job_ctx = {'job_try': job_try, 'job_id': job_id}
+        ctx = {**self.ctx, **job_ctx}
+        try:
+            s = args_to_string(args, kwargs)
+            extra = f' try={job_try}' if job_try > 1 else ''
+            if (start_ms - score) > 1200:
+                extra += f' delayed={(start_ms - score) / 1000:0.2f}s'
+            logger.info('%6.2fs → %s(%s)%s', (start_ms - enqueue_time_ms) / 1000, ref, s, extra)
+            async with async_timeout.timeout(timeout_s):
+                result = await function.coroutine(ctx, *args, **kwargs)
+            # could raise an exception:
+            result_str = '' if result is None else truncate(repr(result))
+        except Exception as e:
+            finished_ms = timestamp_ms()
+            t = (finished_ms - start_ms) / 1000
+            if isinstance(e, RetryJob):
+                incr_score = e.defer_score
+                logger.info('%6.2fs ↻ %s retrying job in %0.2fs', t, ref, (incr_score or 0) / 1000)
+                self.jobs_retried += 1
+            elif isinstance(e, asyncio.CancelledError):
+                logger.info('%6.2fs ↻ %s cancelled, will be run again', t, ref)
+                self.jobs_retried += 1
+            else:
+                # TODO add extra from exception
+                logger.exception('%6.2fs ! %s failed, %s: %s', t, ref, e.__class__.__name__, e)
+                result = e
+                finish = True
+                self.jobs_failed += 1
+        else:
+            finished_ms = timestamp_ms()
+            logger.info('%6.2fs ← %s ● %s', (finished_ms - start_ms) / 1000, ref, result_str)
+            finish = True
+            self.jobs_complete += 1
+
+        result_timeout_s = self.keep_result_s if function.keep_result_s is None else function.keep_result_s
+        result_data = None
+        if result is not no_result and result_timeout_s > 0:
+            d = enqueue_time_ms, function_name, args, kwargs, result, start_ms, finished_ms
+            result_data = pickle.dumps(d)
+
+        await asyncio.shield(self.finish_job(job_id, finish, result_data, result_timeout_s, incr_score))
+
+    async def finish_job(self, job_id, finish, result_data, result_timeout_s, incr_score):
+        with await self.pool as conn:
+            await conn.unwatch()
+            tr = conn.multi_exec()
+            delete_keys = [in_progress_key_prefix + job_id]
+            if finish:
+                if result_data:
+                    tr.setex(result_key_prefix + job_id, result_timeout_s, result_data)
+                delete_keys += [retry_key_prefix + job_id, job_key_prefix + job_id]
+                tr.zrem(queue_name, job_id)
+            elif incr_score:
+                tr.zincrby(queue_name, incr_score, job_id)
+            tr.delete(*delete_keys)
+            await tr.execute()
+        self.sem.release()
+
+    async def abort_job(self, job_id):
+        with await self.pool as conn:
+            await conn.unwatch()
+            tr = conn.multi_exec()
+            tr.delete(retry_key_prefix + job_id, in_progress_key_prefix + job_id, job_key_prefix + job_id)
+            tr.zrem(queue_name, job_id)
+            await tr.execute()
+
+    async def heart_beat(self):
+        await self.record_health()
+        await self.run_cron()
+
+    async def run_cron(self):
+        n = datetime.now()
+        job_futures = set()
+
+        for cron_job in self.cron_jobs:
+            if cron_job.next_run is None:
+                if cron_job.run_at_startup:
+                    cron_job.next_run = n
+                else:
+                    cron_job.set_next(n)
+
+            if n >= cron_job.next_run:
+                job_id = f'{cron_job.name}:{to_unix_ms(cron_job.next_run)}' if cron_job.unique else None
+                job_futures.add(self.pool.enqueue_job(cron_job.name, _job_id=job_id))
+                cron_job.set_next(n)
+
+        job_futures and await asyncio.gather(*job_futures)
+
+    async def record_health(self):
+        now_ts = time()
+        if (now_ts - self._last_health_check) < health_check_interval:
             return
-        self.last_health_check = now_ts
-        pending_tasks = sum(not t.done() for t in self.drain.pending_tasks)
+        self._last_health_check = now_ts
+        pending_tasks = sum(not t.done() for t in self.tasks)
+        queued = await self.pool.zcard(queue_name)
         info = (
             f'{datetime.now():%b-%d %H:%M:%S} j_complete={self.jobs_complete} j_failed={self.jobs_failed} '
-            f'j_timedout={self.jobs_timed_out} j_ongoing={pending_tasks}'
+            f'j_retried={self.jobs_retried} j_ongoing={pending_tasks} queued={queued}'
         )
-        for redis_queue in redis_queues:
-            info += ' q_{}={}'.format(queue_lookup[redis_queue], await self.drain.redis.llen(redis_queue))
-        await self.drain.redis.setex(self.health_check_key, self.health_check_interval + 1, info.encode())
-        log_suffix = info[info.index('j_complete='):]
-        if self.repeat_health_check_logs or log_suffix != self._last_health_check_log:
-            jobs_logger.info('recording health: %s', info)
+        await self.pool.setex(health_check_key, health_check_interval + 1, info.encode())
+        log_suffix = info[info.index('j_complete=') :]
+        if self._last_health_check_log and log_suffix != self._last_health_check_log:
+            logger.info('recording health: %s', info)
             self._last_health_check_log = log_suffix
-
-    async def _check_health(self):
-        r = 1
-        redis = await self.get_redis()
-        data = await redis.get(self.health_check_key)
-        if not data:
-            work_logger.warning('Health check failed: no health check sentinel value found')
-        else:
-            work_logger.info('Health check successful: %s', data.decode())
-            r = 0
-        # only need to close redis not deal with queues etc., hence super close
-        await super().close()
-        return r
-
-    @classmethod
-    def check_health(cls, **kwargs):
-        """
-        Run a health check on the worker return the appropriate exit code.
-
-        :return: 0 if successful, 1 if not
-        """
-        self = cls(**kwargs)
-        return self.loop.run_until_complete(self._check_health())
-
-    async def run_job(self, j: Job):
-        try:
-            shadow = self._shadow_lookup[j.class_name]
-        except KeyError:
-            return self.handle_prepare_exc(f'Job Error: unable to find shadow for {j!r}')
-        try:
-            func = getattr(shadow, j.func_name)
-        except AttributeError:
-            return self.handle_prepare_exc(f'Job Error: shadow class "{shadow.name}" has no function "{j.func_name}"')
-
-        try:
-            func = func.direct
-        except AttributeError:
-            # allow for cases where enqueue_job is called manually
-            pass
-
-        started_at = timestamp()
-        self.log_job_start(started_at, j)
-        try:
-            result = await func(*j.args, **j.kwargs)
-        except StopJob as e:
-            self.handle_stop_job(started_at, e, j)
-            return 0
-        except BaseException as e:
-            self.handle_execute_exc(started_at, e, j)
-            return 1
-        else:
-            self.log_job_result(started_at, result, j)
-            return 0
-
-    def log_job_start(self, started_at: float, j: Job):
-        if jobs_logger.isEnabledFor(logging.INFO):
-            job_str = j.to_string(self.log_curtail)
-            jobs_logger.info('%-4s queued%7.3fs → %s', j.queue, started_at - j.queued_at, job_str)
-
-    def log_job_result(self, started_at: float, result, j: Job):
-        if not jobs_logger.isEnabledFor(logging.INFO):
-            return
-        job_time = timestamp() - started_at
-        sr = '' if result is None else truncate(repr(result), self.log_curtail)
-        jobs_logger.info('%-4s ran in%7.3fs ← %s ● %s', j.queue, job_time, j.short_ref(), sr)
-
-    def handle_prepare_exc(self, msg: str):
-        self.drain.jobs_failed += 1  # type: ignore
-        jobs_logger.error(msg)
-        # exit with zero so we don't increment jobs_failed twice
-        return 0
-
-    @classmethod
-    def handle_stop_job(cls, started_at: float, exc: StopJob, j: Job):
-        if exc.warning:
-            msg, logger = '%-4s ran in%7.3fs ■ %s ● Stopped Warning %s', jobs_logger.warning
-        else:
-            msg, logger = '%-4s ran in%7.3fs ■ %s ● Stopped %s', jobs_logger.info
-        logger(msg, j.queue, timestamp() - started_at, j.short_ref(), exc)
-
-    @classmethod
-    def handle_execute_exc(cls, started_at: float, exc: BaseException, j: Job):
-        exc_type = exc.__class__.__name__
-        jobs_logger.exception('%-4s ran in%7.3fs ! %s: %s', j.queue, timestamp() - started_at, j, exc_type)
-
-    async def close(self):
-        if not self._closed:
-            if self._shadow_lookup:
-                await asyncio.gather(*[s.close(True) for s in self._shadow_lookup.values()], loop=self.loop)
-            await super().close()
-            self._closed = True
-
-    def handle_proxy_signal(self, signum):
-        self.running = False
-        work_logger.info('pid=%d, got signal proxied from main process, stopping...', os.getpid())
-        self._set_force_handler()
-
-    def handle_sig(self, signum):
-        self.running = False
-        work_logger.info('pid=%d, got signal: %s, stopping...', os.getpid(), Signals(signum).name)
-        signal.signal(SIG_PROXY, signal.SIG_IGN)
-        self._set_force_handler()
-
-    def handle_sig_force(self, signum, frame):
-        work_logger.warning('pid=%d, got signal: %s again, forcing exit', os.getpid(), Signals(signum).name)
-        raise ImmediateExit('force exit')
-
-    def _set_force_handler(self):
-        signal.signal(signal.SIGINT, self.handle_sig_force)
-        signal.signal(signal.SIGTERM, self.handle_sig_force)
-        signal.signal(signal.SIGALRM, self.handle_sig_force)
-        signal.alarm(self.shutdown_delay)
+        elif not self._last_health_check_log:
+            self._last_health_check_log = log_suffix
 
     def _add_signal_handler(self, signal, handler):
         self.loop.add_signal_handler(signal, partial(handler, signal))
 
-    jobs_complete = property(lambda self: self.drain.jobs_complete)
-    jobs_failed = property(lambda self: self.drain.jobs_failed)
-    jobs_timed_out = property(lambda self: self.drain.jobs_timed_out)
+    def handle_sig(self, signum):
+        logger.info(
+            'shutdown on %s ◆ %d jobs complete ◆ %d failed ◆ %d retries ◆ %d ongoing to cancel',
+            Signals(signum).name,
+            self.jobs_complete,
+            self.jobs_failed,
+            self.jobs_retried,
+            len(self.tasks),
+        )
+        for t in self.tasks:
+            if not t.done():
+                t.cancel()
+        self.main_task and self.main_task.cancel()
 
-    @property
-    def running(self):
-        return self.drain and self.drain.running
-
-    @running.setter
-    def running(self, v):
-        if self.drain:
-            self.drain.running = v
-
-
-def import_string(file_path, attr_name):
-    """
-    Import attribute/class from from a python module. Raise ``ImportError`` if the import failed.
-    Approximately stolen from django.
-
-    :param file_path: path to python module
-    :param attr_name: attribute to get from module
-    :return: attribute
-    """
-    module_path = file_path.replace('.py', '').replace('/', '.')
-    p = os.getcwd()
-    sys.path = [p] + sys.path
-
-    module = import_module(module_path)
-    reload(module)
-
-    try:
-        attr = getattr(module, attr_name)
-    except AttributeError as e:
-        raise ImportError('Module "%s" does not define a "%s" attribute/class' % (module_path, attr_name)) from e
-    return attr
-
-
-def start_worker(worker_path: str, worker_class: str, burst: bool, loop: asyncio.AbstractEventLoop=None):
-    """
-    Run from within the subprocess to load the worker class and execute jobs.
-
-    :param worker_path: full path to the python file containing the worker definition
-    :param worker_class: name of the worker class to be loaded and used
-    :param burst: whether or not to run in burst mode
-    :param loop: asyncio loop use to or None
-    """
-    worker_cls = import_string(worker_path, worker_class)
-    work_logger.info('Starting "%s" on pid=%d', worker_cls.__name__, os.getpid())
-    worker = worker_cls(burst=burst, loop=loop)
-    try:
-        worker.run_until_complete(log_redis_version=True)
-    except BaseException as e:
-        work_logger.exception('Worker exiting after an unhandled error: %s', e.__class__.__name__)
-        # could raise here instead of sys.exit but that causes the traceback to be printed twice,
-        # if it's needed "raise_exc" would need to be added a new argument to the function
-        sys.exit(1)
-    finally:
-        worker.loop.run_until_complete(worker.close())
-
-
-class RunWorkerProcess:
-    """
-    Responsible for starting a process to run the worker, monitoring it and possibly killing it.
-    """
-    def __init__(self, worker_path, worker_class, burst=False):
-        signal.signal(signal.SIGINT, self.handle_sig)
-        signal.signal(signal.SIGTERM, self.handle_sig)
-        self.process = None
-        self.run_worker(worker_path, worker_class, burst)
-
-    def run_worker(self, worker_path, worker_class, burst):
-        name = 'WorkProcess'
-        ctrl_logger.info('starting work process "%s"', name)
-        self.process = Process(target=start_worker, args=(worker_path, worker_class, burst), name=name)
-        self.process.start()
-        self.process.join()
-        if self.process.exitcode == 0:
-            ctrl_logger.info('worker process exited ok')
+    async def close(self):
+        if not self.pool:
             return
-        ctrl_logger.critical('worker process %s exited badly with exit code %s',
-                             self.process.pid, self.process.exitcode)
-        sys.exit(3)
-        # could restart worker here, but better to leave it up to the real manager eg. docker restart: always
+        await asyncio.gather(*self.tasks)
+        await self.pool.delete(health_check_key)
+        if self.on_shutdown:
+            await self.on_shutdown(self.ctx)
+        self.pool.close()
+        await self.pool.wait_closed()
+        self.pool = None
 
-    def handle_sig(self, signum, frame):
-        signal.signal(signal.SIGINT, self.handle_sig_force)
-        signal.signal(signal.SIGTERM, self.handle_sig_force)
-        ctrl_logger.info('got signal: %s, waiting for worker pid=%s to finish...', Signals(signum).name,
-                         self.process and self.process.pid)
-        # sleep to make sure worker.handle_sig above has executed if it's going to and detached handle_proxy_signal
-        time.sleep(0.01)
-        if self.process and self.process.is_alive():
-            ctrl_logger.debug("sending custom shutdown signal to worker in case it didn't receive the signal")
-            os.kill(self.process.pid, SIG_PROXY)
+    def __repr__(self):
+        return (
+            f'<Worker j_complete={self.jobs_complete} j_failed={self.jobs_failed} j_retried={self.jobs_retried} '
+            f'j_ongoing={sum(not t.done() for t in self.tasks)}>'
+        )
 
-    def handle_sig_force(self, signum, frame):
-        ctrl_logger.warning('got signal: %s again, forcing exit', Signals(signum).name)
-        if self.process and self.process.is_alive():
-            ctrl_logger.error('sending worker %d SIGTERM', self.process.pid)
-            os.kill(self.process.pid, signal.SIGTERM)
-        raise ImmediateExit('force exit')
+
+def get_kwargs(settings_cls):
+    worker_args = set(inspect.signature(Worker).parameters.keys())
+    d = settings_cls if isinstance(settings_cls, dict) else settings_cls.__dict__
+    return {k: v for k, v in d.items() if k in worker_args}
+
+
+def run_worker(settings_cls, **kwargs):
+    kwargs_ = get_kwargs(settings_cls)
+    kwargs_.update(kwargs)
+    worker = Worker(**kwargs_)
+    worker.run()
+    return worker
+
+
+async def acheck_health(redis_settings: Optional[RedisSettings]):
+    redis_settings = redis_settings or RedisSettings()
+    redis: ArqRedis = await create_pool(redis_settings)
+    data = await redis.get(health_check_key)
+    if not data:
+        logger.warning('Health check failed: no health check sentinel value found')
+        r = 1
+    else:
+        logger.info('Health check successful: %s', data)
+        r = 0
+    redis.close()
+    await redis.wait_closed()
+    return r
+
+
+def check_health(settings_cls) -> int:
+    """
+    Run a health check on the worker and return the appropriate exit code.
+    :return: 0 if successful, 1 if not
+    """
+    cls_kwargs = get_kwargs(settings_cls)
+    loop = asyncio.get_event_loop()
+    return loop.run_until_complete(acheck_health(cls_kwargs.get('redis_settings')))
