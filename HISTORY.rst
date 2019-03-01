@@ -3,9 +3,9 @@
 History
 -------
 
-v0.16.0 (unreleased)
-....................
-* **Breaking Change:** **COMPLETE REWRITE!!!** see docs for details
+v0.16.0a1 (2010-03-01)
+......................
+* **Breaking Change:** **COMPLETE REWRITE!!!** see docs for details, #110
 
 v0.15.0 (2018-11-15)
 ....................

@@ -78,9 +78,8 @@ def test_next_cron_invalid():
 def test_next_cron_random(max_previous, kwargs, expected):
     for i in range(100):
         previous = expected - timedelta(seconds=0.9 + random() * max_previous)
-        start = datetime.now()
         v = next_cron(previous, **kwargs)
-        diff = datetime.now() - start
+        diff = v - previous
         print(f'previous: {previous}, expected: {expected}, time: {diff.total_seconds() * 1000:0.3f}ms')
         assert v == expected
 

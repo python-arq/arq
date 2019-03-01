@@ -14,7 +14,7 @@ Job queues and RPC in python with asyncio and redis.
 
 .. warning::
 
-   In ``v0.16`` *arq* was **COMPLETELY** rewritten to use an entirely different approach to registering workers,
+   In ``v0.16`` *arq* was **COMPLETELY REWRITTEN** to use an entirely different approach to registering workers,
    enqueueing jobs and processing jobs. You will need to either keep using ``v0.15`` or entirely rewrite you *arq*
    integration to use ``v0.16``.
 

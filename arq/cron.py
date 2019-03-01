@@ -63,7 +63,7 @@ def _get_next_dt(dt_, options):  # noqa: C901
 
 
 def next_cron(
-    dt: datetime,
+    previous_dt: datetime,
     *,
     month: Union[None, set, int] = None,
     day: Union[None, set, int] = None,
@@ -76,7 +76,7 @@ def next_cron(
     """
     Find the next datetime matching the given parameters.
     """
-    dt = dt + timedelta(seconds=1)
+    dt = previous_dt + timedelta(seconds=1)
     if isinstance(weekday, str):
         weekday = weekdays.index(weekday.lower())
     options = dict(
