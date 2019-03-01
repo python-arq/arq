@@ -41,10 +41,7 @@ async def test_job_error(arq_redis: ArqRedis, worker):
     assert worker.jobs_retried == 0
 
 
-async def test_job_info(arq_redis: ArqRedis, worker):
-    async def foobar(ctx):
-        return 42
-
+async def test_job_info(arq_redis: ArqRedis):
     t_before = time()
     j = await arq_redis.enqueue_job('foobar', 123, a=456)
     info = await j.info()
