@@ -3,6 +3,7 @@ import inspect
 import logging
 import pickle
 import signal
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
 from functools import partial
@@ -192,7 +193,7 @@ class Worker:
                 else:
                     self.tasks.append(asyncio.create_task(self.run_job(job_id, score)))
 
-    async def run_job(self, job_id, score):
+    async def run_job(self, job_id, score):  # noqa: C901
         v, job_try, _ = await asyncio.gather(
             self.pool.get(job_key_prefix + job_id, encoding=None),
             self.pool.incr(retry_key_prefix + job_id),
@@ -253,8 +254,12 @@ class Worker:
                 logger.info('%6.2fs ↻ %s cancelled, will be run again', t, ref)
                 self.jobs_retried += 1
             else:
-                # TODO add extra from exception
-                logger.exception('%6.2fs ! %s failed, %s: %s', t, ref, e.__class__.__name__, e)
+                extra = None
+                with suppress(Exception):
+                    extra = getattr(e, 'extra', None)
+                    if callable(extra):
+                        extra = extra()
+                logger.exception('%6.2fs ! %s failed, %s: %s', t, ref, e.__class__.__name__, e, extra={'extra': extra})
                 result = e
                 finish = True
                 self.jobs_failed += 1
@@ -267,7 +272,7 @@ class Worker:
         result_timeout_s = self.keep_result_s if function.keep_result_s is None else function.keep_result_s
         result_data = None
         if result is not no_result and result_timeout_s > 0:
-            d = enqueue_time_ms, function_name, args, kwargs, result, start_ms, finished_ms
+            d = enqueue_time_ms, function_name, args, kwargs, result, job_try, start_ms, finished_ms
             result_data = pickle.dumps(d)
 
         await asyncio.shield(self.finish_job(job_id, finish, result_data, result_timeout_s, incr_score))

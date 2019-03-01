@@ -18,7 +18,7 @@ async def test_job_in_progress(arq_redis: ArqRedis):
 
 async def test_unknown(arq_redis: ArqRedis):
     j = Job('foobar', arq_redis)
-    assert JobStatus.missing == await j.status()
+    assert JobStatus.not_found == await j.status()
     info = await j.info()
     assert info is None
 
@@ -48,6 +48,7 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker):
         'args': (1, 2),
         'kwargs': {'c': 3},
         'result': 42,
+        'try_count': 1,
         'start_time': CloseToNow(),
         'finish_time': CloseToNow(),
         'score': None,

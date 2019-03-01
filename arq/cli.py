@@ -20,7 +20,7 @@ verbose_help = 'Enable verbose output.'
 @click.option('-v', '--verbose', is_flag=True, help=verbose_help)
 def cli(*, worker_settings, burst, check, verbose):
     """
-    Job queues in python with asyncio, redis and msgpack.
+    Job queues in python with asyncio and redis.
 
     CLI to run the arq worker.
     """

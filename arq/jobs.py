@@ -15,7 +15,7 @@ class JobStatus(str, Enum):
     queued = 'queued'
     in_progress = 'in_progress'
     complete = 'complete'
-    missing = 'missing'
+    not_found = 'not_found'
 
 
 class Job:
@@ -28,13 +28,14 @@ class Job:
     async def result_info(self):
         v = await self._redis.get(result_key_prefix + self.job_id, encoding=None)
         if v:
-            enqueue_time_ms, function, args, kwargs, result, start_time_ms, finish_time_ms = pickle.loads(v)
+            enqueue_time_ms, function, args, kwargs, result, tries, start_time_ms, finish_time_ms = pickle.loads(v)
             return dict(
                 enqueue_time=ms_to_datetime(enqueue_time_ms),
                 function=function,
                 args=args,
                 kwargs=kwargs,
                 result=result,
+                try_count=tries,
                 start_time=ms_to_datetime(start_time_ms),
                 finish_time=ms_to_datetime(finish_time_ms),
             )
@@ -70,7 +71,7 @@ class Job:
         else:
             score = await self._redis.zscore(queue_name, self.job_id)
             if not score:
-                return JobStatus.missing
+                return JobStatus.not_found
             return JobStatus.deferred if score > timestamp_ms() else JobStatus.queued
 
     def __repr__(self):

@@ -207,3 +207,25 @@ async def test_startup_shutdown(arq_redis, worker, caplog):
     await worker.close()
 
     assert calls == ['startup', 'shutdown']
+
+
+class CustomError(RuntimeError):
+    def extra(self):
+        return {'x': 'y'}
+
+
+async def error_function(ctx):
+    raise CustomError('this is the error')
+
+
+async def test_exc_extra(arq_redis, worker, caplog):
+    caplog.set_level(logging.INFO)
+    await arq_redis.enqueue_job('error_function', _job_id='testing')
+    worker: Worker = worker(functions=[error_function])
+    await worker.arun()
+    assert worker.jobs_failed == 1
+
+    log = re.sub(r'(\d+).\d\ds', r'\1.XXs', '\n'.join(r.message for r in caplog.records))
+    assert '0.XXs ! testing:error_function failed, CustomError: this is the error' in log
+    error = next(r for r in caplog.records if r.levelno == logging.ERROR)
+    assert error.extra == {'x': 'y'}

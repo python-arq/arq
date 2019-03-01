@@ -3,7 +3,7 @@ arq
 
 |Build Status| |Coverage| |pypi| |license|
 
-Job queues in python with asyncio, redis and msgpack.
+Job queues in python with asyncio and redis.
 
 See `documentation`_ for more details.
 
