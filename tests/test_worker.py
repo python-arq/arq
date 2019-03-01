@@ -189,3 +189,21 @@ async def test_str_function(arq_redis, worker, caplog):
 
     log = re.sub(r'(\d+).\d\ds', r'\1.XXs', '\n'.join(r.message for r in caplog.records))
     assert '0.XXs ! testing:asyncio.sleep failed, TypeError' in log
+
+
+async def test_startup_shutdown(arq_redis, worker, caplog):
+    calls = []
+
+    async def startup(ctx):
+        calls.append('startup')
+
+    async def shutdown(ctx):
+        calls.append('shutdown')
+
+    caplog.set_level(logging.INFO)
+    await arq_redis.enqueue_job('foobar', _job_id='testing')
+    worker: Worker = worker(functions=[foobar], on_startup=startup, on_shutdown=shutdown)
+    await worker.arun()
+    await worker.close()
+
+    assert calls == ['startup', 'shutdown']

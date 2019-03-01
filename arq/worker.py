@@ -317,12 +317,15 @@ class Worker:
         self.main_task and self.main_task.cancel()
 
     async def close(self):
+        if not self.pool:
+            return
         await asyncio.gather(*self.tasks)
         await self.pool.delete(health_check_key)
         if self.on_shutdown:
             await self.on_shutdown(self.ctx)
         self.pool.close()
         await self.pool.wait_closed()
+        self.pool = None
 
     def __repr__(self):
         return (
