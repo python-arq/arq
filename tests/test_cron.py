@@ -1,9 +1,12 @@
+import logging
+import re
 from datetime import datetime, timedelta
 from random import random
 
 import pytest
 
-from arq.cron import next_cron
+from arq import Worker
+from arq.cron import cron, next_cron
 
 
 @pytest.mark.parametrize(
@@ -80,3 +83,29 @@ def test_next_cron_random(max_previous, kwargs, expected):
         diff = datetime.now() - start
         print(f'previous: {previous}, expected: {expected}, time: {diff.total_seconds() * 1000:0.3f}ms')
         assert v == expected
+
+
+async def foobar(ctx):
+    return 42
+
+
+async def test_job_successful(worker, caplog):
+    caplog.set_level(logging.INFO)
+    worker: Worker = worker(cron_jobs=[cron(foobar, hour=1, run_at_startup=True)])
+    await worker.arun()
+    assert worker.jobs_complete == 1
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+
+    log = re.sub(r'(\d+).\d\ds', r'\1.XXs', '\n'.join(r.message for r in caplog.records))
+    assert '  0.XXs → cron:foobar()\n  0.XXs ← cron:foobar ● 42' in log
+
+
+async def test_repr():
+    cj = cron(foobar, hour=1, run_at_startup=True)
+    assert str(cj).startswith('<CronJob name=cron:foobar coroutine=<function foobar at')
+
+
+async def test_str_function():
+    cj = cron('asyncio.sleep', hour=1, run_at_startup=True)
+    assert str(cj).startswith('<CronJob name=cron:asyncio.sleep coroutine=<function sleep at')

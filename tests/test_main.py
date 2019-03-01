@@ -6,7 +6,7 @@ from pytest_toolbox.comparison import AnyInt, CloseToNow
 
 from arq.connections import ArqRedis
 from arq.constants import queue_name
-from arq.jobs import Job, JobStatus
+from arq.jobs import Job
 from arq.utils import timestamp_ms
 from arq.worker import Worker, func
 
@@ -16,13 +16,10 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker):
         return 42
 
     j = await arq_redis.enqueue_job('foobar')
-    assert isinstance(j, Job)
-    assert JobStatus.queued == await j.status()
     worker: Worker = worker(functions=[func(foobar, name='foobar')])
     await worker.arun()
-    r = await j.result()
+    r = await j.result(pole_delay=0)
     assert r == 42
-    assert JobStatus.complete == await j.status()
 
 
 async def test_job_error(arq_redis: ArqRedis, worker):
@@ -34,7 +31,7 @@ async def test_job_error(arq_redis: ArqRedis, worker):
     await worker.arun()
 
     with pytest.raises(RuntimeError, match='foobar error'):
-        await j.result()
+        await j.result(pole_delay=0)
 
 
 async def test_job_info(arq_redis: ArqRedis):

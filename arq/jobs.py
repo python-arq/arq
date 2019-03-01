@@ -15,7 +15,7 @@ class JobStatus(str, Enum):
     queued = 'queued'
     in_progress = 'in_progress'
     complete = 'complete'
-    unknown = 'unknown'
+    missing = 'missing'
 
 
 class Job:
@@ -70,7 +70,7 @@ class Job:
         else:
             score = await self._redis.zscore(queue_name, self.job_id)
             if not score:
-                return JobStatus.unknown
+                return JobStatus.missing
             return JobStatus.deferred if score > timestamp_ms() else JobStatus.queued
 
     def __repr__(self):

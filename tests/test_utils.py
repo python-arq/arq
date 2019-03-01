@@ -52,3 +52,13 @@ async def test_redis_log():
     assert len(log_msgs) == 1
     assert re.search(r'redis_version=\d\.', log_msgs[0]), log_msgs
     assert log_msgs[0].endswith(' db_keys=2')
+
+
+def test_truncate():
+    assert arq.utils.truncate('123456', 4) == '123…'
+
+
+def test_args_to_string():
+    assert arq.utils.args_to_string((), {'d': 4}) == 'd=4'
+    assert arq.utils.args_to_string((1, 2, 3), {}) == '1, 2, 3'
+    assert arq.utils.args_to_string((1, 2, 3), {'d': 4}) == '1, 2, 3, d=4'

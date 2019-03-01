@@ -7,11 +7,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from functools import partial
 from signal import Signals
-from typing import Awaitable, Callable, Dict, Optional, Sequence
+from time import time
+from typing import Awaitable, Callable, Dict, List, Optional, Sequence, Union
 
 import async_timeout
 from aioredis import MultiExecError
 from pydantic.utils import import_string
+
+from arq.cron import CronJob
 
 from .connections import ArqRedis, RedisSettings, create_pool, log_redis_info
 from .constants import (
@@ -23,7 +26,7 @@ from .constants import (
     result_key_prefix,
     retry_key_prefix,
 )
-from .utils import SecondsTimedelta, args_to_string, poll, timestamp_ms, to_ms, to_seconds, truncate
+from .utils import SecondsTimedelta, args_to_string, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate
 
 logger = logging.getLogger('arq.worker')
 no_result = object()
@@ -33,13 +36,13 @@ no_result = object()
 class Function:
     name: str
     coroutine: Callable
-    keep_result_s: Optional[float]
     timeout_s: Optional[float]
+    keep_result_s: Optional[float]
     max_tries: Optional[int]
 
 
 def func(
-    coroutine: Callable,
+    coroutine: Union[str, Function, Callable],
     *,
     name: Optional[str] = None,
     keep_result: Optional[SecondsTimedelta] = None,
@@ -57,8 +60,7 @@ def func(
     timeout = to_seconds(timeout)
     keep_result = to_seconds(keep_result)
 
-    name = name or coroutine.__qualname__
-    return Function(name, coroutine, keep_result, timeout, max_tries)
+    return Function(name or coroutine.__qualname__, coroutine, timeout, keep_result, max_tries)
 
 
 class RetryJob(RuntimeError):
@@ -77,8 +79,9 @@ class RetryJob(RuntimeError):
 class Worker:
     def __init__(
         self,
-        functions: Sequence[Function],
+        functions: Sequence[Function] = (),
         *,
+        cron_jobs: Optional[Sequence[CronJob]] = None,
         redis_settings: RedisSettings = None,
         redis_pool: ArqRedis = None,
         burst: bool = False,
@@ -90,8 +93,13 @@ class Worker:
         poll_delay: SecondsTimedelta = 0.5,
         max_tries: int = 5,
     ):
-        assert len(functions) > 0, 'at least one function must be registered'
-        self.functions: Dict[str, Function] = {f.name: f for f in map(func, functions)}
+        self.functions: Dict[str, Union[Function, CronJob]] = {f.name: f for f in map(func, functions)}
+        self.cron_jobs: List[CronJob] = []
+        if cron_jobs:
+            assert all(isinstance(cj, CronJob) for cj in cron_jobs), 'cron_jobs, must be instances of CronJob'
+            self.cron_jobs = cron_jobs
+            self.functions.update({cj.name: cj for cj in self.cron_jobs})
+        assert len(self.functions) > 0, 'at least one function or cron_job must be registered'
         self.burst = burst
         self.on_startup = on_startup
         self.on_shutdown = on_shutdown
@@ -123,6 +131,9 @@ class Worker:
         self.main_task = self.loop.create_task(self.arun())
         try:
             self.loop.run_until_complete(self.main_task)
+        except asyncio.CancelledError:
+            # happens on shutdown, fine
+            pass
         finally:
             self.loop.run_until_complete(self.close())
 
@@ -182,7 +193,11 @@ class Worker:
                     self.tasks.append(asyncio.create_task(self.run_job(job_id, score)))
 
     async def run_job(self, job_id, score):
-        v = await self.pool.get(job_key_prefix + job_id, encoding=None)
+        v, job_try, _ = await asyncio.gather(
+            self.pool.get(job_key_prefix + job_id, encoding=None),
+            self.pool.incr(retry_key_prefix + job_id),
+            self.pool.expire(retry_key_prefix + job_id, 88400),
+        )
         if not v:
             logger.warning('job %s expired', job_id)
             self.jobs_failed += 1
@@ -191,17 +206,22 @@ class Worker:
         enqueue_time_ms, function_name, args, kwargs = pickle.loads(v)
 
         try:
-            function: Function = self.functions[function_name]
+            function: Union[Function, CronJob] = self.functions[function_name]
         except KeyError:
             logger.warning('job %s, function %r not found', job_id, function_name)
             self.jobs_failed += 1
             return await asyncio.shield(self.abort_job(job_id))
 
+        if hasattr(function, 'next_run'):
+            # cron_job
+            ref = function_name
+        else:
+            ref = f'{job_id}:{function_name}'
+
         max_tries = self.max_tries if function.max_tries is None else function.max_tries
-        job_try = await self.pool.incr(retry_key_prefix + job_id)
         if job_try > max_tries:
             t = (timestamp_ms() - enqueue_time_ms) / 1000
-            logger.warning('%6.2fs ! %s:%s max retries %d exceeded', t, job_id, function_name, max_tries)
+            logger.warning('%6.2fs ! %s max retries %d exceeded', t, ref, max_tries)
             self.jobs_failed += 1
             return await asyncio.shield(self.abort_job(job_id))
 
@@ -217,7 +237,7 @@ class Worker:
             extra = f' try={job_try}' if job_try > 1 else ''
             if (start_ms - score) > 1200:
                 extra += f' delayed={(start_ms - score) / 1000:0.2f}s'
-            logger.info('%6.2fs → %s.%s(%s)%s', (start_ms - enqueue_time_ms) / 1000, job_id, function_name, s, extra)
+            logger.info('%6.2fs → %s(%s)%s', (start_ms - enqueue_time_ms) / 1000, ref, s, extra)
             async with async_timeout.timeout(timeout_s):
                 result = await function.coroutine(ctx, *args, **kwargs)
             # could raise an exception:
@@ -227,20 +247,20 @@ class Worker:
             t = (finished_ms - start_ms) / 1000
             if isinstance(e, RetryJob):
                 incr_score = e.defer_score
-                logger.info('%6.2fs ↻ %s:%s retrying job in %0.2fs', t, job_id, function_name, (incr_score or 0) / 1000)
+                logger.info('%6.2fs ↻ %s retrying job in %0.2fs', t, ref, (incr_score or 0) / 1000)
                 self.jobs_retried += 1
             elif isinstance(e, asyncio.CancelledError):
-                logger.info('%6.2fs ↻ %s:%s cancelled, will be run again', t, job_id, function_name)
+                logger.info('%6.2fs ↻ %s cancelled, will be run again', t, ref)
                 self.jobs_retried += 1
             else:
                 # TODO add extra from exception
-                logger.exception('%6.2fs ! %s:%s failed, %s: %s', t, job_id, function_name, e.__class__.__name__, e)
+                logger.exception('%6.2fs ! %s failed, %s: %s', t, ref, e.__class__.__name__, e)
                 result = e
                 finish = True
                 self.jobs_failed += 1
         else:
             finished_ms = timestamp_ms()
-            logger.info('%6.2fs ← %s:%s ● %s', (finished_ms - start_ms) / 1000, job_id, function_name, result_str)
+            logger.info('%6.2fs ← %s ● %s', (finished_ms - start_ms) / 1000, ref, result_str)
             finish = True
             self.jobs_complete += 1
 
@@ -278,10 +298,28 @@ class Worker:
 
     async def heart_beat(self):
         await self.record_health()
-        # TODO run cron
+        await self.run_cron()
+
+    async def run_cron(self):
+        n = datetime.now()
+        job_futures = set()
+
+        for cron_job in self.cron_jobs:
+            if cron_job.next_run is None:
+                if cron_job.run_at_startup:
+                    cron_job.next_run = n
+                else:
+                    cron_job.set_next(n)
+
+            if n >= cron_job.next_run:
+                job_id = f'{cron_job.name}:{to_unix_ms(cron_job.next_run)}' if cron_job.unique else None
+                job_futures.add(self.pool.enqueue_job(cron_job.name, _job_id=job_id))
+                cron_job.set_next(n)
+
+        job_futures and await asyncio.gather(*job_futures)
 
     async def record_health(self):
-        now_ts = timestamp_ms()
+        now_ts = time()
         if (now_ts - self._last_health_check) < health_check_interval:
             return
         self._last_health_check = now_ts

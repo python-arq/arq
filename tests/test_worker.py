@@ -70,7 +70,7 @@ async def test_job_successful(arq_redis, worker, caplog):
     assert worker.jobs_retried == 0
 
     log = re.sub(r'\d+.\d\ds', 'X.XXs', '\n'.join(r.message for r in caplog.records))
-    assert 'X.XXs → testing.foobar()\n  X.XXs ← testing:foobar ● 42' in log
+    assert 'X.XXs → testing:foobar()\n  X.XXs ← testing:foobar ● 42' in log
 
 
 async def test_job_retry(arq_redis, worker, caplog):
@@ -88,7 +88,7 @@ async def test_job_retry(arq_redis, worker, caplog):
 
     log = re.sub(r'(\d+).\d\ds', r'\1.XXs', '\n'.join(r.message for r in caplog.records))
     assert '0.XXs ↻ testing:retry retrying job in 0.XXs\n' in log
-    assert '0.XXs → testing.retry() try=2\n' in log
+    assert '0.XXs → testing:retry() try=2\n' in log
     assert '0.XXs ← testing:retry ●' in log
 
 
@@ -168,7 +168,7 @@ async def test_job_old(arq_redis, worker, caplog):
     assert worker.jobs_retried == 0
 
     log = re.sub(r'(\d+).\d\ds', r'\1.XXs', '\n'.join(r.message for r in caplog.records))
-    assert log.endswith('  0.XXs → testing.foobar() delayed=2.XXs\n' '  0.XXs ← testing:foobar ● 42')
+    assert log.endswith('  0.XXs → testing:foobar() delayed=2.XXs\n' '  0.XXs ← testing:foobar ● 42')
 
 
 async def test_retry_repr():
