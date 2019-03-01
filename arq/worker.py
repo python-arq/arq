@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import logging
 import pickle
 import signal
@@ -6,19 +7,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from functools import partial
 from signal import Signals
-from typing import Awaitable, Callable, Dict, List, Optional, Sequence, Type
+from typing import Awaitable, Callable, Dict, Optional, Sequence
 
 import async_timeout
 from aioredis import MultiExecError
-from pydantic import BaseSettings
 from pydantic.utils import import_string
 
 from .connections import ArqRedis, RedisSettings, create_pool, log_redis_info
 from .constants import (
-    default_keep_result,
-    default_max_jobs,
-    default_max_tries,
-    default_timeout,
     health_check_interval,
     health_check_key,
     in_progress_key_prefix,
@@ -56,6 +52,7 @@ def func(
     if isinstance(coroutine, str):
         coroutine = import_string(coroutine)
 
+    assert asyncio.iscoroutinefunction(coroutine), f'{coroutine} is not a coroutine function'
     timeout = to_seconds(timeout)
     keep_result = to_seconds(keep_result)
 
@@ -81,18 +78,19 @@ class Worker:
         redis_settings: RedisSettings = None,
         redis_pool: ArqRedis = None,
         burst: bool = False,
-        on_startup: List[Callable[[Dict], Awaitable]] = None,
-        on_shutdown: List[Callable[[Dict], Awaitable]] = None,
+        on_startup: Callable[[Dict], Awaitable] = None,
+        on_shutdown: Callable[[Dict], Awaitable] = None,
         max_jobs: int = 10,
         job_timeout: SecondsTimedelta = 300,
         keep_result: SecondsTimedelta = 3600,
         poll_delay: SecondsTimedelta = 0.5,
         max_tries: int = 5,
     ):
+        assert len(functions) > 0, 'at least one function must be registered'
         self.functions: Dict[str, Function] = {f.name: f for f in map(func, functions)}
         self.burst = burst
-        self.on_startup = on_startup or []
-        self.on_shutdown = on_shutdown or []
+        self.on_startup = on_startup
+        self.on_shutdown = on_shutdown
         self.sem = asyncio.BoundedSemaphore(max_jobs)
         self.job_timeout_s = to_seconds(job_timeout)
         self.keep_result_s = to_seconds(keep_result)
@@ -131,8 +129,8 @@ class Worker:
         logger.info('Starting worker for %d functions: %s', len(self.functions), ', '.join(self.functions))
         await log_redis_info(self.pool, logger.info)
         self.ctx['redis'] = self.pool
-        for f in self.on_startup:
-            await f(self.ctx)
+        if self.on_startup:
+            await self.on_startup(self.ctx)
 
         async for _ in poll(self.poll_delay_s):  # noqa F841
             async with self.sem:  # don't both with zrangebyscore until we have "space" to run the jobs
@@ -183,6 +181,7 @@ class Worker:
         v = await self.pool.get(job_key_prefix + job_id, encoding=None)
         if not v:
             logger.warning('job %s expired', job_id)
+            self.jobs_failed += 1
             return await asyncio.shield(self.abort_job(job_id))
 
         enqueue_time_ms, function_name, args, kwargs = pickle.loads(v)
@@ -191,6 +190,7 @@ class Worker:
             function: Function = self.functions[function_name]
         except KeyError:
             logger.warning('job %s, function %r not found', job_id, function_name)
+            self.jobs_failed += 1
             return await asyncio.shield(self.abort_job(job_id))
 
         max_tries = self.max_tries if function.max_tries is None else function.max_tries
@@ -198,6 +198,7 @@ class Worker:
         if job_try > max_tries:
             t = (timestamp_ms() - enqueue_time_ms) / 1000
             logger.warning('%6.2fs ! %s:%s max retries %d exceeded', t, job_id, function_name, max_tries)
+            self.jobs_failed += 1
             return await asyncio.shield(self.abort_job(job_id))
 
         result = no_result
@@ -314,8 +315,8 @@ class Worker:
     async def close(self):
         await asyncio.gather(*self.tasks)
         await self.pool.delete(health_check_key)
-        for f in self.on_shutdown:
-            await f(self.ctx)
+        if self.on_shutdown:
+            await self.on_shutdown(self.ctx)
         self.pool.close()
         await self.pool.wait_closed()
 
@@ -326,36 +327,21 @@ class Worker:
         )
 
 
-class BaseWorkerSettings(BaseSettings):
-    functions: List[Function]
-    redis_settings: RedisSettings = None
-    burst: bool = False
-    on_startup: List[Callable] = None
-    on_shutdown: List[Callable] = None
-    max_jobs: int = default_max_jobs
-    job_timeout: int = default_timeout
-    keep_result: int = default_keep_result
-    max_tries: int = default_max_tries
+def get_kwargs(settings_cls):
+    worker_args = set(inspect.signature(Worker).parameters.keys())
+    d = settings_cls if isinstance(settings_cls, dict) else settings_cls.__dict__
+    return {k: v for k, v in d.items() if k in worker_args}
 
 
-def run_worker(settings_cls: Type[BaseWorkerSettings], **kwargs):
-    settings = settings_cls(**kwargs)
-    worker = Worker(
-        functions=settings.functions,
-        redis_settings=settings.redis_settings,
-        burst=settings.burst,
-        on_startup=settings.on_startup,
-        on_shutdown=settings.on_shutdown,
-        max_jobs=settings.max_jobs,
-        job_timeout=settings.job_timeout,
-        keep_result=settings.keep_result,
-        max_tries=settings.max_tries,
-    )
+def run_worker(settings_cls):
+    worker = Worker(**get_kwargs(settings_cls))
     worker.run()
+    return worker
 
 
-async def _check_health(settings: BaseWorkerSettings):
-    redis: ArqRedis = await create_pool(settings.redis_settings)
+async def acheck_health(redis_settings: Optional[RedisSettings]):
+    redis_settings = redis_settings or RedisSettings()
+    redis: ArqRedis = await create_pool(redis_settings)
     data = await redis.get(health_check_key)
     if not data:
         logger.warning('Health check failed: no health check sentinel value found')
@@ -368,11 +354,11 @@ async def _check_health(settings: BaseWorkerSettings):
     return r
 
 
-def check_health(settings_cls: Type[BaseWorkerSettings], **kwargs) -> int:
+def check_health(settings_cls) -> int:
     """
-    Run a health check on the worker return the appropriate exit code.
+    Run a health check on the worker and return the appropriate exit code.
     :return: 0 if successful, 1 if not
     """
-    settings = settings_cls(**kwargs)
+    cls_kwargs = get_kwargs(settings_cls)
     loop = asyncio.get_event_loop()
-    return loop.run_until_complete(_check_health(settings))
+    return loop.run_until_complete(acheck_health(cls_kwargs.get('redis_settings')))

@@ -1,12 +1,11 @@
 import logging.config
-from typing import Type
 
 import click
 from pydantic.utils import import_string
 
 from .logs import default_log_config
 from .version import VERSION
-from .worker import BaseWorkerSettings, check_health, run_worker
+from .worker import check_health, run_worker
 
 burst_help = 'Batch mode: exit once no jobs are found in any queue.'
 health_check_help = 'Health Check: run a health check and exit'
@@ -24,7 +23,7 @@ def cli(*, worker_settings, check, verbose):
 
     CLI to run the arq worker.
     """
-    worker_settings: Type[BaseWorkerSettings] = import_string(worker_settings)
+    worker_settings = import_string(worker_settings)
     logging.config.dictConfig(default_log_config(verbose))
 
     if check:

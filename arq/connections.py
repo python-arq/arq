@@ -34,7 +34,8 @@ class RedisSettings:
         return '<RedisSettings {}>'.format(' '.join(f'{k}={v}' for k, v in self.__dict__.items()))
 
 
-default_expires = timedelta(seconds=3600)
+# extra time after the job is expected to start when the job key should expire
+expires_extra = timedelta(seconds=86400)
 
 
 class ArqRedis(Redis):
@@ -45,7 +46,7 @@ class ArqRedis(Redis):
         _job_id: Optional[str] = None,
         _defer_until: Optional[datetime] = None,
         _defer_by: Union[None, int, float, timedelta] = None,
-        _expires: timedelta = default_expires,
+        _expires: Optional[timedelta] = None,
         **kwargs: Any,
     ):
         job_id = _job_id or uuid4().hex
@@ -66,6 +67,8 @@ class ArqRedis(Redis):
                 score = enqueue_time_ms + defer_by_ms
             else:
                 score = enqueue_time_ms
+
+            _expires = _expires or timedelta(milliseconds=(score - enqueue_time_ms)) + expires_extra
 
             job = pickle.dumps((enqueue_time_ms, function, args, kwargs))
             tr = conn.multi_exec()

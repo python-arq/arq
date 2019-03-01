@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Optional
 from .constants import in_progress_key_prefix, job_key_prefix, queue_name, result_key_prefix
 from .utils import ms_to_datetime, poll, timestamp_ms
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from .connections import ArqRedis
 
 

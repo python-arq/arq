@@ -49,7 +49,6 @@ async def test_redis_log():
         log_msgs.append(s)
 
     await log_redis_info(redis, _log)
-    print(log_msgs)
     assert len(log_msgs) == 1
     assert re.search(r'redis_version=\d\.', log_msgs[0]), log_msgs
     assert log_msgs[0].endswith(' db_keys=2')
