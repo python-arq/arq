@@ -1,7 +1,7 @@
 coverage==4.5.2
 docutils==0.14
 flake8==3.7.7
-isort==4.3.4
+isort==4.3.9
 mypy==0.641
 pycodestyle==2.4.0
 pyflakes==2.0.0
