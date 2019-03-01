@@ -9,9 +9,9 @@ from uuid import uuid4
 import aioredis
 from aioredis import MultiExecError, Redis
 
-from .constants import job_key_prefix, queue_name, result_key_prefix
+from .constants import job_key_prefix, queue_name
 from .jobs import Job
-from .utils import as_int, timestamp, to_unix_ms
+from .utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('arq.connections')
 
@@ -34,46 +34,47 @@ class RedisSettings:
         return '<RedisSettings {}>'.format(' '.join(f'{k}={v}' for k, v in self.__dict__.items()))
 
 
+default_expires = timedelta(seconds=3600)
+
+
 class ArqRedis(Redis):
     async def enqueue_job(
         self,
         function: str,
         *args: Any,
         _job_id: Optional[str] = None,
-        _defer_until: Union[None, int, datetime] = None,
-        _defer_by: Union[None, int, timedelta] = None,
-        _expires: Union[int, timedelta] = 3_600_000,
+        _defer_until: Optional[datetime] = None,
+        _defer_by: Union[None, int, float, timedelta] = None,
+        _expires: timedelta = default_expires,
         **kwargs: Any,
     ):
         job_id = _job_id or uuid4().hex
         job_key = job_key_prefix + job_id
-        assert not (_defer_until and _defer_by), "user either 'defer_until' or 'defer_by' or neither, not both"
+        assert not (_defer_until and _defer_by), "use either 'defer_until' or 'defer_by' or neither, not both"
 
-        if isinstance(_defer_until, datetime):
-            _defer_until = to_unix_ms(_defer_until)
-        elif isinstance(_defer_by, timedelta):
-            _defer_by = as_int(_defer_by.total_seconds() * 1000)
-
-        if isinstance(_expires, timedelta):
-            _expires = as_int(_expires.total_seconds() * 1000)
+        defer_by_ms = to_ms(_defer_by)
 
         with await self as conn:
-            r = await asyncio.gather(conn.unwatch(), conn.watch(job_key), conn.exists(job_key))
-            if r[2]:
+            _, _, job_exists = await asyncio.gather(conn.unwatch(), conn.watch(job_key), conn.exists(job_key))
+            if job_exists:
                 return
 
+            enqueue_time_ms = timestamp_ms()
+            if _defer_until is not None:
+                score = to_unix_ms(_defer_until)
+            elif defer_by_ms:
+                score = enqueue_time_ms + defer_by_ms
+            else:
+                score = enqueue_time_ms
+
+            job = pickle.dumps((enqueue_time_ms, function, args, kwargs))
             tr = conn.multi_exec()
-            enqueue_time_ms = timestamp()
-            score = _defer_until if _defer_until else enqueue_time_ms + (_defer_by or 0)
-            defer_ms = score - enqueue_time_ms
-            job = pickle.dumps((enqueue_time_ms, defer_ms, function, args, kwargs))
-            tr.psetex(job_key, _expires, job)
-            tr.delete(result_key_prefix + job_id)  # have to delete any existing results before starting another job
+            tr.setex(job_key, _expires.total_seconds(), job)
             tr.zadd(queue_name, score, job_id)
             try:
                 await tr.execute()
             except MultiExecError:
-                # job got enqueued since we got 'existing'
+                # job got enqueued since we got 'job_exists'
                 return
         return Job(job_id, self)
 

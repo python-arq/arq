@@ -4,7 +4,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Optional
 
 from .constants import in_progress_key_prefix, job_key_prefix, queue_name, result_key_prefix
-from .utils import ms_to_datetime, ms_to_timedelta, poll, timestamp
+from .utils import ms_to_datetime, poll, timestamp_ms
 
 if TYPE_CHECKING:
     from .connections import ArqRedis
@@ -28,10 +28,9 @@ class Job:
     async def result_info(self):
         v = await self._redis.get(result_key_prefix + self.job_id, encoding=None)
         if v:
-            enqueue_time_ms, defer_ms, function, args, kwargs, result, start_time_ms, finish_time_ms = pickle.loads(v)
+            enqueue_time_ms, function, args, kwargs, result, start_time_ms, finish_time_ms = pickle.loads(v)
             return dict(
                 enqueue_time=ms_to_datetime(enqueue_time_ms),
-                defer_time=ms_to_timedelta(defer_ms),
                 function=function,
                 args=args,
                 kwargs=kwargs,
@@ -57,14 +56,8 @@ class Job:
         if not info:
             v = await self._redis.get(job_key_prefix + self.job_id, encoding=None)
             if v:
-                enqueue_time_ms, defer_ms, function, args, kwargs = pickle.loads(v)
-                info = dict(
-                    enqueue_time=ms_to_datetime(enqueue_time_ms),
-                    defer_time=ms_to_timedelta(defer_ms),
-                    function=function,
-                    args=args,
-                    kwargs=kwargs,
-                )
+                enqueue_time_ms, function, args, kwargs = pickle.loads(v)
+                info = dict(enqueue_time=ms_to_datetime(enqueue_time_ms), function=function, args=args, kwargs=kwargs)
         if info:
             info['score'] = await self._redis.zscore(queue_name, self.job_id)
         return info
@@ -78,7 +71,7 @@ class Job:
             score = await self._redis.zscore(queue_name, self.job_id)
             if not score:
                 return JobStatues.unknown
-            return JobStatues.deferred if score > timestamp() else JobStatues.queued
+            return JobStatues.deferred if score > timestamp_ms() else JobStatues.queued
 
     def __repr__(self):
         return f'<arq job {self.job_id}>'

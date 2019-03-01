@@ -2,20 +2,21 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from time import time
-from typing import Union
+from typing import Optional, Union
 
 logger = logging.getLogger('arq.utils')
 
 
 epoch = datetime(1970, 1, 1)
 epoch_tz = epoch.replace(tzinfo=timezone.utc)
+SecondsTimedelta = Union[int, float, timedelta]
 
 
 def as_int(f: float) -> int:
     return int(round(f))
 
 
-def timestamp() -> int:
+def timestamp_ms() -> int:
     return as_int(time() * 1000)
 
 
@@ -32,15 +33,20 @@ def ms_to_datetime(unix_ms: int) -> datetime:
     return epoch + timedelta(seconds=unix_ms / 1000)
 
 
-def ms_to_timedelta(ms: int) -> timedelta:
-    return timedelta(seconds=ms / 1000)
-
-
-def timedelta_to_ms(td: Union[None, int, timedelta]) -> int:
-    if isinstance(td, int):
+def to_ms(td: Optional[SecondsTimedelta]) -> Optional[int]:
+    if td is None:
         return td
     elif isinstance(td, timedelta):
-        return as_int(td.total_seconds() * 1000)
+        td = td.total_seconds()
+    return as_int(td * 1000)
+
+
+def to_seconds(td: Optional[SecondsTimedelta]) -> Optional[float]:
+    if td is None:
+        return td
+    elif isinstance(td, timedelta):
+        return td.total_seconds()
+    return td
 
 
 async def poll(step: float = 0.5):

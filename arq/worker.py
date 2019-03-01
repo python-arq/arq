@@ -3,10 +3,10 @@ import logging
 import pickle
 import signal
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from functools import partial
 from signal import Signals
-from typing import Awaitable, Callable, Dict, List, Optional, Sequence, Type, Union
+from typing import Awaitable, Callable, Dict, List, Optional, Sequence, Type
 
 import async_timeout
 from aioredis import MultiExecError
@@ -27,26 +27,25 @@ from .constants import (
     result_key_prefix,
     retry_key_prefix,
 )
-from .utils import args_to_string, poll, timedelta_to_ms, timestamp, truncate
+from .utils import SecondsTimedelta, args_to_string, poll, timestamp_ms, to_ms, to_seconds, truncate
 
 logger = logging.getLogger('arq.worker')
 no_result = object()
-IntTimedelta = Union[int, timedelta]
 
 
 @dataclass
 class Function:
     name: str
     coroutine: Callable
-    keep_result: Optional[int]
-    timeout: Optional[int]
+    keep_result_s: Optional[float]
+    timeout_s: Optional[float]
     max_tries: Optional[int]
 
 
 def func(
     coroutine: Callable,
-    keep_result: Optional[IntTimedelta] = None,
-    timeout: Optional[IntTimedelta] = None,
+    keep_result: Optional[SecondsTimedelta] = None,
+    timeout: Optional[SecondsTimedelta] = None,
     max_tries: Optional[int] = None,
 ) -> Function:
     if isinstance(coroutine, Function):
@@ -55,8 +54,8 @@ def func(
     if isinstance(coroutine, str):
         coroutine = import_string(coroutine)
 
-    timeout = timedelta_to_ms(timeout)
-    keep_result = timedelta_to_ms(keep_result)
+    timeout = to_seconds(timeout)
+    keep_result = to_seconds(keep_result)
 
     name = coroutine.__qualname__
     return Function(name, coroutine, keep_result, timeout, max_tries)
@@ -65,14 +64,11 @@ def func(
 class RetryJob(RuntimeError):
     __slots__ = ('defer_score',)
 
-    def __init__(self, defer: Union[None, int, timedelta] = None):
-        if isinstance(defer, timedelta):
-            self.defer_score = timedelta_to_ms(defer)
-        else:
-            self.defer_score = defer
+    def __init__(self, defer: Optional[SecondsTimedelta] = None):
+        self.defer_score = to_ms(defer)
 
     def __repr__(self):
-        return f'<RetryJob defer {self.defer_score or 0}ms>'
+        return f'<RetryJob defer {(self.defer_score or 0) / 1000:0.2f}s>'
 
 
 class Worker:
@@ -84,29 +80,30 @@ class Worker:
         on_startup: List[Callable[[Dict], Awaitable]] = None,
         on_shutdown: List[Callable[[Dict], Awaitable]] = None,
         max_jobs: int = default_max_jobs,
-        job_timeout: IntTimedelta = default_timeout,
-        keep_result: IntTimedelta = default_keep_result,
+        job_timeout: SecondsTimedelta = default_timeout,
+        keep_result: SecondsTimedelta = default_keep_result,
         max_tries: int = default_max_tries,
     ):
-        self.functions = {f.name: f for f in map(func, functions)}
+        self.functions: Dict[str, Function] = {f.name: f for f in map(func, functions)}
         self.redis_settings = redis_settings or RedisSettings
         self.on_startup = on_startup or []
         self.on_shutdown = on_shutdown or []
         self.sem = asyncio.BoundedSemaphore(max_jobs)
-        self.job_timeout = timedelta_to_ms(job_timeout)
-        self.keep_result = timedelta_to_ms(keep_result)
+        self.job_timeout_s = to_seconds(job_timeout)
+        self.keep_result_s = to_seconds(keep_result)
         self.max_tries = max_tries
         self.pool = None
         self.tasks = []
         self.main_task = None
         self.loop = asyncio.get_event_loop()
-        self.ctx = None
-        self.in_progress_timeout = max(f.timeout or self.job_timeout for f in self.functions.values()) + 10000
+        self.ctx = {}
+        max_timeout = max(f.timeout_s or self.job_timeout_s for f in self.functions.values())
+        self.in_progress_timeout_s = max_timeout + 10
         self.jobs_complete = 0
         self.jobs_retried = 0
         self.jobs_failed = 0
-        self._last_health_check_log = None
         self._last_health_check = 0
+        self._last_health_check_log = None
 
     def run(self):
         self._add_signal_handler(signal.SIGINT, self.handle_sig)
@@ -123,24 +120,24 @@ class Worker:
         self.pool: ArqRedis = await create_pool(self.redis_settings)
         logger.info('Starting worker for %d functions: %s', len(self.functions), ', '.join(self.functions))
         await log_redis_info(self.pool, logger.info)
-        self.ctx = {'redis': self.pool}
+        self.ctx['redis'] = self.pool
         for f in self.on_startup:
             await f(self.ctx)
 
         async for _ in poll():  # noqa F841
             async with self.sem:  # don't both with zrangebyscore until we have "space" to run the jobs
-                now = timestamp()
+                now = timestamp_ms()
                 job_ids = await self.pool.zrangebyscore(queue_name, max=now, withscores=True)
-            await self._run_jobs(job_ids)
+            await self.run_jobs(job_ids)
 
             # required to make sure errors in run_job get propagated
             for t in self.tasks:
                 if t.done():
                     self.tasks.remove(t)
                     t.result()
-            await self.record_health()
+            await self.heart_beat()
 
-    async def _run_jobs(self, job_ids):
+    async def run_jobs(self, job_ids):
         for job_id, score in job_ids:
             await self.sem.acquire()
             in_progress_key = in_progress_key_prefix + job_id
@@ -157,95 +154,95 @@ class Worker:
                     continue
 
                 tr = conn.multi_exec()
-                tr.psetex(in_progress_key, self.in_progress_timeout, b'1')
+                tr.setex(in_progress_key, self.in_progress_timeout_s, b'1')
                 try:
                     await tr.execute()
                 except MultiExecError:
                     # job already started elsewhere since we got 'existing'
                     self.sem.release()
                 else:
-                    self.tasks.append(asyncio.create_task(self._run_job(job_id)))
+                    self.tasks.append(asyncio.create_task(self.run_job(job_id, score)))
 
-    async def _run_job(self, job_id):
+    async def run_job(self, job_id, score):
         v = await self.pool.get(job_key_prefix + job_id, encoding=None)
         if not v:
             logger.warning('job %s expired', job_id)
-            return await asyncio.shield(self._abort_job(job_id))
+            return await asyncio.shield(self.abort_job(job_id))
 
-        enqueue_time_ms, defer_ms, function_name, args, kwargs = pickle.loads(v)
+        enqueue_time_ms, function_name, args, kwargs = pickle.loads(v)
 
         try:
             function: Function = self.functions[function_name]
         except KeyError:
             logger.warning('job %s, function %r not found', job_id, function_name)
-            return await asyncio.shield(self._abort_job(job_id))
+            return await asyncio.shield(self.abort_job(job_id))
 
         max_tries = self.max_tries if function.max_tries is None else function.max_tries
         job_try = await self.pool.incr(retry_key_prefix + job_id)
         if job_try > max_tries:
-            t = (timestamp() - enqueue_time_ms) / 1000
+            t = (timestamp_ms() - enqueue_time_ms) / 1000
             logger.warning('%6.2fs ! %s:%s max retries %d exceeded', t, job_id, function_name, max_tries)
-            return await asyncio.shield(self._abort_job(job_id))
+            return await asyncio.shield(self.abort_job(job_id))
 
         result = no_result
         finish = False
-        timeout = self.job_timeout if function.timeout is None else function.timeout
+        timeout_s = self.job_timeout_s if function.timeout_s is None else function.timeout_s
         incr_score = None
-        start_ms = timestamp()
+        start_ms = timestamp_ms()
         job_ctx = {'job_try': job_try, 'job_id': job_id}
         ctx = {**self.ctx, **job_ctx}
         try:
             s = args_to_string(args, kwargs)
-            tries_text = f' try={job_try}' if job_try > 1 else ''
-            logger.info(
-                '%6.2fs → %s.%s(%s)%s', (start_ms - enqueue_time_ms) / 1000, job_id, function_name, s, tries_text
-            )
-            async with async_timeout.timeout(timeout / 1000):
+            extra = f' try={job_try}' if job_try > 1 else ''
+            if (start_ms - score) > 1200:
+                extra += f' delayed={(start_ms - score) / 1000:0.2f}s'
+            logger.info('%6.2fs → %s.%s(%s)%s', (start_ms - enqueue_time_ms) / 1000, job_id, function_name, s, extra)
+            async with async_timeout.timeout(timeout_s):
                 result = await function.coroutine(ctx, *args, **kwargs)
             # could raise an exception:
             result_str = '' if result is None else truncate(repr(result))
         except asyncio.CancelledError:
             # job got cancelled while running, needs to be run again
-            finished_ms = timestamp()
+            finished_ms = timestamp_ms()
             t = (finished_ms - start_ms) / 1000
             logger.info('%6.2fs ↻ %s:%s cancelled, will be run again', t, job_id, function_name)
             self.jobs_retried += 1
         except RetryJob as e:
             incr_score = e.defer_score
-            finished_ms = timestamp()
+            finished_ms = timestamp_ms()
             t = (finished_ms - start_ms) / 1000
             logger.info('%6.2fs ↻ %s:%s retrying job in %0.2fs', t, job_id, function_name, (incr_score or 0) / 1000)
             self.jobs_retried += 1
         except Exception as e:
             result = e
-            finished_ms = timestamp()
+            finished_ms = timestamp_ms()
             t = (finished_ms - start_ms) / 1000
             # TODO add extra from exception
             logger.exception('%6.2fs ! %s:%s failed, %s: %s', t, job_id, function_name, e.__class__.__name__, e)
             finish = True
             self.jobs_failed += 1
         else:
-            finished_ms = timestamp()
+            finished_ms = timestamp_ms()
             logger.info('%6.2fs ← %s:%s ● %s', (finished_ms - start_ms) / 1000, job_id, function_name, result_str)
             finish = True
             self.jobs_complete += 1
 
-        result_timeout = self.keep_result if function.keep_result is None else function.keep_result
+        result_timeout_s = self.keep_result_s if function.keep_result_s is None else function.keep_result_s
         result_data = None
-        if result is not no_result and result_timeout > 0:
-            d = enqueue_time_ms, defer_ms, function, args, kwargs, result, start_ms, finished_ms
+        if result is not no_result and result_timeout_s > 0:
+            d = enqueue_time_ms, function, args, kwargs, result, start_ms, finished_ms
             result_data = pickle.dumps(d)
 
-        await asyncio.shield(self.finish_job(job_id, finish, result_data, result_timeout, incr_score))
+        await asyncio.shield(self.finish_job(job_id, finish, result_data, result_timeout_s, incr_score))
 
-    async def finish_job(self, job_id, finish, result_data, result_timeout, incr_score):
+    async def finish_job(self, job_id, finish, result_data, result_timeout_s, incr_score):
         with await self.pool as conn:
             await conn.unwatch()
             tr = conn.multi_exec()
             delete_keys = [in_progress_key_prefix + job_id]
             if finish:
                 if result_data:
-                    tr.psetex(result_key_prefix + job_id, result_timeout, result_data)
+                    tr.setex(result_key_prefix + job_id, result_timeout_s, result_data)
                 delete_keys += [retry_key_prefix + job_id, job_key_prefix + job_id]
                 tr.zrem(queue_name, job_id)
             elif incr_score:
@@ -254,7 +251,7 @@ class Worker:
             await tr.execute()
         self.sem.release()
 
-    async def _abort_job(self, job_id):
+    async def abort_job(self, job_id):
         with await self.pool as conn:
             await conn.unwatch()
             tr = conn.multi_exec()
@@ -267,7 +264,7 @@ class Worker:
         # TODO run cron
 
     async def record_health(self):
-        now_ts = timestamp()
+        now_ts = timestamp_ms()
         if (now_ts - self._last_health_check) < health_check_interval:
             return
         self._last_health_check = now_ts
