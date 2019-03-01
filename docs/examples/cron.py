@@ -1,8 +1,11 @@
-from arq import Actor, cron
+from arq import cron
 
 
-class FooBar(Actor):
+async def run_regularly(ctx):
+    print('run foo job at 9.12am, 12.12pm and 6.12pm')
 
-    @cron(hour={9, 12, 18}, minute=12)
-    async def foo(self):
-        print('run foo job at 9.12am, 12.12pm and 6.12pm')
+
+class WorkerSettings:
+    cron_jobs = [
+        cron(run_regularly, hour={9, 12, 18}, minute=12)
+    ]

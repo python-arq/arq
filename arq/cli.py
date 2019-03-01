@@ -15,9 +15,10 @@ verbose_help = 'Enable verbose output.'
 @click.command('arq')
 @click.version_option(VERSION, '-V', '--version', prog_name='arq')
 @click.argument('worker-settings', type=str, required=True)
+@click.option('--burst/--no-burst', default=False, help=burst_help)
 @click.option('--check', is_flag=True, help=health_check_help)
 @click.option('-v', '--verbose', is_flag=True, help=verbose_help)
-def cli(*, worker_settings, check, verbose):
+def cli(*, worker_settings, burst, check, verbose):
     """
     Job queues in python with asyncio, redis and msgpack.
 
@@ -29,4 +30,4 @@ def cli(*, worker_settings, check, verbose):
     if check:
         exit(check_health(worker_settings))
     else:
-        run_worker(worker_settings)
+        run_worker(worker_settings, burst=burst)

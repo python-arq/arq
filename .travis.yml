@@ -23,7 +23,7 @@ install:
 script:
 - make lint
 - make test
-#- make docs
+- make docs
 - ./tests/check_tag.py
 
 after_success:

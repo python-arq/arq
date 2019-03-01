@@ -378,8 +378,10 @@ def get_kwargs(settings_cls):
     return {k: v for k, v in d.items() if k in worker_args}
 
 
-def run_worker(settings_cls):
-    worker = Worker(**get_kwargs(settings_cls))
+def run_worker(settings_cls, **kwargs):
+    kwargs_ = get_kwargs(settings_cls)
+    kwargs_.update(kwargs)
+    worker = Worker(**kwargs_)
     worker.run()
     return worker
 

@@ -49,6 +49,9 @@ clean:
 .PHONY: docs
 docs:
 	make -C docs html
+	rm -rf docs/_build/html/old
+	unzip -q docs/old-docs.zip
+	mv old-docs docs/_build/html/old
 	@echo "open file://`pwd`/docs/_build/html/index.html"
 
 .PHONY: deploy-docs
