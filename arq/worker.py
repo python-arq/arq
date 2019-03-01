@@ -44,6 +44,8 @@ class Function:
 
 def func(
     coroutine: Callable,
+    *,
+    name: Optional[str] = None,
     keep_result: Optional[SecondsTimedelta] = None,
     timeout: Optional[SecondsTimedelta] = None,
     max_tries: Optional[int] = None,
@@ -57,7 +59,7 @@ def func(
     timeout = to_seconds(timeout)
     keep_result = to_seconds(keep_result)
 
-    name = coroutine.__qualname__
+    name = name or coroutine.__qualname__
     return Function(name, coroutine, keep_result, timeout, max_tries)
 
 
@@ -77,22 +79,30 @@ class Worker:
         functions: Sequence[Function],
         *,
         redis_settings: RedisSettings = None,
+        redis_pool: ArqRedis = None,
+        burst: bool = False,
         on_startup: List[Callable[[Dict], Awaitable]] = None,
         on_shutdown: List[Callable[[Dict], Awaitable]] = None,
-        max_jobs: int = default_max_jobs,
-        job_timeout: SecondsTimedelta = default_timeout,
-        keep_result: SecondsTimedelta = default_keep_result,
-        max_tries: int = default_max_tries,
+        max_jobs: int = 10,
+        job_timeout: SecondsTimedelta = 300,
+        keep_result: SecondsTimedelta = 3600,
+        poll_delay: SecondsTimedelta = 0.5,
+        max_tries: int = 5,
     ):
         self.functions: Dict[str, Function] = {f.name: f for f in map(func, functions)}
-        self.redis_settings = redis_settings or RedisSettings
+        self.burst = burst
         self.on_startup = on_startup or []
         self.on_shutdown = on_shutdown or []
         self.sem = asyncio.BoundedSemaphore(max_jobs)
         self.job_timeout_s = to_seconds(job_timeout)
         self.keep_result_s = to_seconds(keep_result)
+        self.poll_delay_s = to_seconds(poll_delay)
         self.max_tries = max_tries
-        self.pool = None
+        self.pool = redis_pool
+        if self.pool is None:
+            self.redis_settings = None
+        else:
+            self.redis_settings = redis_settings or RedisSettings()
         self.tasks = []
         self.main_task = None
         self.loop = asyncio.get_event_loop()
@@ -108,23 +118,23 @@ class Worker:
     def run(self):
         self._add_signal_handler(signal.SIGINT, self.handle_sig)
         self._add_signal_handler(signal.SIGTERM, self.handle_sig)
-        self.main_task = self.loop.create_task(self._run())
+        self.main_task = self.loop.create_task(self.arun())
         try:
             self.loop.run_until_complete(self.main_task)
-        except asyncio.CancelledError:
-            self.loop.run_until_complete(asyncio.gather(*self.tasks))
         finally:
             self.loop.run_until_complete(self.close())
 
-    async def _run(self):
-        self.pool: ArqRedis = await create_pool(self.redis_settings)
+    async def arun(self):
+        if self.pool is None:
+            self.pool = await create_pool(self.redis_settings)
+
         logger.info('Starting worker for %d functions: %s', len(self.functions), ', '.join(self.functions))
         await log_redis_info(self.pool, logger.info)
         self.ctx['redis'] = self.pool
         for f in self.on_startup:
             await f(self.ctx)
 
-        async for _ in poll():  # noqa F841
+        async for _ in poll(self.poll_delay_s):  # noqa F841
             async with self.sem:  # don't both with zrangebyscore until we have "space" to run the jobs
                 now = timestamp_ms()
                 job_ids = await self.pool.zrangebyscore(queue_name, max=now, withscores=True)
@@ -135,7 +145,13 @@ class Worker:
                 if t.done():
                     self.tasks.remove(t)
                     t.result()
+
             await self.heart_beat()
+
+            if self.burst:
+                queued_jobs = await self.pool.zcard(queue_name)
+                if queued_jobs == 0:
+                    return
 
     async def run_jobs(self, job_ids):
         for job_id, score in job_ids:
@@ -201,26 +217,22 @@ class Worker:
                 result = await function.coroutine(ctx, *args, **kwargs)
             # could raise an exception:
             result_str = '' if result is None else truncate(repr(result))
-        except asyncio.CancelledError:
-            # job got cancelled while running, needs to be run again
-            finished_ms = timestamp_ms()
-            t = (finished_ms - start_ms) / 1000
-            logger.info('%6.2fs ↻ %s:%s cancelled, will be run again', t, job_id, function_name)
-            self.jobs_retried += 1
-        except RetryJob as e:
-            incr_score = e.defer_score
-            finished_ms = timestamp_ms()
-            t = (finished_ms - start_ms) / 1000
-            logger.info('%6.2fs ↻ %s:%s retrying job in %0.2fs', t, job_id, function_name, (incr_score or 0) / 1000)
-            self.jobs_retried += 1
         except Exception as e:
-            result = e
             finished_ms = timestamp_ms()
             t = (finished_ms - start_ms) / 1000
-            # TODO add extra from exception
-            logger.exception('%6.2fs ! %s:%s failed, %s: %s', t, job_id, function_name, e.__class__.__name__, e)
-            finish = True
-            self.jobs_failed += 1
+            if isinstance(e, RetryJob):
+                incr_score = e.defer_score
+                logger.info('%6.2fs ↻ %s:%s retrying job in %0.2fs', t, job_id, function_name, (incr_score or 0) / 1000)
+                self.jobs_retried += 1
+            elif isinstance(e, asyncio.CancelledError):
+                logger.info('%6.2fs ↻ %s:%s cancelled, will be run again', t, job_id, function_name)
+                self.jobs_retried += 1
+            else:
+                # TODO add extra from exception
+                logger.exception('%6.2fs ! %s:%s failed, %s: %s', t, job_id, function_name, e.__class__.__name__, e)
+                result = e
+                finish = True
+                self.jobs_failed += 1
         else:
             finished_ms = timestamp_ms()
             logger.info('%6.2fs ← %s:%s ● %s', (finished_ms - start_ms) / 1000, job_id, function_name, result_str)
@@ -230,7 +242,7 @@ class Worker:
         result_timeout_s = self.keep_result_s if function.keep_result_s is None else function.keep_result_s
         result_data = None
         if result is not no_result and result_timeout_s > 0:
-            d = enqueue_time_ms, function, args, kwargs, result, start_ms, finished_ms
+            d = enqueue_time_ms, function_name, args, kwargs, result, start_ms, finished_ms
             result_data = pickle.dumps(d)
 
         await asyncio.shield(self.finish_job(job_id, finish, result_data, result_timeout_s, incr_score))
@@ -300,16 +312,24 @@ class Worker:
         self.main_task and self.main_task.cancel()
 
     async def close(self):
+        await asyncio.gather(*self.tasks)
         await self.pool.delete(health_check_key)
         for f in self.on_shutdown:
             await f(self.ctx)
         self.pool.close()
         await self.pool.wait_closed()
 
+    def __repr__(self):
+        return (
+            f'<Worker j_complete={self.jobs_complete} j_failed={self.jobs_failed} j_retried={self.jobs_retried} '
+            f'j_ongoing={sum(not t.done() for t in self.tasks)}>'
+        )
+
 
 class BaseWorkerSettings(BaseSettings):
     functions: List[Function]
     redis_settings: RedisSettings = None
+    burst: bool = False
     on_startup: List[Callable] = None
     on_shutdown: List[Callable] = None
     max_jobs: int = default_max_jobs
@@ -323,6 +343,7 @@ def run_worker(settings_cls: Type[BaseWorkerSettings], **kwargs):
     worker = Worker(
         functions=settings.functions,
         redis_settings=settings.redis_settings,
+        burst=settings.burst,
         on_startup=settings.on_startup,
         on_shutdown=settings.on_shutdown,
         max_jobs=settings.max_jobs,

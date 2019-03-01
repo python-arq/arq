@@ -10,11 +10,11 @@ if TYPE_CHECKING:
     from .connections import ArqRedis
 
 
-class JobStatues(str, Enum):
+class JobStatus(str, Enum):
     deferred = 'deferred'
     queued = 'queued'
     in_progress = 'in_progress'
-    finished = 'finished'
+    complete = 'complete'
     unknown = 'unknown'
 
 
@@ -62,16 +62,16 @@ class Job:
             info['score'] = await self._redis.zscore(queue_name, self.job_id)
         return info
 
-    async def status(self) -> JobStatues:
+    async def status(self) -> JobStatus:
         if await self._redis.exists(result_key_prefix + self.job_id):
-            return JobStatues.finished
+            return JobStatus.complete
         elif await self._redis.exists(in_progress_key_prefix + self.job_id):
-            return JobStatues.in_progress
+            return JobStatus.in_progress
         else:
             score = await self._redis.zscore(queue_name, self.job_id)
             if not score:
-                return JobStatues.unknown
-            return JobStatues.deferred if score > timestamp_ms() else JobStatues.queued
+                return JobStatus.unknown
+            return JobStatus.deferred if score > timestamp_ms() else JobStatus.queued
 
     def __repr__(self):
         return f'<arq job {self.job_id}>'
