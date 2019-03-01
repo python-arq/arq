@@ -80,8 +80,9 @@ def test_next_cron_random(max_previous, kwargs, expected):
         previous = expected - timedelta(seconds=0.9 + random() * max_previous)
         v = next_cron(previous, **kwargs)
         diff = v - previous
-        print(f'previous: {previous}, expected: {expected}, time: {diff.total_seconds() * 1000:0.3f}ms')
-        assert v == expected
+        if diff > timedelta(seconds=1):
+            print(f'previous: {previous}, expected: {expected}, diff: {v - previous}')
+            assert v == expected
 
 
 async def foobar(ctx):

@@ -3,7 +3,6 @@ import inspect
 import logging
 import pickle
 import signal
-from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
 from functools import partial
@@ -227,22 +226,30 @@ class Worker:
             return await asyncio.shield(self.abort_job(job_id))
 
         result = no_result
+        exc_extra = None
         finish = False
         timeout_s = self.job_timeout_s if function.timeout_s is None else function.timeout_s
         incr_score = None
-        start_ms = timestamp_ms()
         job_ctx = {'job_try': job_try, 'job_id': job_id}
         ctx = {**self.ctx, **job_ctx}
+        start_ms = timestamp_ms()
         try:
             s = args_to_string(args, kwargs)
             extra = f' try={job_try}' if job_try > 1 else ''
             if (start_ms - score) > 1200:
                 extra += f' delayed={(start_ms - score) / 1000:0.2f}s'
             logger.info('%6.2fs → %s(%s)%s', (start_ms - enqueue_time_ms) / 1000, ref, s, extra)
-            async with async_timeout.timeout(timeout_s):
-                result = await function.coroutine(ctx, *args, **kwargs)
-            # could raise an exception:
-            result_str = '' if result is None else truncate(repr(result))
+            # run repr(result) and extra inside try/except as they can raise exceptions
+            try:
+                async with async_timeout.timeout(timeout_s):
+                    result = await function.coroutine(ctx, *args, **kwargs)
+            except Exception as e:
+                exc_extra = getattr(e, 'extra', None)
+                if callable(exc_extra):
+                    exc_extra = exc_extra()
+                raise
+            else:
+                result_str = '' if result is None else truncate(repr(result))
         except Exception as e:
             finished_ms = timestamp_ms()
             t = (finished_ms - start_ms) / 1000
@@ -254,12 +261,9 @@ class Worker:
                 logger.info('%6.2fs ↻ %s cancelled, will be run again', t, ref)
                 self.jobs_retried += 1
             else:
-                extra = None
-                with suppress(Exception):
-                    extra = getattr(e, 'extra', None)
-                    if callable(extra):
-                        extra = extra()
-                logger.exception('%6.2fs ! %s failed, %s: %s', t, ref, e.__class__.__name__, e, extra={'extra': extra})
+                logger.exception(
+                    '%6.2fs ! %s failed, %s: %s', t, ref, e.__class__.__name__, e, extra={'extra': exc_extra}
+                )
                 result = e
                 finish = True
                 self.jobs_failed += 1
@@ -273,7 +277,10 @@ class Worker:
         result_data = None
         if result is not no_result and result_timeout_s > 0:
             d = enqueue_time_ms, function_name, args, kwargs, result, job_try, start_ms, finished_ms
-            result_data = pickle.dumps(d)
+            try:
+                result_data = pickle.dumps(d)
+            except AttributeError:
+                logger.critical('error pickling result of %s', ref, exc_info=True)
 
         await asyncio.shield(self.finish_job(job_id, finish, result_data, result_timeout_s, incr_score))
 

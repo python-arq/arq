@@ -229,3 +229,20 @@ async def test_exc_extra(arq_redis, worker, caplog):
     assert '0.XXs ! testing:error_function failed, CustomError: this is the error' in log
     error = next(r for r in caplog.records if r.levelno == logging.ERROR)
     assert error.extra == {'x': 'y'}
+
+
+async def test_unpickleable(arq_redis, worker, caplog):
+    caplog.set_level(logging.INFO)
+
+    class Foo:
+        pass
+
+    async def example(ctx):
+        return Foo()
+
+    await arq_redis.enqueue_job('example', _job_id='testing')
+    worker: Worker = worker(functions=[func(example, name='example')])
+    await worker.arun()
+
+    log = re.sub(r'(\d+).\d\ds', r'\1.XXs', '\n'.join(r.message for r in caplog.records))
+    assert 'error pickling result of testing:example' in log

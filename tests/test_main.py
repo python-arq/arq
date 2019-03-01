@@ -1,4 +1,7 @@
+import asyncio
+from collections import Counter
 from datetime import datetime
+from random import shuffle
 from time import time
 
 import pytest
@@ -69,3 +72,25 @@ async def test_defer_by(arq_redis: ArqRedis):
     ts = timestamp_ms()
     assert score > ts + 19000
     assert ts + 21000 > score
+
+
+async def test_mung(arq_redis: ArqRedis, worker):
+    """
+    check a job can't be enqueued multiple times with the same id
+    """
+    counter = Counter()
+
+    async def count(ctx, v):
+        counter[v] += 1
+
+    tasks = []
+    for i in range(50):
+        tasks.extend(
+            [arq_redis.enqueue_job('count', i, _job_id=f'v-{i}'), arq_redis.enqueue_job('count', i, _job_id=f'v-{i}')]
+        )
+    shuffle(tasks)
+    await asyncio.gather(*tasks)
+
+    worker: Worker = worker(functions=[func(count, name='count')])
+    await worker.arun()
+    assert counter.most_common(1)[0][1] == 1  # no job go enqueued twice
