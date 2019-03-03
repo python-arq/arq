@@ -122,12 +122,33 @@ at a particular time ``_defer_until``.
 
 .. literalinclude:: examples/deferred.py
 
+Job Uniqueness
+..............
+
+Sometimes you want a job to only be run once at a time (eg. a backup) or once for a given parameter (eg. generating
+invoices for a particular company).
+
+*arq* supports this via custom job ids. It guarantees that a job with a particular ID cannot be enqueued again until
+its execution has finished.
+
+.. literalinclude:: examples/job_ids.py
+
+The check of ``job_id`` uniqueness in the queue is performed using a redis transaction so you can be certain jobs
+with the same id won't be enqueued twice (or overwritten) even if they're enqueued at exactly the same time.
+
+Job Results
+...........
+
+You can access job information, status and job results using the (TODO ref) ``Job`` instance returned from
+(TODO ref) ``enqueue_job``.
+
+.. literalinclude:: examples/job_results.py
+
+
 TODO:
 
-* job ids and uniqueness
-* job results
 * Retry and cancellation
-* all the arguments to Worker, func and cron and enqueue_job
+* all the arguments to Worker, func and cron, enqueue_job and Job
 
 Health checks
 .............

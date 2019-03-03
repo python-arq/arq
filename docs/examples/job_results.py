@@ -1,0 +1,56 @@
+import asyncio
+
+from arq import create_pool
+from arq.connections import RedisSettings
+# requires `pip install devtools`, used for pretty printing of job info
+from devtools import debug
+
+async def the_task(ctx):
+    print('running the task')
+    return 42
+
+async def main():
+    redis = await create_pool(RedisSettings())
+
+    job = await redis.enqueue_job('the_task')
+
+    # get the job's id
+    print(job.job_id)
+    """
+    >  68362958a244465b9be909db4b7b5ab4 (or whatever)
+    """
+
+    # get information about the job, will include results if the job has finished, but
+    # doesn't await the job's result
+    debug(await job.info())
+    """
+    >   docs/examples/job_results.py:23 main
+    {
+        'enqueue_time': datetime.datetime(2019, 3, 3, 12, 32, 19, 975000),
+        'function': 'the_task',
+        'args': (),
+        'kwargs': {},
+        'score': 1551616339975,
+    } (dict) len=5
+    """
+
+    # get the Job's status
+    print(await job.status())
+    """
+    >  JobStatus.queued
+    """
+
+    # poll redis for the job result, if the job raised an exception,
+    # it will be raised here
+    # (You'll need the worker running at the same time to get a result here)
+    print(await job.result(timeout=5))
+    """
+    >  42
+    """
+
+class WorkerSettings:
+    functions = [the_task]
+
+if __name__ == '__main__':
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
