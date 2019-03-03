@@ -5,7 +5,7 @@ import signal
 from unittest.mock import MagicMock
 
 from arq.constants import health_check_key, job_key_prefix
-from arq.worker import RetryJob, Worker, async_check_health, check_health, func, run_worker
+from arq.worker import Retry, Worker, async_check_health, check_health, func, run_worker
 
 
 async def foobar(ctx):
@@ -78,7 +78,7 @@ async def test_job_successful(arq_redis, worker, caplog):
 async def test_job_retry(arq_redis, worker, caplog):
     async def retry(ctx):
         if ctx['job_try'] <= 2:
-            raise RetryJob(defer=0.01)
+            raise Retry(defer=0.01)
 
     caplog.set_level(logging.INFO)
     await arq_redis.enqueue_job('retry', _job_id='testing')
@@ -109,7 +109,7 @@ async def test_job_job_not_found(arq_redis, worker, caplog):
 
 async def test_retry_lots(arq_redis, worker, caplog):
     async def retry(ctx):
-        raise RetryJob()
+        raise Retry()
 
     caplog.set_level(logging.INFO)
     await arq_redis.enqueue_job('retry', _job_id='testing')
@@ -174,7 +174,7 @@ async def test_job_old(arq_redis, worker, caplog):
 
 
 async def test_retry_repr():
-    assert str(RetryJob(123)) == '<RetryJob defer 123.00s>'
+    assert str(Retry(123)) == '<Retry defer 123.00s>'
 
 
 async def test_str_function(arq_redis, worker, caplog):

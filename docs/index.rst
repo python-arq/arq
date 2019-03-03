@@ -126,7 +126,7 @@ TODO:
 
 * job ids and uniqueness
 * job results
-* RetryJob and cancellation
+* Retry and cancellation
 * all the arguments to Worker, func and cron and enqueue_job
 
 Health checks

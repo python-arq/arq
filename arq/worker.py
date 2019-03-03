@@ -72,14 +72,14 @@ def func(
     return Function(name or coroutine.__qualname__, coroutine, timeout, keep_result, max_tries)
 
 
-class RetryJob(RuntimeError):
+class Retry(RuntimeError):
     __slots__ = ('defer_score',)
 
     def __init__(self, defer: Optional[SecondsTimedelta] = None):
         self.defer_score = to_ms(defer)
 
     def __repr__(self):
-        return f'<RetryJob defer {(self.defer_score or 0) / 1000:0.2f}s>'
+        return f'<Retry defer {(self.defer_score or 0) / 1000:0.2f}s>'
 
     def __str__(self):
         return repr(self)
@@ -269,7 +269,7 @@ class Worker:
         except Exception as e:
             finished_ms = timestamp_ms()
             t = (finished_ms - start_ms) / 1000
-            if isinstance(e, RetryJob):
+            if isinstance(e, Retry):
                 incr_score = e.defer_score
                 logger.info('%6.2fs ↻ %s retrying job in %0.2fs', t, ref, (incr_score or 0) / 1000)
                 self.jobs_retried += 1
