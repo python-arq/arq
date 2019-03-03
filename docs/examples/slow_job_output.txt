@@ -1,0 +1,15 @@
+➤  arq slow_job.WorkerSettings
+12:42:38: Starting worker for 1 functions: the_task
+12:42:38: redis_version=4.0.9 mem_usage=904.50K clients_connected=4 db_keys=3
+12:42:38:  10.23s → c3dd4acc171541b9ac10b1d791750cde:the_task() delayed=10.23s
+^C12:42:40: shutdown on SIGINT ◆ 0 jobs complete ◆ 0 failed ◆ 0 retries ◆ 1 ongoing to cancel
+12:42:40:   1.16s ↻ c3dd4acc171541b9ac10b1d791750cde:the_task cancelled, will be run again
+
+
+➤  arq slow_job.WorkerSettings
+12:42:50: Starting worker for 1 functions: the_task
+12:42:50: redis_version=4.0.9 mem_usage=904.61K clients_connected=4 db_keys=4
+12:42:50:  21.78s → c3dd4acc171541b9ac10b1d791750cde:the_task() try=2 delayed=21.78s
+12:42:55:   5.00s ← c3dd4acc171541b9ac10b1d791750cde:the_task ●
+^C12:42:57: shutdown on SIGINT ◆ 1 jobs complete ◆ 0 failed ◆ 0 retries ◆ 0 ongoing to cancel
+

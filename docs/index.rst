@@ -117,7 +117,7 @@ Deferring Jobs
 ..............
 
 By default, when a job is enqueued it will run as soon as possible (provided a worker is running). However
-you can schedule jobs to run in the future, either by a given time delta (``_defer_by``) or
+you can schedule jobs to run in the future, either by a given duration (``_defer_by``) or
 at a particular time ``_defer_until``.
 
 .. literalinclude:: examples/deferred.py
@@ -144,11 +144,23 @@ You can access job information, status and job results using the (TODO ref) ``Jo
 
 .. literalinclude:: examples/job_results.py
 
+Retrying jobs and cancellation
+..............................
 
-TODO:
+As described above, when an arq work shuts down any going jobs are cancelled immediately
+(via vanilla ``task.cancel()``, so a ``CancelledError`` will be raised). You can see this by running a slow job
+(eg. add ``await asyncio.sleep(5)``) and hitting ``Ctrl+C`` once it's started.
 
-* Retry and cancellation
-* all the arguments to Worker, func and cron, enqueue_job and Job
+You'll get something like.
+
+.. literalinclude:: examples/slow_job_output.txt
+
+You can also retry jobs by raising the ``Retry`` exception from within a job, optionally with a duration to
+defer rerunning the jobs by:
+
+.. literalinclude:: examples/retry.py
+
+TODO all the arguments to Worker, func and cron, enqueue_job and Job
 
 Health checks
 .............

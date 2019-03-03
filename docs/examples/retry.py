@@ -1,13 +1,17 @@
 import asyncio
 from aiohttp import ClientSession
-from arq import create_pool
+from arq import create_pool, Retry
 from arq.connections import RedisSettings
 
 async def download_content(ctx, url):
     session: ClientSession = ctx['session']
     async with session.get(url) as response:
+        if response.status != 200:
+            # retry the job with increasing backup
+            # delays will be 5s, 10s, 15s, 20s
+            # after max_tries (default 5) the job will permanently fail
+            raise Retry(defer=ctx['job_try'] * 5)
         content = await response.text()
-        print(f'{url}: {content:.80}...')
     return len(content)
 
 async def startup(ctx):
@@ -18,11 +22,8 @@ async def shutdown(ctx):
 
 async def main():
     redis = await create_pool(RedisSettings())
-    for url in ('https://facebook.com', 'https://microsoft.com', 'https://github.com'):
-        await redis.enqueue_job('download_content', url)
+    await redis.enqueue_job('download_content', 'https://httpbin.org/status/503')
 
-# WorkerSettings defines the settings to use when creating the work,
-# it's used by the arq cli
 class WorkerSettings:
     functions = [download_content]
     on_startup = startup

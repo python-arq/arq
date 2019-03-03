@@ -271,7 +271,9 @@ class Worker:
             t = (finished_ms - start_ms) / 1000
             if isinstance(e, Retry):
                 incr_score = e.defer_score
-                logger.info('%6.2fs ↻ %s retrying job in %0.2fs', t, ref, (incr_score or 0) / 1000)
+                logger.info('%6.2fs ↻ %s retrying job in %0.2fs', t, ref, (e.defer_score or 0) / 1000)
+                if e.defer_score:
+                    incr_score = e.defer_score + (timestamp_ms() - score)
                 self.jobs_retried += 1
             elif isinstance(e, asyncio.CancelledError):
                 logger.info('%6.2fs ↻ %s cancelled, will be run again', t, ref)
