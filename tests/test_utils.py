@@ -1,5 +1,6 @@
 import logging
 import re
+from datetime import timedelta
 
 import pytest
 
@@ -62,3 +63,30 @@ def test_args_to_string():
     assert arq.utils.args_to_string((), {'d': 4}) == 'd=4'
     assert arq.utils.args_to_string((1, 2, 3), {}) == '1, 2, 3'
     assert arq.utils.args_to_string((1, 2, 3), {'d': 4}) == '1, 2, 3, d=4'
+
+
+@pytest.mark.parametrize(
+    'input,output',
+    [
+        (timedelta(days=1), 86_400_000),
+        (42, 42_000),
+        (42.123, 42_123),
+        (42.123987, 42_124),
+        (None, None),
+    ]
+)
+def test_to_ms(input, output):
+    assert arq.utils.to_ms(input) == output
+
+
+@pytest.mark.parametrize(
+    'input,output',
+    [
+        (timedelta(days=1), 86_400),
+        (42, 42),
+        (42.123, 42.123),
+        (None, None),
+    ]
+)
+def test_to_seconds(input, output):
+    assert arq.utils.to_seconds(input) == output

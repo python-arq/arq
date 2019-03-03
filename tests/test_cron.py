@@ -101,6 +101,18 @@ async def test_job_successful(worker, caplog):
     assert '  0.XXs → cron:foobar()\n  0.XXs ← cron:foobar ● 42' in log
 
 
+async def test_not_run(worker, caplog):
+    caplog.set_level(logging.INFO)
+    worker: Worker = worker(cron_jobs=[cron(foobar, hour=1, run_at_startup=False)])
+    await worker.arun()
+    assert worker.jobs_complete == 0
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+
+    log = '\n'.join(r.message for r in caplog.records)
+    assert 'cron:foobar()' not in log
+
+
 async def test_repr():
     cj = cron(foobar, hour=1, run_at_startup=True)
     assert str(cj).startswith('<CronJob name=cron:foobar coroutine=<function foobar at')

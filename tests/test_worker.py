@@ -5,7 +5,7 @@ import signal
 from unittest.mock import MagicMock
 
 from arq.constants import health_check_key, job_key_prefix
-from arq.worker import RetryJob, Worker, acheck_health, check_health, func, run_worker
+from arq.worker import RetryJob, Worker, async_check_health, check_health, func, run_worker
 
 
 async def foobar(ctx):
@@ -32,29 +32,31 @@ def test_health_check_direct(loop):
 
 
 async def test_health_check_fails():
-    assert 1 == await acheck_health(None)
+    assert 1 == await async_check_health(None)
 
 
 async def test_health_check_pass(redis):
     await redis.set(health_check_key, b'1')
-    assert 0 == await acheck_health(None)
+    assert 0 == await async_check_health(None)
 
 
 async def test_handle_sig(caplog):
     caplog.set_level(logging.INFO)
     worker = Worker([foobar])
     worker.main_task = MagicMock()
-    worker.tasks = [MagicMock()]
+    worker.tasks = [MagicMock(done=MagicMock(return_value=True)), MagicMock(done=MagicMock(return_value=False))]
 
     assert len(caplog.records) == 0
     worker.handle_sig(signal.SIGINT)
     assert len(caplog.records) == 1
     assert caplog.records[0].message == (
-        'shutdown on SIGINT ◆ 0 jobs complete ◆ 0 failed ◆ 0 retries ◆ 1 ongoing to cancel'
+        'shutdown on SIGINT ◆ 0 jobs complete ◆ 0 failed ◆ 0 retries ◆ 2 ongoing to cancel'
     )
     assert worker.main_task.cancel.call_count == 1
     assert worker.tasks[0].done.call_count == 1
     assert worker.tasks[0].cancel.call_count == 0
+    assert worker.tasks[1].done.call_count == 1
+    assert worker.tasks[1].cancel.call_count == 1
 
 
 async def test_job_successful(arq_redis, worker, caplog):
@@ -246,3 +248,17 @@ async def test_unpickleable(arq_redis, worker, caplog):
 
     log = re.sub(r'(\d+).\d\ds', r'\1.XXs', '\n'.join(r.message for r in caplog.records))
     assert 'error pickling result of testing:example' in log
+
+
+async def test_log_health_check(arq_redis, worker, caplog):
+    caplog.set_level(logging.INFO)
+    await arq_redis.enqueue_job('foobar', _job_id='testing')
+    worker: Worker = worker(functions=[foobar], health_check_interval=0)
+    await worker.arun()
+    await worker.arun()
+    await worker.arun()
+    assert worker.jobs_complete == 1
+
+    log = re.sub(r'\d+.\d\ds', 'X.XXs', '\n'.join(r.message for r in caplog.records))
+    assert 'j_complete=1 j_failed=0 j_retried=0 j_ongoing=0 queued=0' in log
+    assert log.count('recording health') == 1

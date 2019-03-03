@@ -18,7 +18,6 @@ from arq.cron import CronJob
 
 from .connections import ArqRedis, RedisSettings, create_pool, log_redis_info
 from .constants import (
-    health_check_interval,
     health_check_key,
     in_progress_key_prefix,
     job_key_prefix,
@@ -92,6 +91,7 @@ class Worker:
         keep_result: SecondsTimedelta = 3600,
         poll_delay: SecondsTimedelta = 0.5,
         max_tries: int = 5,
+        health_check_interval: SecondsTimedelta = 3600,
     ):
         self.functions: Dict[str, Union[Function, CronJob]] = {f.name: f for f in map(func, functions)}
         self.cron_jobs: List[CronJob] = []
@@ -108,6 +108,7 @@ class Worker:
         self.keep_result_s = to_seconds(keep_result)
         self.poll_delay_s = to_seconds(poll_delay)
         self.max_tries = max_tries
+        self.health_check_interval = to_seconds(health_check_interval)
         self.pool = redis_pool
         if self.pool is None:
             self.redis_settings = None
@@ -332,7 +333,7 @@ class Worker:
 
     async def record_health(self):
         now_ts = time()
-        if (now_ts - self._last_health_check) < health_check_interval:
+        if (now_ts - self._last_health_check) < self.health_check_interval:
             return
         self._last_health_check = now_ts
         pending_tasks = sum(not t.done() for t in self.tasks)
@@ -341,7 +342,7 @@ class Worker:
             f'{datetime.now():%b-%d %H:%M:%S} j_complete={self.jobs_complete} j_failed={self.jobs_failed} '
             f'j_retried={self.jobs_retried} j_ongoing={pending_tasks} queued={queued}'
         )
-        await self.pool.setex(health_check_key, health_check_interval + 1, info.encode())
+        await self.pool.setex(health_check_key, self.health_check_interval + 1, info.encode())
         log_suffix = info[info.index('j_complete=') :]
         if self._last_health_check_log and log_suffix != self._last_health_check_log:
             logger.info('recording health: %s', info)
@@ -398,7 +399,7 @@ def run_worker(settings_cls, **kwargs):
     return worker
 
 
-async def acheck_health(redis_settings: Optional[RedisSettings]):
+async def async_check_health(redis_settings: Optional[RedisSettings]):
     redis_settings = redis_settings or RedisSettings()
     redis: ArqRedis = await create_pool(redis_settings)
     data = await redis.get(health_check_key)
@@ -420,4 +421,4 @@ def check_health(settings_cls) -> int:
     """
     cls_kwargs = get_kwargs(settings_cls)
     loop = asyncio.get_event_loop()
-    return loop.run_until_complete(acheck_health(cls_kwargs.get('redis_settings')))
+    return loop.run_until_complete(async_check_health(cls_kwargs.get('redis_settings')))
