@@ -58,6 +58,15 @@ def func(
     timeout: Optional[SecondsTimedelta] = None,
     max_tries: Optional[int] = None,
 ) -> Function:
+    """
+    Wrapper for a job function which lets you configure more settings.
+
+    :param coroutine: coroutine function to call, can be a string to import
+    :param name: name for function, if None, ``coroutine.__qualname__`` is used
+    :param keep_result: duration to keep the result for, if 0 the result is not kept
+    :param timeout: maximum time the job should take
+    :param max_tries: maximum number of tries allowed for the function, use 1 to prevent retrying
+    """
     if isinstance(coroutine, Function):
         return coroutine
 
@@ -73,6 +82,12 @@ def func(
 
 
 class Retry(RuntimeError):
+    """
+    Special exception to retry the job (if ``max_retries`` hasn't been reached).
+
+    :param defer: duration to wait before rerunning the job
+    """
+
     __slots__ = ('defer_score',)
 
     def __init__(self, defer: Optional[SecondsTimedelta] = None):
@@ -86,6 +101,25 @@ class Retry(RuntimeError):
 
 
 class Worker:
+    """
+    Main class for running jobs.
+
+    :param functions: list of functions to register, can either be raw coroutine functions or the
+      result of :func:`arq.worker.func`.
+    :param cron_jobs:  list of cron jobs to run, use :func:`arq.cron.cron` to create them
+    :param redis_settings: settings for creating a redis connection
+    :param redis_pool: existing redis pool, generally None
+    :param burst: whether to stop the worker once all jobs have been run
+    :param on_startup: coroutine function to run at startup
+    :param on_shutdown: coroutine function to run at shutdown
+    :param max_jobs: maximum number of jobs to run at a time
+    :param job_timeout: default job timeout (max run time)
+    :param keep_result: default duration to keep job results for
+    :param poll_delay: duration between polling the queue for new jobs
+    :param max_tries: default maximum number of times to retry a job
+    :param health_check_interval: how often to set the health check key
+    """
+
     def __init__(
         self,
         functions: Sequence[Function] = (),

@@ -20,6 +20,8 @@ logger = logging.getLogger('arq.connections')
 class RedisSettings:
     """
     No-Op class used to hold redis connection redis_settings.
+
+    Used by :func:`arq.connections.create_pool` and :class:`arq.worker.Worker`.
     """
 
     host: str = 'localhost'
@@ -39,6 +41,10 @@ expires_extra = timedelta(seconds=86400)
 
 
 class ArqRedis(Redis):
+    """
+    Thin subclass of ``aioredis.Redis`` which adds :func:`arq.connections.enqueue_job`.
+    """
+
     async def enqueue_job(
         self,
         function: str,
@@ -48,7 +54,19 @@ class ArqRedis(Redis):
         _defer_by: Union[None, int, float, timedelta] = None,
         _expires: Optional[timedelta] = None,
         **kwargs: Any,
-    ):
+    ) -> Optional[Job]:
+        """
+        Enqueue a job.
+
+        :param function: Name of the function to call
+        :param args: args to pass to the function
+        :param _job_id: ID of the job, can be used to enforce job uniqueness
+        :param _defer_until: datetime at which to run the job
+        :param _defer_by: duration to wait before running the job
+        :param _expires: if the job still hasn't started after this duration, do not run it
+        :param kwargs: any keyword arguments to pass to the function
+        :return: :class:`arq.jobs.Job` instance or ``None`` if a job with this ID already exists
+        """
         job_id = _job_id or uuid4().hex
         job_key = job_key_prefix + job_id
         assert not (_defer_until and _defer_by), "use either 'defer_until' or 'defer_by' or neither, not both"
@@ -84,7 +102,10 @@ class ArqRedis(Redis):
 
 async def create_pool(settings: RedisSettings = None, *, _retry: int = 0) -> ArqRedis:
     """
-    Create a new redis pool, retrying up to conn_retries times if the connection fails.
+    Create a new redis pool, retrying up to ``conn_retries`` times if the connection fails.
+
+    Similar to ``aioredis.create_redis_pool`` except it returns a :class:`arq.connections.ArqRedis` instance,
+    thus allowing job enqueuing.
     """
     settings = settings or RedisSettings()
     addr = settings.host, settings.port

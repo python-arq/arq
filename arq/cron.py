@@ -146,7 +146,7 @@ def cron(
     Create a cron job, eg. it should be executed at specific times.
 
     Workers will enqueue this job at or just after the set times. If ``unique`` is true (the default) the
-    job will only be enqueued once even if multiple workers are running.
+    job will only be run once even if multiple workers are running.
 
     :param coroutine: coroutine function to run
     :param name: name of the job, if None, the name of the coroutine is used

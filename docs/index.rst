@@ -98,7 +98,8 @@ To execute the jobs, either after running ``demo.py`` or before/during::
 
     arq demo.WorkerSettings
 
-Append (``--burst``) to stop the worker once all jobs have finished.
+Append (``--burst``) to stop the worker once all jobs have finished. See :class:`arq.worker.Worker` for more available
+properties of ``WorkerSettings``.
 
 For details on the *arq* CLI::
 
@@ -108,7 +109,7 @@ Startup & Shutdown coroutines
 .............................
 
 The ``on_startup`` and ``on_startup`` coroutines are provided as a convenient way to run logic as the worker
-starts and finishes.
+starts and finishes, see :class:`arq.worker.Worker`.
 
 For example, in the above example ``session`` is created once when the work starts up and is then used in subsequent
 jobs.
@@ -118,7 +119,7 @@ Deferring Jobs
 
 By default, when a job is enqueued it will run as soon as possible (provided a worker is running). However
 you can schedule jobs to run in the future, either by a given duration (``_defer_by``) or
-at a particular time ``_defer_until``.
+at a particular time ``_defer_until``, see :func:`arq.connections.ArqRedis.enqueue_job`.
 
 .. literalinclude:: examples/deferred.py
 
@@ -128,8 +129,8 @@ Job Uniqueness
 Sometimes you want a job to only be run once at a time (eg. a backup) or once for a given parameter (eg. generating
 invoices for a particular company).
 
-*arq* supports this via custom job ids. It guarantees that a job with a particular ID cannot be enqueued again until
-its execution has finished.
+*arq* supports this via custom job ids, see see :func:`arq.connections.ArqRedis.enqueue_job`. It guarantees
+that a job with a particular ID cannot be enqueued again until its execution has finished.
 
 .. literalinclude:: examples/job_ids.py
 
@@ -139,8 +140,8 @@ with the same id won't be enqueued twice (or overwritten) even if they're enqueu
 Job Results
 ...........
 
-You can access job information, status and job results using the (TODO ref) ``Job`` instance returned from
-(TODO ref) ``enqueue_job``.
+You can access job information, status and job results using the :class:`arq.jobs.Job` instance returned from
+:func:`arq.connections.ArqRedis.enqueue_job`.
 
 .. literalinclude:: examples/job_results.py
 
@@ -155,12 +156,10 @@ You'll get something like.
 
 .. literalinclude:: examples/slow_job_output.txt
 
-You can also retry jobs by raising the ``Retry`` exception from within a job, optionally with a duration to
-defer rerunning the jobs by:
+You can also retry jobs by raising the :class:`arq.worker.Retry` exception from within a job,
+optionally with a duration to defer rerunning the jobs by:
 
 .. literalinclude:: examples/retry.py
-
-TODO all the arguments to Worker, func and cron, enqueue_job and Job
 
 Health checks
 .............
@@ -169,7 +168,7 @@ Health checks
 That key/value will expire after ``health_check_interval + 1`` seconds so you can be sure if the variable exists *arq*
 is alive and kicking (technically you can be sure it was alive and kicking ``health_check_interval`` seconds ago).
 
-You can run a health check with the CLI (assuming you're using the above example)::
+You can run a health check with the CLI (assuming you're using the first example above)::
 
     arq --check demo.WorkerSettings
 
@@ -190,7 +189,7 @@ Where the items have the following meaning:
 Cron Jobs
 .........
 
-Functions can be scheduled to be run periodically at specific times
+Functions can be scheduled to be run periodically at specific times. See :func:`arq.cron.cron`.
 
 .. literalinclude:: examples/cron.py
 
@@ -200,6 +199,21 @@ As per the example sets can be used to run at multiple of the given unit.
 Note that ``second`` defaults to ``0`` so you don't in inadvertently run jobs every second and ``microsecond``
 defaults to ``123456`` so you don't inadvertently run jobs every microsecond and so *arq* avoids enqueuing jobs
 at the top of a second when the world is generally slightly busier.
+
+Reference
+---------
+
+.. automodule:: arq.connections
+   :members:
+
+.. automodule:: arq.worker
+   :members: func, Retry, Worker
+
+.. automodule:: arq.cron
+   :members: cron
+
+.. automodule:: arq.jobs
+   :members: JobStatus, Job
 
 .. include:: ../HISTORY.rst
 
