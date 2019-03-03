@@ -66,27 +66,12 @@ def test_args_to_string():
 
 
 @pytest.mark.parametrize(
-    'input,output',
-    [
-        (timedelta(days=1), 86_400_000),
-        (42, 42_000),
-        (42.123, 42_123),
-        (42.123987, 42_124),
-        (None, None),
-    ]
+    'input,output', [(timedelta(days=1), 86_400_000), (42, 42000), (42.123, 42123), (42.123_987, 42124), (None, None)]
 )
 def test_to_ms(input, output):
     assert arq.utils.to_ms(input) == output
 
 
-@pytest.mark.parametrize(
-    'input,output',
-    [
-        (timedelta(days=1), 86_400),
-        (42, 42),
-        (42.123, 42.123),
-        (None, None),
-    ]
-)
+@pytest.mark.parametrize('input,output', [(timedelta(days=1), 86400), (42, 42), (42.123, 42.123), (None, None)])
 def test_to_seconds(input, output):
     assert arq.utils.to_seconds(input) == output

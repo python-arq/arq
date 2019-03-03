@@ -25,7 +25,17 @@ from .constants import (
     result_key_prefix,
     retry_key_prefix,
 )
-from .utils import SecondsTimedelta, args_to_string, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate
+from .utils import (
+    SecondsTimedelta,
+    args_to_string,
+    ms_to_datetime,
+    poll,
+    timestamp_ms,
+    to_ms,
+    to_seconds,
+    to_unix_ms,
+    truncate,
+)
 
 logger = logging.getLogger('arq.worker')
 no_result = object()
@@ -231,7 +241,12 @@ class Worker:
         finish = False
         timeout_s = self.job_timeout_s if function.timeout_s is None else function.timeout_s
         incr_score = None
-        job_ctx = {'job_try': job_try, 'job_id': job_id}
+        job_ctx = {
+            'job_id': job_id,
+            'job_try': job_try,
+            'enqueue_time': ms_to_datetime(enqueue_time_ms),
+            'score': score,
+        }
         ctx = {**self.ctx, **job_ctx}
         start_ms = timestamp_ms()
         try:
