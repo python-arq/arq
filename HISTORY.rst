@@ -3,7 +3,7 @@
 History
 -------
 
-v0.16.0a1 (2010-03-01)
+v0.16.0a1 (2010-03-05)
 ......................
 * **Breaking Change:** **COMPLETE REWRITE!!!** see docs for details, #110
 
