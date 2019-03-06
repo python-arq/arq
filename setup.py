@@ -55,4 +55,7 @@ setup(
         'click>=6.7',
         'pydantic>=0.20',
     ],
+    extras_require={
+        'watch': ['watchgod>=0.4'],
+    }
 )

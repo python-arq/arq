@@ -45,7 +45,7 @@ def cli(*, worker_settings, burst, check, watch, verbose):
 async def watch_reload(path, worker_settings, loop):
     try:
         from watchgod import awatch
-    except ImportError as e:
+    except ImportError as e:  # pragma: no cover
         raise ImportError('watchgod not installed, use `pip install watchgod`') from e
 
     stop_event = asyncio.Event()
