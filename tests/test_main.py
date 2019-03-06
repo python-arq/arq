@@ -11,7 +11,7 @@ from arq.connections import ArqRedis
 from arq.constants import queue_name
 from arq.jobs import Job
 from arq.utils import timestamp_ms
-from arq.worker import Worker, func
+from arq.worker import Worker, func, Retry
 
 
 async def test_enqueue_job(arq_redis: ArqRedis, worker):
@@ -43,6 +43,7 @@ async def test_job_info(arq_redis: ArqRedis):
     info = await j.info()
     assert info == {
         'enqueue_time': CloseToNow(),
+        'job_try': None,
         'function': 'foobar',
         'args': (123,),
         'kwargs': {'a': 456},
@@ -94,3 +95,32 @@ async def test_mung(arq_redis: ArqRedis, worker):
     worker: Worker = worker(functions=[func(count, name='count')])
     await worker.arun()
     assert counter.most_common(1)[0][1] == 1  # no job go enqueued twice
+
+
+async def test_custom_try(arq_redis: ArqRedis, worker):
+    async def foobar(ctx):
+        return ctx['job_try']
+
+    j1 = await arq_redis.enqueue_job('foobar')
+    w: Worker = worker(functions=[func(foobar, name='foobar')])
+    await w.arun()
+    r = await j1.result(pole_delay=0)
+    assert r == 1
+
+    j2 = await arq_redis.enqueue_job('foobar', _job_try=3)
+    await w.arun()
+    r = await j2.result(pole_delay=0)
+    assert r == 3
+
+
+async def test_custom_try2(arq_redis: ArqRedis, worker):
+    async def foobar(ctx):
+        if ctx['job_try'] == 3:
+            raise Retry()
+        return ctx['job_try']
+
+    j1 = await arq_redis.enqueue_job('foobar', _job_try=3)
+    w: Worker = worker(functions=[func(foobar, name='foobar')])
+    await w.arun()
+    r = await j1.result(pole_delay=0)
+    assert r == 4
