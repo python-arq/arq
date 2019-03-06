@@ -3,13 +3,13 @@ import logging
 import pickle
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 from uuid import uuid4
 
 import aioredis
 from aioredis import MultiExecError, Redis
 
-from .constants import job_key_prefix, queue_name
+from .constants import job_key_prefix, queue_name, result_key_prefix
 from .jobs import Job
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
@@ -101,6 +101,20 @@ class ArqRedis(Redis):
                 # job got enqueued since we got 'job_exists'
                 return
         return Job(job_id, self)
+
+    async def _get_job_result(self, key):
+        job_id = key[len(result_key_prefix) :]
+        job = Job(job_id, self)
+        r = await job.result_info()
+        r['job_id'] = job_id
+        return r
+
+    async def all_job_results(self) -> List[Dict]:
+        """
+        Get results for all jobs in redis.
+        """
+        keys = await self.keys(result_key_prefix + '*')
+        return await asyncio.gather(*[self._get_job_result(k) for k in keys])
 
 
 async def create_pool(settings: RedisSettings = None, *, _retry: int = 0) -> ArqRedis:

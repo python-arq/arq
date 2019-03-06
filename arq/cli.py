@@ -1,5 +1,7 @@
 import asyncio
 import logging.config
+import os
+import sys
 from signal import Signals
 
 import click
@@ -28,6 +30,7 @@ def cli(*, worker_settings, burst, check, watch, verbose):
 
     CLI to run the arq worker.
     """
+    sys.path.append(os.getcwd())
     worker_settings = import_string(worker_settings)
     logging.config.dictConfig(default_log_config(verbose))
 
@@ -56,6 +59,7 @@ async def watch_reload(path, worker_settings, loop):
         async for _ in awatch(path, stop_event=stop_event):
             print('\nfiles changed, reloading arq worker...')
             worker.handle_sig(Signals.SIGUSR1)
+            await worker.close()
             loop.create_task(worker.async_run())
     finally:
         await worker.close()

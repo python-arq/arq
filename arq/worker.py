@@ -136,6 +136,7 @@ class Worker:
         poll_delay: SecondsTimedelta = 0.5,
         max_tries: int = 5,
         health_check_interval: SecondsTimedelta = 3600,
+        ctx: Optional[Dict] = None,
     ):
         self.functions: Dict[str, Union[Function, CronJob]] = {f.name: f for f in map(func, functions)}
         self.cron_jobs: List[CronJob] = []
@@ -161,7 +162,7 @@ class Worker:
         self.tasks = []
         self.main_task = None
         self.loop = asyncio.get_event_loop()
-        self.ctx = {}
+        self.ctx = ctx or {}
         max_timeout = max(f.timeout_s or self.job_timeout_s for f in self.functions.values())
         self.in_progress_timeout_s = max_timeout + 10
         self.jobs_complete = 0
@@ -185,11 +186,7 @@ class Worker:
 
     async def async_run(self):
         self.main_task = self.loop.create_task(self.main())
-        try:
-            await self.main_task
-        except asyncio.CancelledError:
-            # happens on shutdown, fine
-            raise
+        await self.main_task
 
     async def main(self):
         if self.pool is None:

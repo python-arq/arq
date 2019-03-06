@@ -53,3 +53,17 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker):
         'finish_time': CloseToNow(),
         'score': None,
     }
+    results = await arq_redis.all_job_results()
+    assert results == [
+        {
+            'enqueue_time': CloseToNow(),
+            'job_try': 1,
+            'function': 'foobar',
+            'args': (1, 2),
+            'kwargs': {'c': 3},
+            'result': 42,
+            'start_time': CloseToNow(),
+            'finish_time': CloseToNow(),
+            'job_id': j.job_id,
+        }
+    ]

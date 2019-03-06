@@ -7,6 +7,9 @@ v0.16.0a1 (2010-03-06)
 ......................
 * add ``job_try`` argument to ``enqueue_job``, #113
 * adding ``--watch`` mode to the worker (requires ``watchgod``), #114
+* allow ``ctx`` when creating Worker
+* add ``all_job_results`` to ``ArqRedis``
+* fix python path when starting worker
 
 v0.16.0a1 (2010-03-05)
 ......................
