@@ -45,7 +45,6 @@ async def test_redis_log():
     await redis.set(b'b', b'2')
 
     log_msgs = []
-    # more again 22
 
     def _log(s):
         log_msgs.append(s)

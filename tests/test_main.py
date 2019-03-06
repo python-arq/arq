@@ -22,7 +22,7 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker):
     worker: Worker = worker(functions=[func(foobar, name='foobar')])
     await worker.main()
     r = await j.result(pole_delay=0)
-    assert r == 42
+    assert r == 42  # 1
 
 
 async def test_job_error(arq_redis: ArqRedis, worker):

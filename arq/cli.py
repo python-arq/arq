@@ -49,17 +49,12 @@ async def watch_reload(path, worker_settings, loop):
         raise ImportError('watchgod not installed, use `pip install watchgod`') from e
 
     stop_event = asyncio.Event()
-
-    def on_stop(signal: Signals):
-        if signal != Signals.SIGUSR1:
-            stop_event.set()
-
     worker = create_worker(worker_settings)
     try:
-        worker.on_stop = on_stop
+        worker.on_stop = lambda s: s != Signals.SIGUSR1 and stop_event.set()
         loop.create_task(worker.async_run())
-        async for changes in awatch(path, stop_event=stop_event):
-            print(f'\n{len(changes)} files changes, reloading arq worker...')
+        async for _ in awatch(path, stop_event=stop_event):
+            print('\nfiles changed, reloading arq worker...')
             worker.handle_sig(Signals.SIGUSR1)
             loop.create_task(worker.async_run())
     finally:
