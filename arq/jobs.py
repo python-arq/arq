@@ -62,8 +62,14 @@ class Job:
         if not info:
             v = await self._redis.get(job_key_prefix + self.job_id, encoding=None)
             if v:
-                enqueue_time_ms, function, args, kwargs = pickle.loads(v)
-                info = dict(enqueue_time=ms_to_datetime(enqueue_time_ms), function=function, args=args, kwargs=kwargs)
+                enqueue_time_ms, job_try, function, args, kwargs = pickle.loads(v)
+                info = dict(
+                    enqueue_time=ms_to_datetime(enqueue_time_ms),
+                    job_try=job_try,
+                    function=function,
+                    args=args,
+                    kwargs=kwargs,
+                )
         if info:
             info['score'] = await self._redis.zscore(queue_name, self.job_id)
         return info
@@ -75,14 +81,14 @@ class Job:
         """
         v = await self._redis.get(result_key_prefix + self.job_id, encoding=None)
         if v:
-            enqueue_time_ms, function, args, kwargs, result, tries, start_time_ms, finish_time_ms = pickle.loads(v)
+            enqueue_time_ms, job_try, function, args, kwargs, result, start_time_ms, finish_time_ms = pickle.loads(v)
             return dict(
                 enqueue_time=ms_to_datetime(enqueue_time_ms),
+                job_try=job_try,
                 function=function,
                 args=args,
                 kwargs=kwargs,
                 result=result,
-                try_count=tries,
                 start_time=ms_to_datetime(start_time_ms),
                 finish_time=ms_to_datetime(finish_time_ms),
             )

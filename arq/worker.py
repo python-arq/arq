@@ -248,7 +248,7 @@ class Worker:
             self.jobs_failed += 1
             return await asyncio.shield(self.abort_job(job_id))
 
-        enqueue_time_ms, function_name, args, kwargs = pickle.loads(v)
+        enqueue_time_ms, enqueue_job_try, function_name, args, kwargs = pickle.loads(v)
 
         try:
             function: Union[Function, CronJob] = self.functions[function_name]
@@ -262,6 +262,10 @@ class Worker:
             ref = function_name
         else:
             ref = f'{job_id}:{function_name}'
+
+        if enqueue_job_try and enqueue_job_try > job_try:
+            job_try = enqueue_job_try
+            await self.pool.setex(retry_key_prefix + job_id, 88400, str(job_try))
 
         max_tries = self.max_tries if function.max_tries is None else function.max_tries
         if job_try > max_tries:
@@ -328,7 +332,7 @@ class Worker:
         result_timeout_s = self.keep_result_s if function.keep_result_s is None else function.keep_result_s
         result_data = None
         if result is not no_result and result_timeout_s > 0:
-            d = enqueue_time_ms, function_name, args, kwargs, result, job_try, start_ms, finished_ms
+            d = enqueue_time_ms, job_try, function_name, args, kwargs, result, start_ms, finished_ms
             try:
                 result_data = pickle.dumps(d)
             except AttributeError:

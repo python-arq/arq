@@ -36,8 +36,8 @@ class RedisSettings:
         return '<RedisSettings {}>'.format(' '.join(f'{k}={v}' for k, v in self.__dict__.items()))
 
 
-# extra time after the job is expected to start when the job key should expire
-expires_extra = timedelta(seconds=86400)
+# extra time after the job is expected to start when the job key should expire, 1 day in ms
+expires_extra_ms = 86_400_000
 
 
 class ArqRedis(Redis):
@@ -52,7 +52,8 @@ class ArqRedis(Redis):
         _job_id: Optional[str] = None,
         _defer_until: Optional[datetime] = None,
         _defer_by: Union[None, int, float, timedelta] = None,
-        _expires: Optional[timedelta] = None,
+        _expires: Union[None, int, float, timedelta] = None,
+        _job_try: Optional[int] = None,
         **kwargs: Any,
     ) -> Optional[Job]:
         """
@@ -64,6 +65,7 @@ class ArqRedis(Redis):
         :param _defer_until: datetime at which to run the job
         :param _defer_by: duration to wait before running the job
         :param _expires: if the job still hasn't started after this duration, do not run it
+        :param _job_try: useful when re-enqueueing jobs within a job
         :param kwargs: any keyword arguments to pass to the function
         :return: :class:`arq.jobs.Job` instance or ``None`` if a job with this ID already exists
         """
@@ -72,6 +74,7 @@ class ArqRedis(Redis):
         assert not (_defer_until and _defer_by), "use either 'defer_until' or 'defer_by' or neither, not both"
 
         defer_by_ms = to_ms(_defer_by)
+        expires_ms = to_ms(_expires)
 
         with await self as conn:
             _, _, job_exists = await asyncio.gather(conn.unwatch(), conn.watch(job_key), conn.exists(job_key))
@@ -86,11 +89,11 @@ class ArqRedis(Redis):
             else:
                 score = enqueue_time_ms
 
-            _expires = _expires or timedelta(milliseconds=(score - enqueue_time_ms)) + expires_extra
+            expires_ms = expires_ms or score - enqueue_time_ms + expires_extra_ms
 
-            job = pickle.dumps((enqueue_time_ms, function, args, kwargs))
+            job = pickle.dumps((enqueue_time_ms, _job_try, function, args, kwargs))
             tr = conn.multi_exec()
-            tr.setex(job_key, _expires.total_seconds(), job)
+            tr.psetex(job_key, expires_ms, job)
             tr.zadd(queue_name, score, job_id)
             try:
                 await tr.execute()

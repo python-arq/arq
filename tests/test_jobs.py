@@ -44,11 +44,11 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker):
     info = await j.info()
     assert info == {
         'enqueue_time': CloseToNow(),
+        'job_try': 1,
         'function': 'foobar',
         'args': (1, 2),
         'kwargs': {'c': 3},
         'result': 42,
-        'try_count': 1,
         'start_time': CloseToNow(),
         'finish_time': CloseToNow(),
         'score': None,
