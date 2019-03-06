@@ -461,8 +461,8 @@ def create_worker(settings_cls, **kwargs) -> Worker:
     return Worker(**{**get_kwargs(settings_cls), **kwargs})
 
 
-def run_worker(settings_cls, **kwargs):
-    worker = Worker(**{**get_kwargs(settings_cls), **kwargs})
+def run_worker(settings_cls, **kwargs) -> Worker:
+    worker = create_worker(settings_cls, **kwargs)
     worker.run()
     return worker
 
