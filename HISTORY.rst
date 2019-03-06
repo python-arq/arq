@@ -3,7 +3,7 @@
 History
 -------
 
-v0.16.0a1 (2010-03-06)
+v0.16.0a2 (2010-03-06)
 ......................
 * add ``job_try`` argument to ``enqueue_job``, #113
 * adding ``--watch`` mode to the worker (requires ``watchgod``), #114

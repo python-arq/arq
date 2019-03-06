@@ -3,6 +3,7 @@ import logging
 import pickle
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from operator import itemgetter
 from typing import Any, Dict, List, Optional, Union
 from uuid import uuid4
 
@@ -114,7 +115,8 @@ class ArqRedis(Redis):
         Get results for all jobs in redis.
         """
         keys = await self.keys(result_key_prefix + '*')
-        return await asyncio.gather(*[self._get_job_result(k) for k in keys])
+        results = await asyncio.gather(*[self._get_job_result(k) for k in keys])
+        return sorted(results, key=itemgetter('enqueue_time'))
 
 
 async def create_pool(settings: RedisSettings = None, *, _retry: int = 0) -> ArqRedis:
