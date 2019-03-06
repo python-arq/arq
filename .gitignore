@@ -9,7 +9,7 @@ __pycache__/
 /htmlcov/
 /build
 /dist
-/test.py
+/demo.py
 *.egg-info
 /docs/_build/
 /.mypy_cache/

@@ -37,7 +37,7 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker):
     assert isinstance(j, Job)
     assert JobStatus.queued == await j.status()
     worker: Worker = worker(functions=[func(foobar, name='foobar')])
-    await worker.arun()
+    await worker.main()
     r = await j.result(pole_delay=0)
     assert r == 42
     assert JobStatus.complete == await j.status()
