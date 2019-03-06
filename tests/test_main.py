@@ -11,7 +11,7 @@ from arq.connections import ArqRedis
 from arq.constants import queue_name
 from arq.jobs import Job
 from arq.utils import timestamp_ms
-from arq.worker import Worker, func, Retry
+from arq.worker import Retry, Worker, func
 
 
 async def test_enqueue_job(arq_redis: ArqRedis, worker):
@@ -20,9 +20,9 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker):
 
     j = await arq_redis.enqueue_job('foobar')
     worker: Worker = worker(functions=[func(foobar, name='foobar')])
-    await worker.arun()
+    await worker.main()
     r = await j.result(pole_delay=0)
-    assert r == 42
+    assert r == 42  # 1
 
 
 async def test_job_error(arq_redis: ArqRedis, worker):
@@ -31,7 +31,7 @@ async def test_job_error(arq_redis: ArqRedis, worker):
 
     j = await arq_redis.enqueue_job('foobar')
     worker: Worker = worker(functions=[func(foobar, name='foobar')])
-    await worker.arun()
+    await worker.main()
 
     with pytest.raises(RuntimeError, match='foobar error'):
         await j.result(pole_delay=0)
@@ -93,7 +93,7 @@ async def test_mung(arq_redis: ArqRedis, worker):
     await asyncio.gather(*tasks)
 
     worker: Worker = worker(functions=[func(count, name='count')])
-    await worker.arun()
+    await worker.main()
     assert counter.most_common(1)[0][1] == 1  # no job go enqueued twice
 
 
@@ -103,12 +103,12 @@ async def test_custom_try(arq_redis: ArqRedis, worker):
 
     j1 = await arq_redis.enqueue_job('foobar')
     w: Worker = worker(functions=[func(foobar, name='foobar')])
-    await w.arun()
+    await w.main()
     r = await j1.result(pole_delay=0)
     assert r == 1
 
     j2 = await arq_redis.enqueue_job('foobar', _job_try=3)
-    await w.arun()
+    await w.main()
     r = await j2.result(pole_delay=0)
     assert r == 3
 
@@ -121,6 +121,6 @@ async def test_custom_try2(arq_redis: ArqRedis, worker):
 
     j1 = await arq_redis.enqueue_job('foobar', _job_try=3)
     w: Worker = worker(functions=[func(foobar, name='foobar')])
-    await w.arun()
+    await w.main()
     r = await j1.result(pole_delay=0)
     assert r == 4

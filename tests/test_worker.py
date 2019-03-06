@@ -69,7 +69,7 @@ async def test_job_successful(arq_redis: ArqRedis, worker, caplog):
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
-    await worker.arun()
+    await worker.main()
     assert worker.jobs_complete == 1
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
@@ -86,7 +86,7 @@ async def test_job_retry(arq_redis: ArqRedis, worker, caplog):
     caplog.set_level(logging.INFO)
     await arq_redis.enqueue_job('retry', _job_id='testing')
     worker: Worker = worker(functions=[func(retry, name='retry')])
-    await worker.arun()
+    await worker.main()
     assert worker.jobs_complete == 1
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 2
@@ -101,7 +101,7 @@ async def test_job_job_not_found(arq_redis: ArqRedis, worker, caplog):
     caplog.set_level(logging.INFO)
     await arq_redis.enqueue_job('missing', _job_id='testing')
     worker: Worker = worker(functions=[foobar])
-    await worker.arun()
+    await worker.main()
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 1
     assert worker.jobs_retried == 0
@@ -117,7 +117,7 @@ async def test_retry_lots(arq_redis: ArqRedis, worker, caplog):
     caplog.set_level(logging.INFO)
     await arq_redis.enqueue_job('retry', _job_id='testing')
     worker: Worker = worker(functions=[func(retry, name='retry')])
-    await worker.arun()
+    await worker.main()
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 1
     assert worker.jobs_retried == 5
@@ -134,7 +134,7 @@ async def test_cancel_error(arq_redis: ArqRedis, worker, caplog):
     caplog.set_level(logging.INFO)
     await arq_redis.enqueue_job('retry', _job_id='testing')
     worker: Worker = worker(functions=[func(retry, name='retry')])
-    await worker.arun()
+    await worker.main()
     assert worker.jobs_complete == 1
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 1
@@ -151,7 +151,7 @@ async def test_job_expired(arq_redis: ArqRedis, worker, caplog):
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
-    await worker.arun()
+    await worker.main()
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 1
     assert worker.jobs_retried == 0
@@ -167,7 +167,7 @@ async def test_job_old(arq_redis: ArqRedis, worker, caplog):
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
-    await worker.arun()
+    await worker.main()
     assert worker.jobs_complete == 1
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
@@ -187,7 +187,7 @@ async def test_str_function(arq_redis: ArqRedis, worker, caplog):
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
-    await worker.arun()
+    await worker.main()
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 1
     assert worker.jobs_retried == 0
@@ -207,7 +207,7 @@ async def test_startup_shutdown(arq_redis: ArqRedis, worker):
 
     await arq_redis.enqueue_job('foobar', _job_id='testing')
     worker: Worker = worker(functions=[foobar], on_startup=startup, on_shutdown=shutdown)
-    await worker.arun()
+    await worker.main()
     await worker.close()
 
     assert calls == ['startup', 'shutdown']
@@ -226,7 +226,7 @@ async def test_exc_extra(arq_redis: ArqRedis, worker, caplog):
     caplog.set_level(logging.INFO)
     await arq_redis.enqueue_job('error_function', _job_id='testing')
     worker: Worker = worker(functions=[error_function])
-    await worker.arun()
+    await worker.main()
     assert worker.jobs_failed == 1
 
     log = re.sub(r'(\d+).\d\ds', r'\1.XXs', '\n'.join(r.message for r in caplog.records))
@@ -246,7 +246,7 @@ async def test_unpickleable(arq_redis: ArqRedis, worker, caplog):
 
     await arq_redis.enqueue_job('example', _job_id='testing')
     worker: Worker = worker(functions=[func(example, name='example')])
-    await worker.arun()
+    await worker.main()
 
     log = re.sub(r'(\d+).\d\ds', r'\1.XXs', '\n'.join(r.message for r in caplog.records))
     assert 'error pickling result of testing:example' in log
@@ -256,9 +256,9 @@ async def test_log_health_check(arq_redis: ArqRedis, worker, caplog):
     caplog.set_level(logging.INFO)
     await arq_redis.enqueue_job('foobar', _job_id='testing')
     worker: Worker = worker(functions=[foobar], health_check_interval=0)
-    await worker.arun()
-    await worker.arun()
-    await worker.arun()
+    await worker.main()
+    await worker.main()
+    await worker.main()
     assert worker.jobs_complete == 1
 
     log = re.sub(r'\d+.\d\ds', 'X.XXs', '\n'.join(r.message for r in caplog.records))
@@ -272,7 +272,7 @@ async def test_remain_keys(arq_redis: ArqRedis, worker):
         await arq_redis.enqueue_job('foobar', _job_id='testing')
         assert sorted(await redis2.keys('*')) == ['arq:job:testing', 'arq:queue']
         worker: Worker = worker(functions=[foobar])
-        await worker.arun()
+        await worker.main()
         assert sorted(await redis2.keys('*')) == ['arq:health-check', 'arq:result:testing']
         await worker.close()
         assert sorted(await redis2.keys('*')) == ['arq:result:testing']
@@ -285,5 +285,5 @@ async def test_remain_keys_no_results(arq_redis: ArqRedis, worker):
     await arq_redis.enqueue_job('foobar', _job_id='testing')
     assert sorted(await arq_redis.keys('*')) == ['arq:job:testing', 'arq:queue']
     worker: Worker = worker(functions=[func(foobar, keep_result=0)])
-    await worker.arun()
+    await worker.main()
     assert sorted(await arq_redis.keys('*')) == ['arq:health-check']

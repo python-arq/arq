@@ -6,7 +6,7 @@ black = black -S -l 120 --py36 arq tests
 install:
 	pip install -U pip setuptools
 	pip install -r requirements.txt
-	pip install -e .
+	pip install -e .[watch]
 
 .PHONY: isort
 format:

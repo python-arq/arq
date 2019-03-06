@@ -98,8 +98,14 @@ To execute the jobs, either after running ``demo.py`` or before/during::
 
     arq demo.WorkerSettings
 
-Append (``--burst``) to stop the worker once all jobs have finished. See :class:`arq.worker.Worker` for more available
+Append ``--burst`` to stop the worker once all jobs have finished. See :class:`arq.worker.Worker` for more available
 properties of ``WorkerSettings``.
+
+You can also watch for changes and reload the worker when the source changes::
+
+    arq demo.WorkerSettings --watch path/to/src
+
+This requires watchgod_ to be installed (``pip install watchgod``).
 
 For details on the *arq* CLI::
 
@@ -222,4 +228,5 @@ Reference
 .. |license| image:: https://img.shields.io/pypi/l/arq.svg
    :target: https://github.com/samuelcolvin/arq
 .. _asyncio: https://docs.python.org/3/library/asyncio.html
+.. _watchgod: https://pypi.org/project/watchgod/
 .. _rq: http://python-rq.org/

@@ -169,11 +169,12 @@ class Worker:
         self.jobs_failed = 0
         self._last_health_check = 0
         self._last_health_check_log = None
-
-    def run(self):
         self._add_signal_handler(signal.SIGINT, self.handle_sig)
         self._add_signal_handler(signal.SIGTERM, self.handle_sig)
-        self.main_task = self.loop.create_task(self.arun())
+        self.on_stop = None
+
+    def run(self):
+        self.main_task = self.loop.create_task(self.main())
         try:
             self.loop.run_until_complete(self.main_task)
         except asyncio.CancelledError:
@@ -182,7 +183,15 @@ class Worker:
         finally:
             self.loop.run_until_complete(self.close())
 
-    async def arun(self):
+    async def async_run(self):
+        self.main_task = self.loop.create_task(self.main())
+        try:
+            await self.main_task
+        except asyncio.CancelledError:
+            # happens on shutdown, fine
+            raise
+
+    async def main(self):
         if self.pool is None:
             self.pool = await create_pool(self.redis_settings)
 
@@ -409,9 +418,10 @@ class Worker:
         self.loop.add_signal_handler(signal, partial(handler, signal))
 
     def handle_sig(self, signum):
+        sig = Signals(signum)
         logger.info(
             'shutdown on %s ◆ %d jobs complete ◆ %d failed ◆ %d retries ◆ %d ongoing to cancel',
-            Signals(signum).name,
+            sig.name,
             self.jobs_complete,
             self.jobs_failed,
             self.jobs_retried,
@@ -421,6 +431,7 @@ class Worker:
             if not t.done():
                 t.cancel()
         self.main_task and self.main_task.cancel()
+        self.on_stop and self.on_stop(sig)
 
     async def close(self):
         if not self.pool:
@@ -446,10 +457,12 @@ def get_kwargs(settings_cls):
     return {k: v for k, v in d.items() if k in worker_args}
 
 
-def run_worker(settings_cls, **kwargs):
-    kwargs_ = get_kwargs(settings_cls)
-    kwargs_.update(kwargs)
-    worker = Worker(**kwargs_)
+def create_worker(settings_cls, **kwargs) -> Worker:
+    return Worker(**{**get_kwargs(settings_cls), **kwargs})
+
+
+def run_worker(settings_cls, **kwargs) -> Worker:
+    worker = create_worker(settings_cls, **kwargs)
     worker.run()
     return worker
 
