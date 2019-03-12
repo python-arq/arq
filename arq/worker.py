@@ -156,9 +156,9 @@ class Worker:
         self.health_check_interval = to_seconds(health_check_interval)
         self.pool = redis_pool
         if self.pool is None:
-            self.redis_settings = None
-        else:
             self.redis_settings = redis_settings or RedisSettings()
+        else:
+            self.redis_settings = None
         self.tasks = []
         self.main_task = None
         self.loop = asyncio.get_event_loop()
