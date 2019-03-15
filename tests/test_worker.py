@@ -4,15 +4,20 @@ import re
 import signal
 from unittest.mock import MagicMock
 
+import pytest
 from aioredis import create_redis_pool
 
 from arq.connections import ArqRedis
 from arq.constants import health_check_key, job_key_prefix
-from arq.worker import Retry, Worker, async_check_health, check_health, func, run_worker
+from arq.worker import Retry, Worker, async_check_health, check_health, func, run_worker, FailedJobs
 
 
 async def foobar(ctx):
     return 42
+
+
+async def fails(ctx):
+    raise TypeError('xxx')
 
 
 def test_no_jobs(arq_redis: ArqRedis, loop):
@@ -287,3 +292,26 @@ async def test_remain_keys_no_results(arq_redis: ArqRedis, worker):
     worker: Worker = worker(functions=[func(foobar, keep_result=0)])
     await worker.main()
     assert sorted(await arq_redis.keys('*')) == ['arq:health-check']
+
+
+async def test_run_check_passes(arq_redis: ArqRedis, worker):
+    await arq_redis.enqueue_job('foobar')
+    await arq_redis.enqueue_job('foobar')
+    worker: Worker = worker(functions=[func(foobar, name='foobar')])
+    assert 2 == await worker.run_check()
+
+
+async def test_run_check_error(arq_redis: ArqRedis, worker):
+    await arq_redis.enqueue_job('fails')
+    worker: Worker = worker(functions=[func(fails, name='fails')])
+    with pytest.raises(FailedJobs, match='1 job failed'):
+        await worker.run_check()
+
+
+async def test_run_check_error2(arq_redis: ArqRedis, worker):
+    await arq_redis.enqueue_job('fails')
+    await arq_redis.enqueue_job('fails')
+    worker: Worker = worker(functions=[func(fails, name='fails')])
+    with pytest.raises(FailedJobs, match='2 jobs failed') as exc_info:
+        await worker.run_check()
+    assert len(exc_info.value.job_results) == 2

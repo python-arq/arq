@@ -3,6 +3,10 @@
 History
 -------
 
+v0.16.0a4 (unreleased)
+......................
+* add ``Worker.run_check``, fix #115
+
 v0.16.0a3 (2010-03-12)
 ......................
 * fix ``Worker`` with custom redis settings

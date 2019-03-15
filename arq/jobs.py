@@ -89,6 +89,7 @@ class Job:
                 args=args,
                 kwargs=kwargs,
                 result=result,
+                success=not isinstance(result, Exception),
                 start_time=ms_to_datetime(start_time_ms),
                 finish_time=ms_to_datetime(finish_time_ms),
             )

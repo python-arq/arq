@@ -100,6 +100,18 @@ class Retry(RuntimeError):
         return repr(self)
 
 
+class FailedJobs(RuntimeError):
+    def __init__(self, count, job_results):
+        self.count = count
+        self.job_results = job_results
+
+    def __str__(self):
+        return f'{self.count} job{"" if self.count == 1 else "s"} failed'
+
+    def __repr__(self):
+        return f'<{str(self)}>'
+
+
 class Worker:
     """
     Main class for running jobs.
@@ -174,7 +186,10 @@ class Worker:
         self._add_signal_handler(signal.SIGTERM, self.handle_sig)
         self.on_stop = None
 
-    def run(self):
+    def run(self) -> None:
+        """
+        Sync function to run the worker, finally closes worker connections.
+        """
         self.main_task = self.loop.create_task(self.main())
         try:
             self.loop.run_until_complete(self.main_task)
@@ -184,9 +199,25 @@ class Worker:
         finally:
             self.loop.run_until_complete(self.close())
 
-    async def async_run(self):
+    async def async_run(self) -> None:
+        """
+        Asynchronously run the worker, does not close connections. Useful when testing.
+        """
         self.main_task = self.loop.create_task(self.main())
         await self.main_task
+
+    async def run_check(self) -> int:
+        """
+        Run :func:`arq.worker.Worker.async_run`, check for failed jobs and raise :class:`arq.worker.FailedJobs`
+        if any jobs have failed.
+
+        :return: number of completed jobs
+        """
+        await self.async_run()
+        if self.jobs_failed:
+            raise FailedJobs(self.jobs_failed, [r for r in await self.pool.all_job_results() if not r['success']])
+        else:
+            return self.jobs_complete
 
     async def main(self):
         if self.pool is None:
