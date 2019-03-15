@@ -106,7 +106,11 @@ class FailedJobs(RuntimeError):
         self.job_results = job_results
 
     def __str__(self):
-        return f'{self.count} job{"" if self.count == 1 else "s"} failed'
+        if self.count == 1 and self.job_results:
+            exc = self.job_results[0]['result']
+            return f'1 job failed "{exc.__class__.__name__}: {exc}"'
+        else:
+            return f'{self.count} jobs failed'
 
     def __repr__(self):
         return f'<{str(self)}>'
@@ -215,7 +219,8 @@ class Worker:
         """
         await self.async_run()
         if self.jobs_failed:
-            raise FailedJobs(self.jobs_failed, [r for r in await self.pool.all_job_results() if not r['success']])
+            failed_job_results = [r for r in await self.pool.all_job_results() if not r['success']]
+            raise FailedJobs(self.jobs_failed, failed_job_results)
         else:
             return self.jobs_complete
 
