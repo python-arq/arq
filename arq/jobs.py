@@ -47,10 +47,10 @@ class Job:
             info = await self.result_info()
             if info:
                 result = info['result']
-                if isinstance(result, Exception):
-                    raise result
-                else:
+                if info['success']:
                     return result
+                else:
+                    raise result
             if timeout is not None and delay > timeout:
                 raise asyncio.TimeoutError()
 
@@ -81,14 +81,15 @@ class Job:
         """
         v = await self._redis.get(result_key_prefix + self.job_id, encoding=None)
         if v:
-            enqueue_time_ms, job_try, function, args, kwargs, result, start_time_ms, finish_time_ms = pickle.loads(v)
+            enqueue_time_ms, job_try, function, args, kwargs, s, r, start_time_ms, finish_time_ms = pickle.loads(v)
             return dict(
                 enqueue_time=ms_to_datetime(enqueue_time_ms),
                 job_try=job_try,
                 function=function,
                 args=args,
                 kwargs=kwargs,
-                result=result,
+                result=r,
+                success=s,
                 start_time=ms_to_datetime(start_time_ms),
                 finish_time=ms_to_datetime(finish_time_ms),
             )

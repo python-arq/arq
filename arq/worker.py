@@ -100,6 +100,22 @@ class Retry(RuntimeError):
         return repr(self)
 
 
+class FailedJobs(RuntimeError):
+    def __init__(self, count, job_results):
+        self.count = count
+        self.job_results = job_results
+
+    def __str__(self):
+        if self.count == 1 and self.job_results:
+            exc = self.job_results[0]['result']
+            return f'1 job failed "{exc.__class__.__name__}: {exc}"'
+        else:
+            return f'{self.count} jobs failed'
+
+    def __repr__(self):
+        return f'<{str(self)}>'
+
+
 class Worker:
     """
     Main class for running jobs.
@@ -174,7 +190,10 @@ class Worker:
         self._add_signal_handler(signal.SIGTERM, self.handle_sig)
         self.on_stop = None
 
-    def run(self):
+    def run(self) -> None:
+        """
+        Sync function to run the worker, finally closes worker connections.
+        """
         self.main_task = self.loop.create_task(self.main())
         try:
             self.loop.run_until_complete(self.main_task)
@@ -184,9 +203,26 @@ class Worker:
         finally:
             self.loop.run_until_complete(self.close())
 
-    async def async_run(self):
+    async def async_run(self) -> None:
+        """
+        Asynchronously run the worker, does not close connections. Useful when testing.
+        """
         self.main_task = self.loop.create_task(self.main())
         await self.main_task
+
+    async def run_check(self) -> int:
+        """
+        Run :func:`arq.worker.Worker.async_run`, check for failed jobs and raise :class:`arq.worker.FailedJobs`
+        if any jobs have failed.
+
+        :return: number of completed jobs
+        """
+        await self.async_run()
+        if self.jobs_failed:
+            failed_job_results = [r for r in await self.pool.all_job_results() if not r['success']]
+            raise FailedJobs(self.jobs_failed, failed_job_results)
+        else:
+            return self.jobs_complete
 
     async def main(self):
         if self.pool is None:
@@ -293,6 +329,7 @@ class Worker:
         }
         ctx = {**self.ctx, **job_ctx}
         start_ms = timestamp_ms()
+        success = False
         try:
             s = args_to_string(args, kwargs)
             extra = f' try={job_try}' if job_try > 1 else ''
@@ -330,6 +367,7 @@ class Worker:
                 finish = True
                 self.jobs_failed += 1
         else:
+            success = True
             finished_ms = timestamp_ms()
             logger.info('%6.2fs ← %s ● %s', (finished_ms - start_ms) / 1000, ref, result_str)
             finish = True
@@ -338,7 +376,7 @@ class Worker:
         result_timeout_s = self.keep_result_s if function.keep_result_s is None else function.keep_result_s
         result_data = None
         if result is not no_result and result_timeout_s > 0:
-            d = enqueue_time_ms, job_try, function_name, args, kwargs, result, start_ms, finished_ms
+            d = enqueue_time_ms, job_try, function_name, args, kwargs, success, result, start_ms, finished_ms
             try:
                 result_data = pickle.dumps(d)
             except AttributeError:
