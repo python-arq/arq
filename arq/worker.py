@@ -324,6 +324,7 @@ class Worker:
         }
         ctx = {**self.ctx, **job_ctx}
         start_ms = timestamp_ms()
+        success = False
         try:
             s = args_to_string(args, kwargs)
             extra = f' try={job_try}' if job_try > 1 else ''
@@ -361,6 +362,7 @@ class Worker:
                 finish = True
                 self.jobs_failed += 1
         else:
+            success = True
             finished_ms = timestamp_ms()
             logger.info('%6.2fs ← %s ● %s', (finished_ms - start_ms) / 1000, ref, result_str)
             finish = True
@@ -369,7 +371,7 @@ class Worker:
         result_timeout_s = self.keep_result_s if function.keep_result_s is None else function.keep_result_s
         result_data = None
         if result is not no_result and result_timeout_s > 0:
-            d = enqueue_time_ms, job_try, function_name, args, kwargs, result, start_ms, finished_ms
+            d = enqueue_time_ms, job_try, function_name, args, kwargs, success, result, start_ms, finished_ms
             try:
                 result_data = pickle.dumps(d)
             except AttributeError:

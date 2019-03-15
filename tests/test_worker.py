@@ -9,7 +9,7 @@ from aioredis import create_redis_pool
 
 from arq.connections import ArqRedis
 from arq.constants import health_check_key, job_key_prefix
-from arq.worker import Retry, Worker, async_check_health, check_health, func, run_worker, FailedJobs
+from arq.worker import FailedJobs, Retry, Worker, async_check_health, check_health, func, run_worker
 
 
 async def foobar(ctx):
@@ -315,3 +315,26 @@ async def test_run_check_error2(arq_redis: ArqRedis, worker):
     with pytest.raises(FailedJobs, match='2 jobs failed') as exc_info:
         await worker.run_check()
     assert len(exc_info.value.job_results) == 2
+
+
+async def test_return_exception(arq_redis: ArqRedis, worker):
+    async def return_error(ctx):
+        return TypeError('xxx')
+
+    j = await arq_redis.enqueue_job('return_error')
+    worker: Worker = worker(functions=[func(return_error, name='return_error')])
+    await worker.async_run()
+    assert (worker.jobs_complete, worker.jobs_failed, worker.jobs_retried) == (1, 0, 0)
+    r = await j.result(pole_delay=0)
+    assert isinstance(r, TypeError)
+    info = await j.result_info()
+    assert info['success'] is True
+
+
+async def test_error_success(arq_redis: ArqRedis, worker):
+    j = await arq_redis.enqueue_job('fails')
+    worker: Worker = worker(functions=[func(fails, name='fails')])
+    await worker.async_run()
+    assert (worker.jobs_complete, worker.jobs_failed, worker.jobs_retried) == (0, 1, 0)
+    info = await j.result_info()
+    assert info['success'] is False
