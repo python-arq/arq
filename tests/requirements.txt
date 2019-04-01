@@ -1,4 +1,4 @@
-black==18.9b0
+black==19.3b0
 coverage==4.5.2
 docutils==0.14
 flake8==3.7.7
