@@ -78,8 +78,12 @@ class ArqRedis(Redis):
         expires_ms = to_ms(_expires)
 
         with await self as conn:
-            _, _, job_exists = await asyncio.gather(conn.unwatch(), conn.watch(job_key), conn.exists(job_key))
-            if job_exists:
+            pipe = conn.pipeline()
+            pipe.unwatch()
+            pipe.watch(job_key)
+            job_exists = pipe.exists(job_key)
+            await pipe.execute()
+            if await job_exists:
                 return
 
             enqueue_time_ms = timestamp_ms()
@@ -99,7 +103,7 @@ class ArqRedis(Redis):
             try:
                 await tr.execute()
             except MultiExecError:
-                # job got enqueued since we got 'job_exists'
+                # job got enqueued since we checked 'job_exists'
                 return
         return Job(job_id, self)
 

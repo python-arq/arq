@@ -8,7 +8,7 @@ install:
 	pip install -r requirements.txt
 	pip install -e .[watch]
 
-.PHONY: isort
+.PHONY: format
 format:
 	$(isort)
 	$(black)

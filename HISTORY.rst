@@ -6,6 +6,7 @@ History
 v0.16.0a4 (unreleased)
 ......................
 * add ``Worker.run_check``, fix #115
+* use ``pipeline`` in ``enqueue_job``
 
 v0.16.0a3 (2010-03-12)
 ......................
