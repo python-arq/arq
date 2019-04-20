@@ -30,6 +30,7 @@ setup(
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3 :: Only',
+        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Topic :: Internet',
         'Topic :: Software Development :: Libraries :: Python Modules',
@@ -38,7 +39,7 @@ setup(
         'Topic :: System :: Monitoring',
         'Topic :: System :: Systems Administration',
     ],
-    python_requires='>=3.7',
+    python_requires='>=3.6',
     author='Samuel Colvin',
     author_email='s@muelcolvin.com',
     url='https://github.com/samuelcolvin/arq',
@@ -54,6 +55,7 @@ setup(
         'aioredis>=1.1.0',
         'click>=6.7',
         'pydantic>=0.20',
+        'dataclasses>=0.6;python_version == "3.6"'
     ],
     extras_require={
         'watch': ['watchgod>=0.4'],
