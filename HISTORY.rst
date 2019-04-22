@@ -7,6 +7,7 @@ v0.16.0a5 (2019-04-22)
 ......................
 * use ``pipeline`` in ``enqueue_job``
 * catch any error when pickling job result
+* add support for python 3.6
 
 v0.16.0a4 (2019-03-15)
 ......................

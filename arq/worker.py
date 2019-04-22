@@ -277,7 +277,7 @@ class Worker:
                     # job already started elsewhere since we got 'existing'
                     self.sem.release()
                 else:
-                    self.tasks.append(asyncio.create_task(self.run_job(job_id, score)))
+                    self.tasks.append(self.loop.create_task(self.run_job(job_id, score)))
 
     async def run_job(self, job_id, score):  # noqa: C901
         v, job_try, _ = await asyncio.gather(
