@@ -379,7 +379,7 @@ class Worker:
             d = enqueue_time_ms, job_try, function_name, args, kwargs, success, result, start_ms, finished_ms
             try:
                 result_data = pickle.dumps(d)
-            except AttributeError:
+            except Exception:
                 logger.critical('error pickling result of %s', ref, exc_info=True)
 
         await asyncio.shield(self.finish_job(job_id, finish, result_data, result_timeout_s, incr_score))

@@ -3,16 +3,20 @@
 History
 -------
 
-v0.16.0a4 (unreleased)
+v0.16.0a5 (2019-04-22)
+......................
+* use ``pipeline`` in ``enqueue_job``
+* catch any error when pickling job result
+
+v0.16.0a4 (2019-03-15)
 ......................
 * add ``Worker.run_check``, fix #115
-* use ``pipeline`` in ``enqueue_job``
 
-v0.16.0a3 (2010-03-12)
+v0.16.0a3 (2019-03-12)
 ......................
 * fix ``Worker`` with custom redis settings
 
-v0.16.0a2 (2010-03-06)
+v0.16.0a2 (2019-03-06)
 ......................
 * add ``job_try`` argument to ``enqueue_job``, #113
 * adding ``--watch`` mode to the worker (requires ``watchgod``), #114
@@ -20,7 +24,7 @@ v0.16.0a2 (2010-03-06)
 * add ``all_job_results`` to ``ArqRedis``
 * fix python path when starting worker
 
-v0.16.0a1 (2010-03-05)
+v0.16.0a1 (2019-03-05)
 ......................
 * **Breaking Change:** **COMPLETE REWRITE!!!** see docs for details, #110
 
