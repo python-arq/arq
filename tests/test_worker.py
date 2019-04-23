@@ -5,8 +5,8 @@ import signal
 from unittest.mock import MagicMock
 
 import pytest
-
 from aioredis import create_redis_pool
+
 from arq.connections import ArqRedis
 from arq.constants import health_check_key, job_key_prefix
 from arq.worker import FailedJobs, Retry, Worker, async_check_health, check_health, func, run_worker

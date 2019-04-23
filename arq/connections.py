@@ -2,8 +2,8 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from operator import attrgetter, itemgetter
-from typing import Any, Dict, List, Optional, Union
+from operator import attrgetter
+from typing import Any, List, Optional, Union
 from uuid import uuid4
 
 import aioredis

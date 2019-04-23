@@ -4,7 +4,7 @@ import pickle
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from .constants import in_progress_key_prefix, job_key_prefix, queue_name, result_key_prefix
 from .utils import ms_to_datetime, poll, timestamp_ms
