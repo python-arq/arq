@@ -3,6 +3,10 @@
 History
 -------
 
+v0.16.0b1 (2019-04-23)
+......................
+* use dicts for pickling not tuples, better handling of pickling errors, #123
+
 v0.16.0a5 (2019-04-22)
 ......................
 * use ``pipeline`` in ``enqueue_job``

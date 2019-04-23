@@ -6,7 +6,7 @@ from pytest_toolbox.comparison import CloseToNow
 from arq import Worker, func
 from arq.connections import ArqRedis
 from arq.constants import in_progress_key_prefix
-from arq.jobs import Job, JobResult, JobStatus
+from arq.jobs import Job, JobResult, JobStatus, pickle_result
 
 
 async def test_job_in_progress(arq_redis: ArqRedis):
@@ -70,3 +70,14 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker):
             job_id=j.job_id,
         )
     ]
+
+
+async def test_cant_unpickel_at_all():
+    class Foobar:
+        def __getstate__(self):
+            raise TypeError("this doesn't pickle")
+
+    r1 = pickle_result('foobar', (1,), {}, 1, 123, True, Foobar(), 123, 123, 'testing')
+    assert isinstance(r1, bytes)
+    r2 = pickle_result('foobar', (Foobar(),), {}, 1, 123, True, Foobar(), 123, 123, 'testing')
+    assert r2 is None

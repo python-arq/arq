@@ -123,7 +123,16 @@ async def test_custom_try2(arq_redis: ArqRedis, worker):
     assert r == 4
 
 
-async def test_cant_pickle(arq_redis: ArqRedis, worker):
+async def test_cant_pickle_arg(arq_redis: ArqRedis, worker):
+    class Foobar:
+        def __getstate__(self):
+            raise TypeError("this doesn't pickle")
+
+    with pytest.raises(PickleError):
+        await arq_redis.enqueue_job('foobar', Foobar())
+
+
+async def test_cant_pickle_result(arq_redis: ArqRedis, worker):
     class Foobar:
         def __getstate__(self):
             raise TypeError("this doesn't pickle")
@@ -131,7 +140,7 @@ async def test_cant_pickle(arq_redis: ArqRedis, worker):
     async def foobar(ctx):
         return Foobar()
 
-    j1 = await arq_redis.enqueue_job('foobar', _job_try=3)
+    j1 = await arq_redis.enqueue_job('foobar')
     w: Worker = worker(functions=[func(foobar, name='foobar')])
     await w.main()
     with pytest.raises(PickleError):

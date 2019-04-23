@@ -142,7 +142,6 @@ def pickle_result(
     finished_ms: int,
     ref: str,
 ) -> Optional[bytes]:
-    # d = enqueue_time_ms, job_try, function_name, args, kwargs, success, result, start_ms, finished_ms
     data = {
         't': job_try,
         'f': function,
