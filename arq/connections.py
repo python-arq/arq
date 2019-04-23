@@ -2,7 +2,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from operator import itemgetter
+from operator import attrgetter, itemgetter
 from typing import Any, Dict, List, Optional, Union
 from uuid import uuid4
 
@@ -10,7 +10,7 @@ import aioredis
 from aioredis import MultiExecError, Redis
 
 from .constants import job_key_prefix, queue_name, result_key_prefix
-from .jobs import Job, pickle_job
+from .jobs import Job, JobResult, pickle_job
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('arq.connections')
@@ -110,16 +110,16 @@ class ArqRedis(Redis):
         job_id = key[len(result_key_prefix) :]
         job = Job(job_id, self)
         r = await job.result_info()
-        r['job_id'] = job_id
+        r.job_id = job_id
         return r
 
-    async def all_job_results(self) -> List[Dict]:
+    async def all_job_results(self) -> List[JobResult]:
         """
         Get results for all jobs in redis.
         """
         keys = await self.keys(result_key_prefix + '*')
         results = await asyncio.gather(*[self._get_job_result(k) for k in keys])
-        return sorted(results, key=itemgetter('enqueue_time'))
+        return sorted(results, key=attrgetter('enqueue_time'))
 
 
 async def create_pool(settings: RedisSettings = None, *, _retry: int = 0) -> ArqRedis:

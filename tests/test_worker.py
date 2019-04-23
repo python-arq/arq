@@ -5,8 +5,8 @@ import signal
 from unittest.mock import MagicMock
 
 import pytest
-from aioredis import create_redis_pool
 
+from aioredis import create_redis_pool
 from arq.connections import ArqRedis
 from arq.constants import health_check_key, job_key_prefix
 from arq.worker import FailedJobs, Retry, Worker, async_check_health, check_health, func, run_worker
@@ -328,7 +328,7 @@ async def test_return_exception(arq_redis: ArqRedis, worker):
     r = await j.result(pole_delay=0)
     assert isinstance(r, TypeError)
     info = await j.result_info()
-    assert info['success'] is True
+    assert info.success is True
 
 
 async def test_error_success(arq_redis: ArqRedis, worker):
@@ -337,4 +337,4 @@ async def test_error_success(arq_redis: ArqRedis, worker):
     await worker.async_run()
     assert (worker.jobs_complete, worker.jobs_failed, worker.jobs_retried) == (0, 1, 0)
     info = await j.result_info()
-    assert info['success'] is False
+    assert info.success is False

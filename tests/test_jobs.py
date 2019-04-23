@@ -6,7 +6,7 @@ from pytest_toolbox.comparison import CloseToNow
 from arq import Worker, func
 from arq.connections import ArqRedis
 from arq.constants import in_progress_key_prefix
-from arq.jobs import Job, JobStatus
+from arq.jobs import Job, JobResult, JobStatus
 
 
 async def test_job_in_progress(arq_redis: ArqRedis):
@@ -42,30 +42,31 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker):
     assert r == 42
     assert JobStatus.complete == await j.status()
     info = await j.info()
-    assert info == {
-        'enqueue_time': CloseToNow(),
-        'job_try': 1,
-        'function': 'foobar',
-        'args': (1, 2),
-        'kwargs': {'c': 3},
-        'success': True,
-        'result': 42,
-        'start_time': CloseToNow(),
-        'finish_time': CloseToNow(),
-        'score': None,
-    }
+    assert info == JobResult(
+        job_try=1,
+        function='foobar',
+        args=(1, 2),
+        kwargs={'c': 3},
+        enqueue_time=CloseToNow(),
+        success=True,
+        result=42,
+        start_time=CloseToNow(),
+        finish_time=CloseToNow(),
+        score=None,
+    )
     results = await arq_redis.all_job_results()
     assert results == [
-        {
-            'enqueue_time': CloseToNow(),
-            'job_try': 1,
-            'function': 'foobar',
-            'args': (1, 2),
-            'kwargs': {'c': 3},
-            'success': True,
-            'result': 42,
-            'start_time': CloseToNow(),
-            'finish_time': CloseToNow(),
-            'job_id': j.job_id,
-        }
+        JobResult(
+            function='foobar',
+            args=(1, 2),
+            kwargs={'c': 3},
+            job_try=1,
+            enqueue_time=CloseToNow(),
+            success=True,
+            result=42,
+            start_time=CloseToNow(),
+            finish_time=CloseToNow(),
+            score=None,
+            job_id=j.job_id,
+        )
     ]

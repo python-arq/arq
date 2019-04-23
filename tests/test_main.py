@@ -41,15 +41,12 @@ async def test_job_info(arq_redis: ArqRedis):
     t_before = time()
     j = await arq_redis.enqueue_job('foobar', 123, a=456)
     info = await j.info()
-    assert info == {
-        'enqueue_time': CloseToNow(),
-        'job_try': None,
-        'function': 'foobar',
-        'args': (123,),
-        'kwargs': {'a': 456},
-        'score': AnyInt(),
-    }
-    assert abs(t_before * 1000 - info['score']) < 1000
+    assert info.enqueue_time == CloseToNow()
+    assert info.job_try is None
+    assert info.function == 'foobar'
+    assert info.args == (123,)
+    assert info.kwargs == {'a': 456}
+    assert abs(t_before * 1000 - info.score) < 1000
 
 
 async def test_repeat_job(arq_redis: ArqRedis):
