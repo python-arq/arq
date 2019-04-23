@@ -25,13 +25,14 @@ async def main():
     debug(await job.info())
     """
     >   docs/examples/job_results.py:23 main
-    {
-        'enqueue_time': datetime.datetime(2019, 3, 3, 12, 32, 19, 975000),
-        'function': 'the_task',
-        'args': (),
-        'kwargs': {},
-        'score': 1551616339975,
-    } (dict) len=5
+    JobDef(
+        function='the_task',
+        args=(),
+        kwargs={},
+        job_try=None,
+        enqueue_time=datetime.datetime(2019, 4, 23, 13, 58, 56, 781000),
+        score=1556027936781
+    ) (JobDef)
     """
 
     # get the Job's status
