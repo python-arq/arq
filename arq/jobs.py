@@ -1,10 +1,15 @@
 import asyncio
+import logging
 import pickle
+from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from .constants import in_progress_key_prefix, job_key_prefix, queue_name, result_key_prefix
 from .utils import ms_to_datetime, poll, timestamp_ms
+
+logger = logging.getLogger('arq.jobs')
 
 
 class JobStatus(str, Enum):
@@ -22,6 +27,25 @@ class JobStatus(str, Enum):
     complete = 'complete'
     #: job not found in any way
     not_found = 'not_found'
+
+
+@dataclass
+class JobDef:
+    function: str
+    args: tuple
+    kwargs: dict
+    job_try: int
+    enqueue_time: datetime
+    score: Optional[int]
+
+
+@dataclass
+class JobResult(JobDef):
+    success: bool
+    result: Any
+    start_time: datetime
+    finish_time: datetime
+    job_id: Optional[str] = None
 
 
 class Job:
@@ -46,15 +70,15 @@ class Job:
         async for delay in poll(pole_delay):
             info = await self.result_info()
             if info:
-                result = info['result']
-                if info['success']:
+                result = info.result
+                if info.success:
                     return result
                 else:
                     raise result
             if timeout is not None and delay > timeout:
                 raise asyncio.TimeoutError()
 
-    async def info(self) -> Optional[Dict[str, Any]]:
+    async def info(self) -> Optional[JobDef]:
         """
         All information on a job, including its result if it's available, does not wait for the result.
         """
@@ -62,37 +86,19 @@ class Job:
         if not info:
             v = await self._redis.get(job_key_prefix + self.job_id, encoding=None)
             if v:
-                enqueue_time_ms, job_try, function, args, kwargs = pickle.loads(v)
-                info = dict(
-                    enqueue_time=ms_to_datetime(enqueue_time_ms),
-                    job_try=job_try,
-                    function=function,
-                    args=args,
-                    kwargs=kwargs,
-                )
+                info = unpickle_job(v)
         if info:
-            info['score'] = await self._redis.zscore(queue_name, self.job_id)
+            info.score = await self._redis.zscore(queue_name, self.job_id)
         return info
 
-    async def result_info(self) -> Optional[Dict[str, Any]]:
+    async def result_info(self) -> Optional[JobResult]:
         """
         Information about the job result if available, does not wait for the result. Does not raise an exception
         even if the job raised one.
         """
         v = await self._redis.get(result_key_prefix + self.job_id, encoding=None)
         if v:
-            enqueue_time_ms, job_try, function, args, kwargs, s, r, start_time_ms, finish_time_ms = pickle.loads(v)
-            return dict(
-                enqueue_time=ms_to_datetime(enqueue_time_ms),
-                job_try=job_try,
-                function=function,
-                args=args,
-                kwargs=kwargs,
-                result=r,
-                success=s,
-                start_time=ms_to_datetime(start_time_ms),
-                finish_time=ms_to_datetime(finish_time_ms),
-            )
+            return unpickle_result(v)
 
     async def status(self) -> JobStatus:
         """
@@ -110,3 +116,78 @@ class Job:
 
     def __repr__(self):
         return f'<arq job {self.job_id}>'
+
+
+class PickleError(RuntimeError):
+    pass
+
+
+def pickle_job(function_name: str, args: tuple, kwargs: dict, job_try: int, enqueue_time_ms: int):
+    data = {'t': job_try, 'f': function_name, 'a': args, 'k': kwargs, 'et': enqueue_time_ms}
+    try:
+        return pickle.dumps(data)
+    except Exception as e:
+        raise PickleError(f'unable to pickle job "{function_name}"') from e
+
+
+def pickle_result(
+    function: str,
+    args: tuple,
+    kwargs: dict,
+    job_try: int,
+    enqueue_time_ms: int,
+    success: bool,
+    result: Any,
+    start_ms: int,
+    finished_ms: int,
+    ref: str,
+) -> Optional[bytes]:
+    data = {
+        't': job_try,
+        'f': function,
+        'a': args,
+        'k': kwargs,
+        'et': enqueue_time_ms,
+        's': success,
+        'r': result,
+        'st': start_ms,
+        'ft': finished_ms,
+    }
+    try:
+        return pickle.dumps(data)
+    except Exception:
+        logger.warning('error pickling result of %s', ref, exc_info=True)
+
+    data.update(r=PickleError('unable to pickle result'), s=False)
+    try:
+        return pickle.dumps(data)
+    except Exception:
+        logger.critical('error pickling result of %s even after replacing result', ref, exc_info=True)
+
+
+def unpickle_job(r: bytes) -> JobDef:
+    d = pickle.loads(r)
+    return JobDef(
+        function=d['f'], args=d['a'], kwargs=d['k'], job_try=d['t'], enqueue_time=ms_to_datetime(d['et']), score=None
+    )
+
+
+def unpickle_job_raw(r: bytes) -> tuple:
+    d = pickle.loads(r)
+    return d['f'], d['a'], d['k'], d['t'], d['et']
+
+
+def unpickle_result(r: bytes) -> JobResult:
+    d = pickle.loads(r)
+    return JobResult(
+        job_try=d['t'],
+        function=d['f'],
+        args=d['a'],
+        kwargs=d['k'],
+        enqueue_time=ms_to_datetime(d['et']),
+        score=None,
+        success=d['s'],
+        result=d['r'],
+        start_time=ms_to_datetime(d['st']),
+        finish_time=ms_to_datetime(d['ft']),
+    )

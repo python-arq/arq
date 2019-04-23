@@ -5,11 +5,11 @@ from random import shuffle
 from time import time
 
 import pytest
-from pytest_toolbox.comparison import AnyInt, CloseToNow
+from pytest_toolbox.comparison import CloseToNow
 
 from arq.connections import ArqRedis
 from arq.constants import queue_name
-from arq.jobs import Job
+from arq.jobs import Job, PickleError
 from arq.utils import timestamp_ms
 from arq.worker import Retry, Worker, func
 
@@ -41,15 +41,12 @@ async def test_job_info(arq_redis: ArqRedis):
     t_before = time()
     j = await arq_redis.enqueue_job('foobar', 123, a=456)
     info = await j.info()
-    assert info == {
-        'enqueue_time': CloseToNow(),
-        'job_try': None,
-        'function': 'foobar',
-        'args': (123,),
-        'kwargs': {'a': 456},
-        'score': AnyInt(),
-    }
-    assert abs(t_before * 1000 - info['score']) < 1000
+    assert info.enqueue_time == CloseToNow()
+    assert info.job_try is None
+    assert info.function == 'foobar'
+    assert info.args == (123,)
+    assert info.kwargs == {'a': 456}
+    assert abs(t_before * 1000 - info.score) < 1000
 
 
 async def test_repeat_job(arq_redis: ArqRedis):
@@ -124,3 +121,27 @@ async def test_custom_try2(arq_redis: ArqRedis, worker):
     await w.main()
     r = await j1.result(pole_delay=0)
     assert r == 4
+
+
+async def test_cant_pickle_arg(arq_redis: ArqRedis, worker):
+    class Foobar:
+        def __getstate__(self):
+            raise TypeError("this doesn't pickle")
+
+    with pytest.raises(PickleError):
+        await arq_redis.enqueue_job('foobar', Foobar())
+
+
+async def test_cant_pickle_result(arq_redis: ArqRedis, worker):
+    class Foobar:
+        def __getstate__(self):
+            raise TypeError("this doesn't pickle")
+
+    async def foobar(ctx):
+        return Foobar()
+
+    j1 = await arq_redis.enqueue_job('foobar')
+    w: Worker = worker(functions=[func(foobar, name='foobar')])
+    await w.main()
+    with pytest.raises(PickleError):
+        await j1.result(pole_delay=0)

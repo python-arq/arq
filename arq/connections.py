@@ -1,17 +1,16 @@
 import asyncio
 import logging
-import pickle
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from operator import itemgetter
-from typing import Any, Dict, List, Optional, Union
+from operator import attrgetter
+from typing import Any, List, Optional, Union
 from uuid import uuid4
 
 import aioredis
 from aioredis import MultiExecError, Redis
 
 from .constants import job_key_prefix, queue_name, result_key_prefix
-from .jobs import Job
+from .jobs import Job, JobResult, pickle_job
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('arq.connections')
@@ -96,7 +95,7 @@ class ArqRedis(Redis):
 
             expires_ms = expires_ms or score - enqueue_time_ms + expires_extra_ms
 
-            job = pickle.dumps((enqueue_time_ms, _job_try, function, args, kwargs))
+            job = pickle_job(function, args, kwargs, _job_try, enqueue_time_ms)
             tr = conn.multi_exec()
             tr.psetex(job_key, expires_ms, job)
             tr.zadd(queue_name, score, job_id)
@@ -111,16 +110,16 @@ class ArqRedis(Redis):
         job_id = key[len(result_key_prefix) :]
         job = Job(job_id, self)
         r = await job.result_info()
-        r['job_id'] = job_id
+        r.job_id = job_id
         return r
 
-    async def all_job_results(self) -> List[Dict]:
+    async def all_job_results(self) -> List[JobResult]:
         """
         Get results for all jobs in redis.
         """
         keys = await self.keys(result_key_prefix + '*')
         results = await asyncio.gather(*[self._get_job_result(k) for k in keys])
-        return sorted(results, key=itemgetter('enqueue_time'))
+        return sorted(results, key=attrgetter('enqueue_time'))
 
 
 async def create_pool(settings: RedisSettings = None, *, _retry: int = 0) -> ArqRedis:
