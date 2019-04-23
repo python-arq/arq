@@ -16,3 +16,4 @@ __pycache__/
 /demo/tmp/
 .vscode/
 .venv/
+/.auto-format

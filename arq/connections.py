@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import pickle
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import itemgetter
@@ -11,7 +10,7 @@ import aioredis
 from aioredis import MultiExecError, Redis
 
 from .constants import job_key_prefix, queue_name, result_key_prefix
-from .jobs import Job
+from .jobs import Job, pickle_job
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('arq.connections')
@@ -96,7 +95,7 @@ class ArqRedis(Redis):
 
             expires_ms = expires_ms or score - enqueue_time_ms + expires_extra_ms
 
-            job = pickle.dumps((enqueue_time_ms, _job_try, function, args, kwargs))
+            job = pickle_job(function, args, kwargs, _job_try, enqueue_time_ms)
             tr = conn.multi_exec()
             tr.psetex(job_key, expires_ms, job)
             tr.zadd(queue_name, score, job_id)

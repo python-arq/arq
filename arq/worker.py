@@ -1,7 +1,6 @@
 import asyncio
 import inspect
 import logging
-import pickle
 import signal
 from dataclasses import dataclass
 from datetime import datetime
@@ -12,9 +11,9 @@ from typing import Awaitable, Callable, Dict, List, Optional, Sequence, Union
 
 import async_timeout
 from aioredis import MultiExecError
-from pydantic.utils import import_string
-
 from arq.cron import CronJob
+from arq.jobs import pickle_result, unpickle_job_raw
+from pydantic.utils import import_string
 
 from .connections import ArqRedis, RedisSettings, create_pool, log_redis_info
 from .constants import (
@@ -290,7 +289,7 @@ class Worker:
             self.jobs_failed += 1
             return await asyncio.shield(self.abort_job(job_id))
 
-        enqueue_time_ms, enqueue_job_try, function_name, args, kwargs = pickle.loads(v)
+        function_name, args, kwargs, enqueue_job_try, enqueue_time_ms = unpickle_job_raw(v)
 
         try:
             function: Union[Function, CronJob] = self.functions[function_name]
@@ -376,11 +375,9 @@ class Worker:
         result_timeout_s = self.keep_result_s if function.keep_result_s is None else function.keep_result_s
         result_data = None
         if result is not no_result and result_timeout_s > 0:
-            d = enqueue_time_ms, job_try, function_name, args, kwargs, success, result, start_ms, finished_ms
-            try:
-                result_data = pickle.dumps(d)
-            except Exception:
-                logger.critical('error pickling result of %s', ref, exc_info=True)
+            result_data = pickle_result(
+                function_name, args, kwargs, job_try, enqueue_time_ms, success, result, start_ms, finished_ms, ref
+            )
 
         await asyncio.shield(self.finish_job(job_id, finish, result_data, result_timeout_s, incr_score))
 
