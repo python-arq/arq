@@ -50,6 +50,7 @@ class ArqRedis(Redis):
         function: str,
         *args: Any,
         _job_id: Optional[str] = None,
+        _queue_name: str = queue_name,
         _defer_until: Optional[datetime] = None,
         _defer_by: Union[None, int, float, timedelta] = None,
         _expires: Union[None, int, float, timedelta] = None,
@@ -62,6 +63,7 @@ class ArqRedis(Redis):
         :param function: Name of the function to call
         :param args: args to pass to the function
         :param _job_id: ID of the job, can be used to enforce job uniqueness
+        :param _queue_name: queue of the job, can be used to create job in different queue
         :param _defer_until: datetime at which to run the job
         :param _defer_by: duration to wait before running the job
         :param _expires: if the job still hasn't started after this duration, do not run it
@@ -98,7 +100,7 @@ class ArqRedis(Redis):
             job = pickle_job(function, args, kwargs, _job_try, enqueue_time_ms)
             tr = conn.multi_exec()
             tr.psetex(job_key, expires_ms, job)
-            tr.zadd(queue_name, score, job_id)
+            tr.zadd(_queue_name, score, job_id)
             try:
                 await tr.execute()
             except MultiExecError:

@@ -25,6 +25,23 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker):
     assert r == 42  # 1
 
 
+async def test_enqueue_job_different_queues(arq_redis: ArqRedis, worker):
+    async def foobar(ctx):
+        return 42
+
+    j1 = await arq_redis.enqueue_job('foobar', _queue_name='arq:queue1')
+    j2 = await arq_redis.enqueue_job('foobar', _queue_name='arq:queue2')
+    worker1: Worker = worker(functions=[func(foobar, name='foobar')], queue='arq:queue1')
+    worker2: Worker = worker(functions=[func(foobar, name='foobar')], queue='arq:queue2')
+
+    await worker1.main()
+    await worker2.main()
+    r1 = await j1.result(pole_delay=0)
+    r2 = await j2.result(pole_delay=0)
+    assert r1 == 42  # 1
+    assert r2 == 42  # 2
+
+
 async def test_job_error(arq_redis: ArqRedis, worker):
     async def foobar(ctx):
         raise RuntimeError('foobar error')
