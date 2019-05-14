@@ -177,6 +177,8 @@ class Worker:
         self.health_check_interval = to_seconds(health_check_interval)
         if health_check_key is None:
             self.health_check_key = self.queue_name + health_check_key_suffix
+        else:
+            self.health_check_key = health_check_key
         self.pool = redis_pool
         if self.pool is None:
             self.redis_settings = redis_settings or RedisSettings()
