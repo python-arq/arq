@@ -3,6 +3,10 @@
 History
 -------
 
+v0.16.0b2 (2019-05-14)
+......................
+* add support for different queues, #127 thanks @tsutsarin
+
 v0.16.0b1 (2019-04-23)
 ......................
 * use dicts for pickling not tuples, better handling of pickling errors, #123
