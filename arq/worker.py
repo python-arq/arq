@@ -19,7 +19,7 @@ from arq.jobs import pickle_result, unpickle_job_raw
 from .connections import ArqRedis, RedisSettings, create_pool, log_redis_info
 from .constants import (
     default_queue_name,
-    health_check_key,
+    health_check_key_suffix,
     in_progress_key_prefix,
     job_key_prefix,
     result_key_prefix,
@@ -135,6 +135,7 @@ class Worker:
     :param poll_delay: duration between polling the queue for new jobs
     :param max_tries: default maximum number of times to retry a job
     :param health_check_interval: how often to set the health check key
+    :param health_check_key: redis key under which health check is set
     """
 
     def __init__(
@@ -154,6 +155,7 @@ class Worker:
         poll_delay: SecondsTimedelta = 0.5,
         max_tries: int = 5,
         health_check_interval: SecondsTimedelta = 3600,
+        health_check_key: Optional[str] = None,
         ctx: Optional[Dict] = None,
     ):
         self.functions: Dict[str, Union[Function, CronJob]] = {f.name: f for f in map(func, functions)}
@@ -173,6 +175,8 @@ class Worker:
         self.poll_delay_s = to_seconds(poll_delay)
         self.max_tries = max_tries
         self.health_check_interval = to_seconds(health_check_interval)
+        if health_check_key is None:
+            self.health_check_key = self.queue_name + health_check_key_suffix
         self.pool = redis_pool
         if self.pool is None:
             self.redis_settings = redis_settings or RedisSettings()
@@ -442,7 +446,7 @@ class Worker:
             f'{datetime.now():%b-%d %H:%M:%S} j_complete={self.jobs_complete} j_failed={self.jobs_failed} '
             f'j_retried={self.jobs_retried} j_ongoing={pending_tasks} queued={queued}'
         )
-        await self.pool.setex(health_check_key, self.health_check_interval + 1, info.encode())
+        await self.pool.setex(self.health_check_key, self.health_check_interval + 1, info.encode())
         log_suffix = info[info.index('j_complete=') :]
         if self._last_health_check_log and log_suffix != self._last_health_check_log:
             logger.info('recording health: %s', info)
@@ -473,7 +477,7 @@ class Worker:
         if not self.pool:
             return
         await asyncio.gather(*self.tasks)
-        await self.pool.delete(health_check_key)
+        await self.pool.delete(self.health_check_key)
         if self.on_shutdown:
             await self.on_shutdown(self.ctx)
         self.pool.close()
@@ -503,9 +507,14 @@ def run_worker(settings_cls, **kwargs) -> Worker:
     return worker
 
 
-async def async_check_health(redis_settings: Optional[RedisSettings]):
+async def async_check_health(
+    redis_settings: Optional[RedisSettings], health_check_key: Optional[str] = None, queue_name: Optional[str] = None
+):
     redis_settings = redis_settings or RedisSettings()
     redis: ArqRedis = await create_pool(redis_settings)
+    queue_name = queue_name or default_queue_name
+    health_check_key = health_check_key or (queue_name + health_check_key_suffix)
+
     data = await redis.get(health_check_key)
     if not data:
         logger.warning('Health check failed: no health check sentinel value found')
@@ -525,4 +534,8 @@ def check_health(settings_cls) -> int:
     """
     cls_kwargs = get_kwargs(settings_cls)
     loop = asyncio.get_event_loop()
-    return loop.run_until_complete(async_check_health(cls_kwargs.get('redis_settings')))
+    return loop.run_until_complete(
+        async_check_health(
+            cls_kwargs.get('redis_settings'), cls_kwargs.get('health_check_key'), cls_kwargs.get('queue_name')
+        )
+    )
