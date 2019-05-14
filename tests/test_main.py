@@ -31,8 +31,8 @@ async def test_enqueue_job_different_queues(arq_redis: ArqRedis, worker):
 
     j1 = await arq_redis.enqueue_job('foobar', _queue_name='arq:queue1')
     j2 = await arq_redis.enqueue_job('foobar', _queue_name='arq:queue2')
-    worker1: Worker = worker(functions=[func(foobar, name='foobar')], queue='arq:queue1')
-    worker2: Worker = worker(functions=[func(foobar, name='foobar')], queue='arq:queue2')
+    worker1: Worker = worker(functions=[func(foobar, name='foobar')], queue_name='arq:queue1')
+    worker2: Worker = worker(functions=[func(foobar, name='foobar')], queue_name='arq:queue2')
 
     await worker1.main()
     await worker2.main()

@@ -122,7 +122,7 @@ class Worker:
 
     :param functions: list of functions to register, can either be raw coroutine functions or the
       result of :func:`arq.worker.func`.
-    :param queue: queue name to get jobs from
+    :param queue_name: queue name to get jobs from
     :param cron_jobs:  list of cron jobs to run, use :func:`arq.cron.cron` to create them
     :param redis_settings: settings for creating a redis connection
     :param redis_pool: existing redis pool, generally None
@@ -141,7 +141,7 @@ class Worker:
         self,
         functions: Sequence[Function] = (),
         *,
-        queue: str = queue_name,
+        queue_name: str = queue_name,
         cron_jobs: Optional[Sequence[CronJob]] = None,
         redis_settings: RedisSettings = None,
         redis_pool: ArqRedis = None,
@@ -157,7 +157,7 @@ class Worker:
         ctx: Optional[Dict] = None,
     ):
         self.functions: Dict[str, Union[Function, CronJob]] = {f.name: f for f in map(func, functions)}
-        self.queue = queue
+        self.queue_name = queue_name
         self.cron_jobs: List[CronJob] = []
         if cron_jobs:
             assert all(isinstance(cj, CronJob) for cj in cron_jobs), 'cron_jobs, must be instances of CronJob'
@@ -240,7 +240,7 @@ class Worker:
         async for _ in poll(self.poll_delay_s):  # noqa F841
             async with self.sem:  # don't both with zrangebyscore until we have "space" to run the jobs
                 now = timestamp_ms()
-                job_ids = await self.pool.zrangebyscore(self.queue, max=now)
+                job_ids = await self.pool.zrangebyscore(self.queue_name, max=now)
             await self.run_jobs(job_ids)
 
             # required to make sure errors in run_job get propagated
@@ -252,7 +252,7 @@ class Worker:
             await self.heart_beat()
 
             if self.burst:
-                queued_jobs = await self.pool.zcard(self.queue)
+                queued_jobs = await self.pool.zcard(self.queue_name)
                 if queued_jobs == 0:
                     return
 
@@ -265,7 +265,7 @@ class Worker:
                     conn.unwatch(),
                     conn.watch(in_progress_key),
                     conn.exists(in_progress_key),
-                    conn.zscore(self.queue, job_id),
+                    conn.zscore(self.queue_name, job_id),
                 )
                 if ongoing_exists or not score:
                     # job already started elsewhere, or already finished and removed from queue
@@ -394,9 +394,9 @@ class Worker:
                 if result_data:
                     tr.setex(result_key_prefix + job_id, result_timeout_s, result_data)
                 delete_keys += [retry_key_prefix + job_id, job_key_prefix + job_id]
-                tr.zrem(self.queue, job_id)
+                tr.zrem(self.queue_name, job_id)
             elif incr_score:
-                tr.zincrby(self.queue, incr_score, job_id)
+                tr.zincrby(self.queue_name, incr_score, job_id)
             tr.delete(*delete_keys)
             await tr.execute()
         self.sem.release()
@@ -406,7 +406,7 @@ class Worker:
             await conn.unwatch()
             tr = conn.multi_exec()
             tr.delete(retry_key_prefix + job_id, in_progress_key_prefix + job_id, job_key_prefix + job_id)
-            tr.zrem(self.queue, job_id)
+            tr.zrem(self.queue_name, job_id)
             await tr.execute()
 
     async def heart_beat(self):
@@ -437,7 +437,7 @@ class Worker:
             return
         self._last_health_check = now_ts
         pending_tasks = sum(not t.done() for t in self.tasks)
-        queued = await self.pool.zcard(self.queue)
+        queued = await self.pool.zcard(self.queue_name)
         info = (
             f'{datetime.now():%b-%d %H:%M:%S} j_complete={self.jobs_complete} j_failed={self.jobs_failed} '
             f'j_retried={self.jobs_retried} j_ongoing={pending_tasks} queued={queued}'
