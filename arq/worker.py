@@ -244,7 +244,7 @@ class Worker:
             await self.on_startup(self.ctx)
 
         async for _ in poll(self.poll_delay_s):  # noqa F841
-            async with self.sem:  # don't both with zrangebyscore until we have "space" to run the jobs
+            async with self.sem:  # don't bother with zrangebyscore until we have "space" to run the jobs
                 now = timestamp_ms()
                 job_ids = await self.pool.zrangebyscore(self.queue_name, max=now)
             await self.run_jobs(job_ids)
