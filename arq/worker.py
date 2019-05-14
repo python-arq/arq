@@ -244,7 +244,7 @@ class Worker:
             await self.on_startup(self.ctx)
 
         async for _ in poll(self.poll_delay_s):  # noqa F841
-            async with self.sem:  # don't both with zrangebyscore until we have "space" to run the jobs
+            async with self.sem:  # don't bother with zrangebyscore until we have "space" to run the jobs
                 now = timestamp_ms()
                 job_ids = await self.pool.zrangebyscore(self.queue_name, max=now)
             await self.run_jobs(job_ids)
@@ -286,7 +286,9 @@ class Worker:
                     # job already started elsewhere since we got 'existing'
                     self.sem.release()
                 else:
-                    self.tasks.append(self.loop.create_task(self.run_job(job_id, score)))
+                    t = self.loop.create_task(self.run_job(job_id, score))
+                    t.add_done_callback(lambda _: self.sem.release())
+                    self.tasks.append(t)
 
     async def run_job(self, job_id, score):  # noqa: C901
         v, job_try, _ = await asyncio.gather(
@@ -405,7 +407,6 @@ class Worker:
                 tr.zincrby(self.queue_name, incr_score, job_id)
             tr.delete(*delete_keys)
             await tr.execute()
-        self.sem.release()
 
     async def abort_job(self, job_id):
         with await self.pool as conn:

@@ -345,3 +345,21 @@ async def test_error_success(arq_redis: ArqRedis, worker):
     assert (worker.jobs_complete, worker.jobs_failed, worker.jobs_retried) == (0, 1, 0)
     info = await j.result_info()
     assert info.success is False
+
+
+async def test_many_jobs_expire(arq_redis: ArqRedis, worker, caplog):
+    caplog.set_level(logging.INFO)
+    await arq_redis.enqueue_job('foobar')
+    await asyncio.gather(*[arq_redis.zadd(default_queue_name, 1, f'testing-{i}') for i in range(100)])
+    worker: Worker = worker(functions=[foobar])
+    assert worker.jobs_complete == 0
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+    await worker.main()
+    assert worker.jobs_complete == 1
+    assert worker.jobs_failed == 100
+    assert worker.jobs_retried == 0
+
+    log = '\n'.join(r.message for r in caplog.records)
+    assert 'job testing-0 expired' in log
+    assert log.count(' expired') == 100
