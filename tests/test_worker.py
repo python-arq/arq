@@ -48,6 +48,13 @@ async def test_health_check_pass(arq_redis):
     assert 0 == await async_check_health(None)
 
 
+async def test_set_health_check_key(arq_redis: ArqRedis, worker):
+    await arq_redis.enqueue_job('foobar', _job_id='testing')
+    worker: Worker = worker(functions=[func(foobar, keep_result=0)], health_check_key='arq:test:health-check')
+    await worker.main()
+    assert sorted(await arq_redis.keys('*')) == ['arq:test:health-check']
+
+
 async def test_handle_sig(caplog):
     caplog.set_level(logging.INFO)
     worker = Worker([foobar])
