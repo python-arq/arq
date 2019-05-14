@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := all
 isort = isort -rc arq tests
-black = black -S -l 120 --py36 arq tests
+black = black -S -l 120 --target-version py37 arq tests
 
 .PHONY: install
 install:

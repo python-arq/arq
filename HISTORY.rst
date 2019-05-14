@@ -3,6 +3,10 @@
 History
 -------
 
+v0.16.0b3 (unreleased)
+......................
+* fix semaphore on worker with many expired jobs
+
 v0.16.0b2 (2019-05-14)
 ......................
 * add support for different queues, #127 thanks @tsutsarin
