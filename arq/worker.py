@@ -18,10 +18,10 @@ from arq.jobs import pickle_result, unpickle_job_raw
 
 from .connections import ArqRedis, RedisSettings, create_pool, log_redis_info
 from .constants import (
+    default_queue_name,
     health_check_key,
     in_progress_key_prefix,
     job_key_prefix,
-    queue_name,
     result_key_prefix,
     retry_key_prefix,
 )
@@ -141,7 +141,7 @@ class Worker:
         self,
         functions: Sequence[Function] = (),
         *,
-        queue_name: str = queue_name,
+        queue_name: str = default_queue_name,
         cron_jobs: Optional[Sequence[CronJob]] = None,
         redis_settings: RedisSettings = None,
         redis_pool: ArqRedis = None,

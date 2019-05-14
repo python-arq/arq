@@ -9,7 +9,7 @@ from uuid import uuid4
 import aioredis
 from aioredis import MultiExecError, Redis
 
-from .constants import job_key_prefix, queue_name, result_key_prefix
+from .constants import default_queue_name, job_key_prefix, result_key_prefix
 from .jobs import Job, JobResult, pickle_job
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
@@ -50,7 +50,7 @@ class ArqRedis(Redis):
         function: str,
         *args: Any,
         _job_id: Optional[str] = None,
-        _queue_name: str = queue_name,
+        _queue_name: str = default_queue_name,
         _defer_until: Optional[datetime] = None,
         _defer_by: Union[None, int, float, timedelta] = None,
         _expires: Union[None, int, float, timedelta] = None,

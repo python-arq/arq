@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
 
-from .constants import in_progress_key_prefix, job_key_prefix, queue_name, result_key_prefix
+from .constants import default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
 from .utils import ms_to_datetime, poll, timestamp_ms
 
 logger = logging.getLogger('arq.jobs')
@@ -55,7 +55,7 @@ class Job:
 
     __slots__ = 'job_id', '_redis', '_queue_name'
 
-    def __init__(self, job_id: str, redis, _queue_name: str = queue_name):
+    def __init__(self, job_id: str, redis, _queue_name: str = default_queue_name):
         self.job_id = job_id
         self._redis = redis
         self._queue_name = _queue_name
