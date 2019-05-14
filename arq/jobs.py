@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
 
-from .constants import in_progress_key_prefix, job_key_prefix, queue_name, result_key_prefix
+from .constants import default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
 from .utils import ms_to_datetime, poll, timestamp_ms
 
 logger = logging.getLogger('arq.jobs')
@@ -53,11 +53,12 @@ class Job:
     Holds data a reference to a job.
     """
 
-    __slots__ = 'job_id', '_redis'
+    __slots__ = 'job_id', '_redis', '_queue_name'
 
-    def __init__(self, job_id: str, redis):
+    def __init__(self, job_id: str, redis, _queue_name: str = default_queue_name):
         self.job_id = job_id
         self._redis = redis
+        self._queue_name = _queue_name
 
     async def result(self, timeout: Optional[float] = None, *, pole_delay: float = 0.5) -> Any:
         """
@@ -88,7 +89,7 @@ class Job:
             if v:
                 info = unpickle_job(v)
         if info:
-            info.score = await self._redis.zscore(queue_name, self.job_id)
+            info.score = await self._redis.zscore(self._queue_name, self.job_id)
         return info
 
     async def result_info(self) -> Optional[JobResult]:
@@ -109,7 +110,7 @@ class Job:
         elif await self._redis.exists(in_progress_key_prefix + self.job_id):
             return JobStatus.in_progress
         else:
-            score = await self._redis.zscore(queue_name, self.job_id)
+            score = await self._redis.zscore(self._queue_name, self.job_id)
             if not score:
                 return JobStatus.not_found
             return JobStatus.deferred if score > timestamp_ms() else JobStatus.queued

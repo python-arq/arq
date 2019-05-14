@@ -8,7 +8,7 @@ import pytest
 from pytest_toolbox.comparison import CloseToNow
 
 from arq.connections import ArqRedis
-from arq.constants import queue_name
+from arq.constants import default_queue_name
 from arq.jobs import Job, PickleError
 from arq.utils import timestamp_ms
 from arq.worker import Retry, Worker, func
@@ -23,6 +23,23 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker):
     await worker.main()
     r = await j.result(pole_delay=0)
     assert r == 42  # 1
+
+
+async def test_enqueue_job_different_queues(arq_redis: ArqRedis, worker):
+    async def foobar(ctx):
+        return 42
+
+    j1 = await arq_redis.enqueue_job('foobar', _queue_name='arq:queue1')
+    j2 = await arq_redis.enqueue_job('foobar', _queue_name='arq:queue2')
+    worker1: Worker = worker(functions=[func(foobar, name='foobar')], queue_name='arq:queue1')
+    worker2: Worker = worker(functions=[func(foobar, name='foobar')], queue_name='arq:queue2')
+
+    await worker1.main()
+    await worker2.main()
+    r1 = await j1.result(pole_delay=0)
+    r2 = await j2.result(pole_delay=0)
+    assert r1 == 42  # 1
+    assert r2 == 42  # 2
 
 
 async def test_job_error(arq_redis: ArqRedis, worker):
@@ -59,14 +76,14 @@ async def test_repeat_job(arq_redis: ArqRedis):
 async def test_defer_until(arq_redis: ArqRedis):
     j1 = await arq_redis.enqueue_job('foobar', _job_id='job_id', _defer_until=datetime(2032, 1, 1))
     assert isinstance(j1, Job)
-    score = await arq_redis.zscore(queue_name, 'job_id')
+    score = await arq_redis.zscore(default_queue_name, 'job_id')
     assert score == 1_956_528_000_000
 
 
 async def test_defer_by(arq_redis: ArqRedis):
     j1 = await arq_redis.enqueue_job('foobar', _job_id='job_id', _defer_by=20)
     assert isinstance(j1, Job)
-    score = await arq_redis.zscore(queue_name, 'job_id')
+    score = await arq_redis.zscore(default_queue_name, 'job_id')
     ts = timestamp_ms()
     assert score > ts + 19000
     assert ts + 21000 > score

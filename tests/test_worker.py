@@ -8,7 +8,7 @@ import pytest
 from aioredis import create_redis_pool
 
 from arq.connections import ArqRedis
-from arq.constants import health_check_key, job_key_prefix
+from arq.constants import default_queue_name, health_check_key_suffix, job_key_prefix
 from arq.worker import FailedJobs, Retry, Worker, async_check_health, check_health, func, run_worker
 
 
@@ -44,8 +44,15 @@ async def test_health_check_fails():
 
 
 async def test_health_check_pass(arq_redis):
-    await arq_redis.set(health_check_key, b'1')
+    await arq_redis.set(default_queue_name + health_check_key_suffix, b'1')
     assert 0 == await async_check_health(None)
+
+
+async def test_set_health_check_key(arq_redis: ArqRedis, worker):
+    await arq_redis.enqueue_job('foobar', _job_id='testing')
+    worker: Worker = worker(functions=[func(foobar, keep_result=0)], health_check_key='arq:test:health-check')
+    await worker.main()
+    assert sorted(await arq_redis.keys('*')) == ['arq:test:health-check']
 
 
 async def test_handle_sig(caplog):
@@ -278,7 +285,7 @@ async def test_remain_keys(arq_redis: ArqRedis, worker):
         assert sorted(await redis2.keys('*')) == ['arq:job:testing', 'arq:queue']
         worker: Worker = worker(functions=[foobar])
         await worker.main()
-        assert sorted(await redis2.keys('*')) == ['arq:health-check', 'arq:result:testing']
+        assert sorted(await redis2.keys('*')) == ['arq:queue:health-check', 'arq:result:testing']
         await worker.close()
         assert sorted(await redis2.keys('*')) == ['arq:result:testing']
     finally:
@@ -291,7 +298,7 @@ async def test_remain_keys_no_results(arq_redis: ArqRedis, worker):
     assert sorted(await arq_redis.keys('*')) == ['arq:job:testing', 'arq:queue']
     worker: Worker = worker(functions=[func(foobar, keep_result=0)])
     await worker.main()
-    assert sorted(await arq_redis.keys('*')) == ['arq:health-check']
+    assert sorted(await arq_redis.keys('*')) == ['arq:queue:health-check']
 
 
 async def test_run_check_passes(arq_redis: ArqRedis, worker):
