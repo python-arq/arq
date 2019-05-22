@@ -35,7 +35,7 @@ steps:
 - script: make lint
   displayName: lint
 
-- script: make test
+- script: REDIS_HOST=redis make test
   displayName: test
 
 - script: make docs
