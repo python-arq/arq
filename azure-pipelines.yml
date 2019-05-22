@@ -9,7 +9,6 @@ resources:
     image: redis
 
 services:
-  nginx: nginx
   redis: redis
 
 pool:
