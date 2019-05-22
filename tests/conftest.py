@@ -1,5 +1,3 @@
-import os
-
 import pytest
 from aioredis import create_redis_pool
 
@@ -9,8 +7,7 @@ from arq.worker import Worker
 
 @pytest.yield_fixture
 async def arq_redis(loop):
-    redis_host = os.getenv('REDIS_HOST', 'localhost')
-    redis_ = await create_redis_pool((redis_host, 6379), encoding='utf8', loop=loop, commands_factory=ArqRedis)
+    redis_ = await create_redis_pool(('localhost', 6379), encoding='utf8', loop=loop, commands_factory=ArqRedis)
     await redis_.flushall()
     yield redis_
     redis_.close()

@@ -7,6 +7,8 @@ resources:
   containers:
   - container: redis
     image: redis
+    ports:
+    - 6379:6379
 
 services:
   redis: redis
@@ -35,7 +37,9 @@ steps:
 - script: make lint
   displayName: lint
 
-- script: REDIS_HOST=redis make test
+- script: printenv
+
+- script: make test
   displayName: test
 
 - script: make docs
