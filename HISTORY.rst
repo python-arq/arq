@@ -3,8 +3,8 @@
 History
 -------
 
-v0.16 (unreleased)
-......................
+v0.16 (2019-07-30)
+..................
 * improved error when a job is aborted (eg. function not found)
 
 v0.16.0b3 (2019-05-14)
