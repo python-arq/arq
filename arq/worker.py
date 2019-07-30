@@ -100,6 +100,13 @@ class Retry(RuntimeError):
         return repr(self)
 
 
+class JobExecutionFailed(RuntimeError):
+    def __eq__(self, other):
+        if isinstance(other, JobExecutionFailed):
+            return self.args == other.args
+        return False
+
+
 class FailedJobs(RuntimeError):
     def __init__(self, count, job_results):
         self.count = count
@@ -108,9 +115,9 @@ class FailedJobs(RuntimeError):
     def __str__(self):
         if self.count == 1 and self.job_results:
             exc = self.job_results[0].result
-            return f'1 job failed "{exc.__class__.__name__}: {exc}"'
+            return f'1 job failed {exc!r}'
         else:
-            return f'{self.count} jobs failed'
+            return f'{self.count} jobs failed:\n' + '\n'.join(repr(r.result) for r in self.job_results)
 
     def __repr__(self):
         return f'<{str(self)}>'
@@ -291,6 +298,7 @@ class Worker:
                     self.tasks.append(t)
 
     async def run_job(self, job_id, score):  # noqa: C901
+        start_ms = timestamp_ms()
         v, job_try, _ = await asyncio.gather(
             self.pool.get(job_key_prefix + job_id, encoding=None),
             self.pool.incr(retry_key_prefix + job_id),
@@ -299,7 +307,19 @@ class Worker:
         if not v:
             logger.warning('job %s expired', job_id)
             self.jobs_failed += 1
-            return await asyncio.shield(self.abort_job(job_id))
+            result_data = pickle_result(
+                '<unknown>',
+                (),
+                {},
+                job_try,
+                0,
+                False,
+                JobExecutionFailed('job expired'),
+                start_ms,
+                timestamp_ms(),
+                f'{job_id}:<unknown function>',
+            )
+            return await asyncio.shield(self.abort_job(job_id, result_data))
 
         function_name, args, kwargs, enqueue_job_try, enqueue_time_ms = unpickle_job_raw(v)
 
@@ -308,7 +328,19 @@ class Worker:
         except KeyError:
             logger.warning('job %s, function %r not found', job_id, function_name)
             self.jobs_failed += 1
-            return await asyncio.shield(self.abort_job(job_id))
+            result_data = pickle_result(
+                function_name,
+                args,
+                kwargs,
+                job_try,
+                enqueue_time_ms,
+                False,
+                JobExecutionFailed(f'function {function_name!r} not found'),
+                start_ms,
+                timestamp_ms(),
+                f'{job_id}:{function_name}',
+            )
+            return await asyncio.shield(self.abort_job(job_id, result_data))
 
         if hasattr(function, 'next_run'):
             # cron_job
@@ -325,7 +357,19 @@ class Worker:
             t = (timestamp_ms() - enqueue_time_ms) / 1000
             logger.warning('%6.2fs ! %s max retries %d exceeded', t, ref, max_tries)
             self.jobs_failed += 1
-            return await asyncio.shield(self.abort_job(job_id))
+            result_data = pickle_result(
+                function_name,
+                args,
+                kwargs,
+                job_try,
+                enqueue_time_ms,
+                False,
+                JobExecutionFailed(f'max {max_tries} retries exceeded'),
+                start_ms,
+                timestamp_ms(),
+                ref,
+            )
+            return await asyncio.shield(self.abort_job(job_id, result_data))
 
         result = no_result
         exc_extra = None
@@ -393,7 +437,9 @@ class Worker:
 
         await asyncio.shield(self.finish_job(job_id, finish, result_data, result_timeout_s, incr_score))
 
-    async def finish_job(self, job_id, finish, result_data, result_timeout_s, incr_score):
+    async def finish_job(
+        self, job_id: str, finish: bool, result_data: bytes, result_timeout_s: Optional[int], incr_score: int
+    ):
         with await self.pool as conn:
             await conn.unwatch()
             tr = conn.multi_exec()
@@ -408,12 +454,13 @@ class Worker:
             tr.delete(*delete_keys)
             await tr.execute()
 
-    async def abort_job(self, job_id):
+    async def abort_job(self, job_id: str, result_data: bytes):
         with await self.pool as conn:
             await conn.unwatch()
             tr = conn.multi_exec()
             tr.delete(retry_key_prefix + job_id, in_progress_key_prefix + job_id, job_key_prefix + job_id)
             tr.zrem(self.queue_name, job_id)
+            tr.setex(result_key_prefix + job_id, self.keep_result_s, result_data)
             await tr.execute()
 
     async def heart_beat(self):

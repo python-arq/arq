@@ -9,7 +9,7 @@ from aioredis import create_redis_pool
 
 from arq.connections import ArqRedis
 from arq.constants import default_queue_name, health_check_key_suffix, job_key_prefix
-from arq.worker import FailedJobs, Retry, Worker, async_check_health, check_health, func, run_worker
+from arq.worker import FailedJobs, JobExecutionFailed, Retry, Worker, async_check_health, check_health, func, run_worker
 
 
 async def foobar(ctx):
@@ -122,6 +122,18 @@ async def test_job_job_not_found(arq_redis: ArqRedis, worker, caplog):
     assert "job testing, function 'missing' not found" in log
 
 
+async def test_job_job_not_found_run_check(arq_redis: ArqRedis, worker, caplog):
+    caplog.set_level(logging.INFO)
+    await arq_redis.enqueue_job('missing', _job_id='testing')
+    worker: Worker = worker(functions=[foobar])
+    with pytest.raises(FailedJobs) as exc_info:
+        await worker.run_check()
+
+    assert exc_info.value.count == 1
+    assert len(exc_info.value.job_results) == 1
+    assert exc_info.value.job_results[0].result == JobExecutionFailed("function 'missing' not found")
+
+
 async def test_retry_lots(arq_redis: ArqRedis, worker, caplog):
     async def retry(ctx):
         raise Retry()
@@ -136,6 +148,17 @@ async def test_retry_lots(arq_redis: ArqRedis, worker, caplog):
 
     log = re.sub(r'\d+.\d\ds', 'X.XXs', '\n'.join(r.message for r in caplog.records))
     assert '  X.XXs ! testing:retry max retries 5 exceeded' in log
+
+
+async def test_retry_lots_check(arq_redis: ArqRedis, worker, caplog):
+    async def retry(ctx):
+        raise Retry()
+
+    caplog.set_level(logging.INFO)
+    await arq_redis.enqueue_job('retry', _job_id='testing')
+    worker: Worker = worker(functions=[func(retry, name='retry')])
+    with pytest.raises(FailedJobs, match='max 5 retries exceeded'):
+        await worker.run_check()
 
 
 async def test_cancel_error(arq_redis: ArqRedis, worker, caplog):
@@ -170,6 +193,20 @@ async def test_job_expired(arq_redis: ArqRedis, worker, caplog):
 
     log = re.sub(r'\d+.\d\ds', 'X.XXs', '\n'.join(r.message for r in caplog.records))
     assert 'job testing expired' in log
+
+
+async def test_job_expired_run_check(arq_redis: ArqRedis, worker, caplog):
+    caplog.set_level(logging.INFO)
+    await arq_redis.enqueue_job('foobar', _job_id='testing')
+    await arq_redis.delete(job_key_prefix + 'testing')
+    worker: Worker = worker(functions=[foobar])
+    with pytest.raises(FailedJobs) as exc_info:
+        await worker.run_check()
+
+    assert str(exc_info.value) == "1 job failed JobExecutionFailed('job expired')"
+    assert exc_info.value.count == 1
+    assert len(exc_info.value.job_results) == 1
+    assert exc_info.value.job_results[0].result == JobExecutionFailed('job expired')
 
 
 async def test_job_old(arq_redis: ArqRedis, worker, caplog):
@@ -311,7 +348,7 @@ async def test_run_check_passes(arq_redis: ArqRedis, worker):
 async def test_run_check_error(arq_redis: ArqRedis, worker):
     await arq_redis.enqueue_job('fails')
     worker: Worker = worker(functions=[func(fails, name='fails')])
-    with pytest.raises(FailedJobs, match='1 job failed "TypeError: my type error"'):
+    with pytest.raises(FailedJobs, match=r"1 job failed TypeError\('my type error'\)"):
         await worker.run_check()
 
 
@@ -319,7 +356,7 @@ async def test_run_check_error2(arq_redis: ArqRedis, worker):
     await arq_redis.enqueue_job('fails')
     await arq_redis.enqueue_job('fails')
     worker: Worker = worker(functions=[func(fails, name='fails')])
-    with pytest.raises(FailedJobs, match='2 jobs failed') as exc_info:
+    with pytest.raises(FailedJobs, match='2 jobs failed:\n') as exc_info:
         await worker.run_check()
     assert len(exc_info.value.job_results) == 2
 

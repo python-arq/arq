@@ -3,6 +3,10 @@
 History
 -------
 
+v0.16 (unreleased)
+......................
+* improved error when a job is aborted (eg. function not found)
+
 v0.16.0b3 (2019-05-14)
 ......................
 * fix semaphore on worker with many expired jobs
