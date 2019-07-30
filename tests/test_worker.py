@@ -203,7 +203,10 @@ async def test_job_expired_run_check(arq_redis: ArqRedis, worker, caplog):
     with pytest.raises(FailedJobs) as exc_info:
         await worker.run_check()
 
-    assert str(exc_info.value) == "1 job failed JobExecutionFailed('job expired')"
+    assert str(exc_info.value) in {
+        "1 job failed JobExecutionFailed('job expired',)",  # python 3.6
+        "1 job failed JobExecutionFailed('job expired')",  # python 3.7
+    }
     assert exc_info.value.count == 1
     assert len(exc_info.value.job_results) == 1
     assert exc_info.value.job_results[0].result == JobExecutionFailed('job expired')
@@ -348,7 +351,7 @@ async def test_run_check_passes(arq_redis: ArqRedis, worker):
 async def test_run_check_error(arq_redis: ArqRedis, worker):
     await arq_redis.enqueue_job('fails')
     worker: Worker = worker(functions=[func(fails, name='fails')])
-    with pytest.raises(FailedJobs, match=r"1 job failed TypeError\('my type error'\)"):
+    with pytest.raises(FailedJobs, match=r"1 job failed TypeError\('my type error'"):
         await worker.run_check()
 
 
