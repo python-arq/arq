@@ -83,8 +83,9 @@ class ArqRedis(Redis):
             pipe.unwatch()
             pipe.watch(job_key)
             job_exists = pipe.exists(job_key)
+            job_result_exists = pipe.exists(result_key_prefix + job_id)
             await pipe.execute()
-            if await job_exists:
+            if await job_exists or await job_result_exists:
                 return
 
             enqueue_time_ms = timestamp_ms()

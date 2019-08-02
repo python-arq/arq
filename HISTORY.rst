@@ -3,6 +3,10 @@
 History
 -------
 
+v0.16.1 (unreleased)
+....................
+* prevent duplicate ``job_id`` when job result exists, fix #137
+
 v0.16 (2019-07-30)
 ..................
 * improved error when a job is aborted (eg. function not found)

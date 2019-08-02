@@ -9,6 +9,7 @@ from aioredis import create_redis_pool
 
 from arq.connections import ArqRedis
 from arq.constants import default_queue_name, health_check_key_suffix, job_key_prefix
+from arq.jobs import Job, JobStatus
 from arq.worker import FailedJobs, JobExecutionFailed, Retry, Worker, async_check_health, check_health, func, run_worker
 
 
@@ -403,3 +404,16 @@ async def test_many_jobs_expire(arq_redis: ArqRedis, worker, caplog):
     log = '\n'.join(r.message for r in caplog.records)
     assert 'job testing-0 expired' in log
     assert log.count(' expired') == 100
+
+
+async def test_repeat_job_result(arq_redis: ArqRedis, worker):
+    j1 = await arq_redis.enqueue_job('foobar', _job_id='job_id')
+    assert isinstance(j1, Job)
+    assert await j1.status() == JobStatus.queued
+
+    assert await arq_redis.enqueue_job('foobar', _job_id='job_id') is None
+
+    await worker(functions=[foobar]).run_check()
+    assert await j1.status() == JobStatus.complete
+
+    assert await arq_redis.enqueue_job('foobar', _job_id='job_id') is None
