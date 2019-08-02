@@ -163,6 +163,7 @@ class Worker:
         health_check_key: Optional[str] = None,
         ctx: Optional[Dict] = None,
         retry_jobs: bool = True,
+        max_burst_jobs: int = -1,
     ):
         self.functions: Dict[str, Union[Function, CronJob]] = {f.name: f for f in map(func, functions)}
         self.queue_name = queue_name
@@ -205,7 +206,8 @@ class Worker:
         self._add_signal_handler(signal.SIGTERM, self.handle_sig)
         self.on_stop = None
         # whether or not to retry jobs on Retry and CancelledError
-        self.retry_jobs: bool = retry_jobs
+        self.retry_jobs = retry_jobs
+        self.max_burst_jobs = max_burst_jobs
 
     def run(self) -> None:
         """
@@ -227,13 +229,17 @@ class Worker:
         self.main_task = self.loop.create_task(self.main())
         await self.main_task
 
-    async def run_check(self) -> int:
+    async def run_check(self, retry_jobs: Optional[bool] = None, max_burst_jobs: Optional[int] = None) -> int:
         """
         Run :func:`arq.worker.Worker.async_run`, check for failed jobs and raise :class:`arq.worker.FailedJobs`
         if any jobs have failed.
 
         :return: number of completed jobs
         """
+        if retry_jobs is not None:
+            self.retry_jobs = retry_jobs
+        if max_burst_jobs is not None:
+            self.max_burst_jobs = max_burst_jobs
         await self.async_run()
         if self.jobs_failed:
             failed_job_results = [r for r in await self.pool.all_job_results() if not r.success]
@@ -266,6 +272,11 @@ class Worker:
             await self.heart_beat()
 
             if self.burst:
+                if (
+                    self.max_burst_jobs >= 0
+                    and self.jobs_complete + self.jobs_retried + self.jobs_failed >= self.max_burst_jobs
+                ):
+                    return
                 queued_jobs = await self.pool.zcard(self.queue_name)
                 if queued_jobs == 0:
                     return

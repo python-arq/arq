@@ -112,18 +112,34 @@ async def test_job_retry(arq_redis: ArqRedis, worker, caplog):
 
 async def test_job_retry_dont_retry(arq_redis: ArqRedis, worker, caplog):
     async def retry(ctx):
-        if ctx['job_try'] <= 2:
-            raise Retry(defer=0.01)
+        raise Retry(defer=0.01)
 
     caplog.set_level(logging.INFO)
     await arq_redis.enqueue_job('retry', _job_id='testing')
-    worker: Worker = worker(functions=[func(retry, name='retry')], retry_jobs=False)
+    worker: Worker = worker(functions=[func(retry, name='retry')])
     with pytest.raises(FailedJobs) as exc_info:
-        await worker.run_check()
+        await worker.run_check(retry_jobs=False)
     assert str(exc_info.value) == '1 job failed <Retry defer 0.01s>'
 
     assert '↻' not in caplog.text
     assert '! testing:retry failed, Retry: <Retry defer 0.01s>\n' in caplog.text
+
+
+async def test_job_retry_max_jobs(arq_redis: ArqRedis, worker, caplog):
+    async def retry(ctx):
+        raise Retry(defer=0.01)
+
+    caplog.set_level(logging.INFO)
+    await arq_redis.enqueue_job('retry', _job_id='testing')
+    worker: Worker = worker(functions=[func(retry, name='retry')])
+    assert await worker.run_check(max_burst_jobs=1) == 0
+    assert worker.jobs_complete == 0
+    assert worker.jobs_retried == 1
+    assert worker.jobs_failed == 0
+
+    log = re.sub(r'(\d+).\d\ds', r'\1.XXs', caplog.text)
+    assert '0.XXs ↻ testing:retry retrying job in 0.XXs\n' in log
+    assert '0.XXs → testing:retry() try=2\n' not in log
 
 
 async def test_job_job_not_found(arq_redis: ArqRedis, worker, caplog):
