@@ -3,11 +3,11 @@
 History
 -------
 
-v0.16.1 (unreleased)
+v0.16.1 (2019-08-02)
 ....................
 * prevent duplicate ``job_id`` when job result exists, fix #137
-* add "don't retry mode" via ``worker.retry_jobs = False`, fix #139
-* add ``worker.max_burst_jobs`
+* add "don't retry mode" via ``worker.retry_jobs = False``, fix #139
+* add ``worker.max_burst_jobs``
 
 v0.16 (2019-07-30)
 ..................
