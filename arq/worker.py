@@ -7,7 +7,7 @@ from datetime import datetime
 from functools import partial
 from signal import Signals
 from time import time
-from typing import Awaitable, Callable, Dict, List, Optional, Sequence, Union
+from typing import Awaitable, Any, Callable, Dict, List, Optional, Sequence, Union
 
 import async_timeout
 from aioredis import MultiExecError
@@ -141,6 +141,8 @@ class Worker:
     :param max_tries: default maximum number of times to retry a job
     :param health_check_interval: how often to set the health check key
     :param health_check_key: redis key under which health check is set
+    :param serialize: a function that serializes Python objects to bytes, defaults to pickle.dumps
+    :param deserialize: a function that deserializes bytes into Python objects, defaults to pickle.loads
     """
 
     def __init__(
@@ -164,6 +166,8 @@ class Worker:
         ctx: Optional[Dict] = None,
         retry_jobs: bool = True,
         max_burst_jobs: int = -1,
+        serialize: Optional[Callable[[Any], bytes]] = None,
+        deserialize: Optional[Callable[[bytes], Any]] = None,
     ):
         self.functions: Dict[str, Union[Function, CronJob]] = {f.name: f for f in map(func, functions)}
         self.queue_name = queue_name
@@ -208,6 +212,8 @@ class Worker:
         # whether or not to retry jobs on Retry and CancelledError
         self.retry_jobs = retry_jobs
         self.max_burst_jobs = max_burst_jobs
+        self.serialize = serialize
+        self.deserialize = deserialize
 
     def run(self) -> None:
         """
@@ -330,10 +336,11 @@ class Worker:
                 start_ms,
                 timestamp_ms(),
                 f'{job_id}:<unknown function>',
+                _serialize=self.serialize,
             )
             return await asyncio.shield(self.abort_job(job_id, result_data))
 
-        function_name, args, kwargs, enqueue_job_try, enqueue_time_ms = unpickle_job_raw(v)
+        function_name, args, kwargs, enqueue_job_try, enqueue_time_ms = unpickle_job_raw(v, _deserialize=self.deserialize)
 
         try:
             function: Union[Function, CronJob] = self.functions[function_name]
@@ -351,6 +358,7 @@ class Worker:
                 start_ms,
                 timestamp_ms(),
                 f'{job_id}:{function_name}',
+                _serialize=self.serialize,
             )
             return await asyncio.shield(self.abort_job(job_id, result_data))
 
@@ -380,6 +388,7 @@ class Worker:
                 start_ms,
                 timestamp_ms(),
                 ref,
+                _serialize=self.serialize,
             )
             return await asyncio.shield(self.abort_job(job_id, result_data))
 
@@ -444,7 +453,17 @@ class Worker:
         result_data = None
         if result is not no_result and result_timeout_s > 0:
             result_data = pickle_result(
-                function_name, args, kwargs, job_try, enqueue_time_ms, success, result, start_ms, finished_ms, ref
+                function_name,
+                args,
+                kwargs,
+                job_try,
+                enqueue_time_ms,
+                success,
+                result,
+                start_ms,
+                finished_ms,
+                ref,
+                _serialize=self.serialize,
             )
 
         await asyncio.shield(self.finish_job(job_id, finish, result_data, result_timeout_s, incr_score))

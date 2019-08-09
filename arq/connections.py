@@ -3,7 +3,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
-from typing import Any, List, Optional, Union
+from typing import Any, List, Optional, Union, Callable
 from uuid import uuid4
 
 import aioredis
@@ -43,7 +43,23 @@ expires_extra_ms = 86_400_000
 class ArqRedis(Redis):
     """
     Thin subclass of ``aioredis.Redis`` which adds :func:`arq.connections.enqueue_job`.
+
+    :param redis_settings: an instance of ``arq.connections.RedisSettings``.
+    :param _serialize: a function that serializes Python objects to bytes, defaults to pickle.dumps
+    :param _deserialize: a function that deserializes bytes into Python objects, defaults to pickle.loads
+    :param kwargs: keyword arguments directly passed to ``aioredis.Redis``.
     """
+
+    def __init__(
+        self,
+        redis_settings,
+        _serialize: Optional[Callable[[Any], bytes]] = None,
+        _deserialize: Optional[Callable[[bytes], Any]] = None,
+        **kwargs,
+    ) -> None:
+        self._serialize = _serialize
+        self._deserialize = _deserialize
+        super().__init__(redis_settings, **kwargs)
 
     async def enqueue_job(
         self,
@@ -98,7 +114,7 @@ class ArqRedis(Redis):
 
             expires_ms = expires_ms or score - enqueue_time_ms + expires_extra_ms
 
-            job = pickle_job(function, args, kwargs, _job_try, enqueue_time_ms)
+            job = pickle_job(function, args, kwargs, _job_try, enqueue_time_ms, _serialize=self._serialize)
             tr = conn.multi_exec()
             tr.psetex(job_key, expires_ms, job)
             tr.zadd(_queue_name, score, job_id)
@@ -107,11 +123,11 @@ class ArqRedis(Redis):
             except MultiExecError:
                 # job got enqueued since we checked 'job_exists'
                 return
-        return Job(job_id, self)
+        return Job(job_id, redis=self, _deserialize=self._deserialize)
 
     async def _get_job_result(self, key):
         job_id = key[len(result_key_prefix) :]
-        job = Job(job_id, self)
+        job = Job(job_id, self, _deserialize=self._deserialize)
         r = await job.result_info()
         r.job_id = job_id
         return r

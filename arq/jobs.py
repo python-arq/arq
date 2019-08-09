@@ -4,7 +4,7 @@ import pickle
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Optional, Callable
 
 from .constants import default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
 from .utils import ms_to_datetime, poll, timestamp_ms
@@ -53,12 +53,13 @@ class Job:
     Holds data a reference to a job.
     """
 
-    __slots__ = 'job_id', '_redis', '_queue_name'
+    __slots__ = 'job_id', '_redis', '_queue_name', '_deserialize'
 
-    def __init__(self, job_id: str, redis, _queue_name: str = default_queue_name):
+    def __init__(self, job_id: str, redis, _queue_name: str = default_queue_name, _deserialize: Optional[Callable[[bytes], Any]] = None):
         self.job_id = job_id
         self._redis = redis
         self._queue_name = _queue_name
+        self._deserialize = _deserialize
 
     async def result(self, timeout: Optional[float] = None, *, pole_delay: float = 0.5) -> Any:
         """
@@ -87,7 +88,7 @@ class Job:
         if not info:
             v = await self._redis.get(job_key_prefix + self.job_id, encoding=None)
             if v:
-                info = unpickle_job(v)
+                info = unpickle_job(v, _deserialize=self._deserialize)
         if info:
             info.score = await self._redis.zscore(self._queue_name, self.job_id)
         return info
@@ -99,7 +100,7 @@ class Job:
         """
         v = await self._redis.get(result_key_prefix + self.job_id, encoding=None)
         if v:
-            return unpickle_result(v)
+            return unpickle_result(v, _deserialize=self._deserialize)
 
     async def status(self) -> JobStatus:
         """
@@ -119,16 +120,26 @@ class Job:
         return f'<arq job {self.job_id}>'
 
 
-class PickleError(RuntimeError):
+class SerializationError(RuntimeError):
     pass
 
 
-def pickle_job(function_name: str, args: tuple, kwargs: dict, job_try: int, enqueue_time_ms: int):
+def pickle_job(
+    function_name: str,
+    args: tuple,
+    kwargs: dict,
+    job_try: int,
+    enqueue_time_ms: int,
+    *,
+    _serialize: Optional[Callable[[Any], bytes]] = None,
+) -> Optional[bytes]:
     data = {'t': job_try, 'f': function_name, 'a': args, 'k': kwargs, 'et': enqueue_time_ms}
+    if _serialize is None:
+        _serialize = pickle.dumps
     try:
-        return pickle.dumps(data)
+        return _serialize(data)
     except Exception as e:
-        raise PickleError(f'unable to pickle job "{function_name}"') from e
+        raise SerializationError(f'unable to pickle job "{function_name}"') from e
 
 
 def pickle_result(
@@ -142,6 +153,8 @@ def pickle_result(
     start_ms: int,
     finished_ms: int,
     ref: str,
+    *,
+    _serialize: Optional[Callable[[Any], bytes]] = None,
 ) -> Optional[bytes]:
     data = {
         't': job_try,
@@ -154,41 +167,58 @@ def pickle_result(
         'st': start_ms,
         'ft': finished_ms,
     }
+    if _serialize is None:
+        _serialize = pickle.dumps
     try:
-        return pickle.dumps(data)
+        return _serialize(data)
     except Exception:
         logger.warning('error pickling result of %s', ref, exc_info=True)
 
-    data.update(r=PickleError('unable to pickle result'), s=False)
+    data.update(r=SerializationError('unable to serialize result'), s=False)
     try:
-        return pickle.dumps(data)
+        return _serialize(data)
     except Exception:
-        logger.critical('error pickling result of %s even after replacing result', ref, exc_info=True)
+        logger.critical('error serializing result of %s even after replacing result', ref, exc_info=True)
 
 
-def unpickle_job(r: bytes) -> JobDef:
-    d = pickle.loads(r)
-    return JobDef(
-        function=d['f'], args=d['a'], kwargs=d['k'], job_try=d['t'], enqueue_time=ms_to_datetime(d['et']), score=None
-    )
+def unpickle_job(r: bytes, _deserialize: Optional[Callable[[bytes], Any]] = None) -> JobDef:
+    if _deserialize is None:
+        _deserialize = pickle.loads
+    try:
+        d = _deserialize(r)
+        return JobDef(
+            function=d['f'], args=d['a'], kwargs=d['k'], job_try=d['t'], enqueue_time=ms_to_datetime(d['et']), score=None
+        )
+    except Exception as e:
+        raise SerializationError(f'unable to deserialize job: {r!r}') from e
 
 
-def unpickle_job_raw(r: bytes) -> tuple:
-    d = pickle.loads(r)
-    return d['f'], d['a'], d['k'], d['t'], d['et']
+def unpickle_job_raw(r: bytes, _deserialize: Optional[Callable[[bytes], Any]] = None) -> tuple:
+    if _deserialize is None:
+        _deserialize = pickle.loads
+    try:
+        d = _deserialize(r)
+        return d['f'], d['a'], d['k'], d['t'], d['et']
+    except Exception as e:
+        raise SerializationError(f'unable to deserialize job: {r!r}') from e
 
 
-def unpickle_result(r: bytes) -> JobResult:
-    d = pickle.loads(r)
-    return JobResult(
-        job_try=d['t'],
-        function=d['f'],
-        args=d['a'],
-        kwargs=d['k'],
-        enqueue_time=ms_to_datetime(d['et']),
-        score=None,
-        success=d['s'],
-        result=d['r'],
-        start_time=ms_to_datetime(d['st']),
-        finish_time=ms_to_datetime(d['ft']),
-    )
+def unpickle_result(r: bytes, _deserialize: Optional[Callable[[bytes], Any]] = None) -> JobResult:
+    if _deserialize is None:
+        _deserialize = pickle.loads
+    try:
+        d = _deserialize(r)
+        return JobResult(
+            job_try=d['t'],
+            function=d['f'],
+            args=d['a'],
+            kwargs=d['k'],
+            enqueue_time=ms_to_datetime(d['et']),
+            score=None,
+            success=d['s'],
+            result=d['r'],
+            start_time=ms_to_datetime(d['st']),
+            finish_time=ms_to_datetime(d['ft']),
+        )
+    except Exception as e:
+        raise SerializationError(f'unable to deserialize job result: {r!r}') from e
