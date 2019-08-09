@@ -185,6 +185,11 @@ class Worker:
         self.keep_result_s = to_seconds(keep_result)
         self.poll_delay_s = to_seconds(poll_delay)
         self.queue_read_limit = queue_read_limit
+        if self.queue_read_limit is None:
+            # Redis requires offset and count to be both set or both unset
+            self.queue_read_offset = None
+        else:
+            self.queue_read_offset = 0
         self.max_tries = max_tries
         self.health_check_interval = to_seconds(health_check_interval)
         if health_check_key is None:
@@ -265,7 +270,9 @@ class Worker:
         async for _ in poll(self.poll_delay_s):  # noqa F841
             async with self.sem:  # don't bother with zrangebyscore until we have "space" to run the jobs
                 now = timestamp_ms()
-                job_ids = await self.pool.zrangebyscore(self.queue_name, offset=0, count=self.queue_read_limit, max=now)
+                job_ids = await self.pool.zrangebyscore(
+                    self.queue_name, offset=self.queue_read_offset, count=self.queue_read_limit, max=now,
+                )
             await self.run_jobs(job_ids)
 
             # required to make sure errors in run_job get propagated
