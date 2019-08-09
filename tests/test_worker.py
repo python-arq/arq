@@ -26,6 +26,7 @@ def test_no_jobs(arq_redis: ArqRedis, loop):
         functions = [func(foobar, name='foobar')]
         burst = True
         poll_delay = 0
+        queue_read_limit = 10
 
     loop.run_until_complete(arq_redis.enqueue_job('foobar'))
     worker = run_worker(Settings)
