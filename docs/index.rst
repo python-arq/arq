@@ -170,7 +170,7 @@ optionally with a duration to defer rerunning the jobs by:
 Health checks
 .............
 
-*arq* will automatically record some info about it's current state in redis every ``health_check_interval`` seconds.
+*arq* will automatically record some info about its current state in redis every ``health_check_interval`` seconds.
 That key/value will expire after ``health_check_interval + 1`` seconds so you can be sure if the variable exists *arq*
 is alive and kicking (technically you can be sure it was alive and kicking ``health_check_interval`` seconds ago).
 
@@ -205,6 +205,28 @@ As per the example sets can be used to run at multiple of the given unit.
 Note that ``second`` defaults to ``0`` so you don't in inadvertently run jobs every second and ``microsecond``
 defaults to ``123456`` so you don't inadvertently run jobs every microsecond and so *arq* avoids enqueuing jobs
 at the top of a second when the world is generally slightly busier.
+
+Custom job serializers
+......................
+
+By default, *arq* will use the built-in ``pickle`` module to serialize and deserialize jobs. If you wish to
+use an alternative serialization methods, you can do so by specifying them when creating the connection pool
+and the worker settings. A serializer function takes a Python object and returns a binary representation
+encoded in a ``bytes`` object. A deserializer function, on the other hand, creates Python objects out of
+a ``bytes`` sequence.
+
+.. warning::
+   It is essential that the serialization functions used by :func:`arq.connections.create_pool` and
+   :class:`arq.worker.Worker` are the same, otherwise jobs created by the former cannot be executed by the
+   latter. This also applies when you update your serialization functions: you need to ensure that your new
+   functions are backward compatible with the old jobs, or that there are no jobs with the older serialization
+   scheme in the queue.
+
+Here is an example with `MsgPack <http://msgpack.org>`_, an efficient binary serialization format that
+may enable significant memory improvements over pickle:
+
+.. literalinclude:: examples/custom_serialization_msgpack.py
+
 
 Reference
 ---------

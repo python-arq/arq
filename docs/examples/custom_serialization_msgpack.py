@@ -1,0 +1,31 @@
+import asyncio
+
+import msgpack  # installable with "pip install msgpack"
+
+from arq import create_pool
+from arq.connections import RedisSettings
+
+
+async def the_task(ctx):
+    return 42
+
+
+async def main():
+    redis = await create_pool(
+        RedisSettings(),
+        _job_serializer=msgpack.packb,
+        _job_deserializer=lambda b: msgpack.unpackb(b, raw=False),
+    )
+    await redis.enqueue_job('the_task', _defer_by=10)
+
+
+class WorkerSettings:
+    functions = [the_task]
+    job_serializer = msgpack.packb
+    # refer to MsgPack's documentation as to why raw=False is required
+    job_deserializer = lambda b: msgpack.unpackb(b, raw=False)
+
+
+if __name__ == '__main__':
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
