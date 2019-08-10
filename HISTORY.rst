@@ -3,6 +3,10 @@
 History
 -------
 
+v0.17 (unreleased)
+..................
+* custom serializers, eg. to use msgpack rather than pickle, #143 by @rubik
+
 v0.16.1 (2019-08-02)
 ....................
 * prevent duplicate ``job_id`` when job result exists, fix #137
