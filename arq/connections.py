@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import functools
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
@@ -52,14 +53,14 @@ class ArqRedis(Redis):
 
     def __init__(
         self,
-        redis_settings,
+        pool_or_conn,
         _serialize: Optional[Callable[[Any], bytes]] = None,
         _deserialize: Optional[Callable[[bytes], Any]] = None,
         **kwargs,
     ) -> None:
         self._serialize = _serialize
         self._deserialize = _deserialize
-        super().__init__(redis_settings, **kwargs)
+        super().__init__(pool_or_conn, **kwargs)
 
     async def enqueue_job(
         self,
@@ -141,7 +142,13 @@ class ArqRedis(Redis):
         return sorted(results, key=attrgetter('enqueue_time'))
 
 
-async def create_pool(settings: RedisSettings = None, *, _retry: int = 0) -> ArqRedis:
+async def create_pool(
+    settings: RedisSettings = None,
+    *,
+    _retry: int = 0,
+    _serialize: Optional[Callable[[Any], bytes]] = None,
+    _deserialize: Optional[Callable[[bytes], Any]] = None,
+) -> ArqRedis:
     """
     Create a new redis pool, retrying up to ``conn_retries`` times if the connection fails.
 
@@ -157,7 +164,9 @@ async def create_pool(settings: RedisSettings = None, *, _retry: int = 0) -> Arq
             password=settings.password,
             timeout=settings.conn_timeout,
             encoding='utf8',
-            commands_factory=ArqRedis,
+            commands_factory=functools.partial(
+                ArqRedis, _serialize=_serialize, _deserialize=_deserialize,
+            ),
         )
     except (ConnectionError, OSError, aioredis.RedisError, asyncio.TimeoutError) as e:
         if _retry < settings.conn_retries:
