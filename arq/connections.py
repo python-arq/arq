@@ -4,14 +4,14 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
-from typing import Any, Callable, List, Optional, Union
+from typing import Any, List, Optional, Union
 from uuid import uuid4
 
 import aioredis
 from aioredis import MultiExecError, Redis
 
 from .constants import default_queue_name, job_key_prefix, result_key_prefix
-from .jobs import Job, JobResult, serialize_job
+from .jobs import Serializer, Deserializer, Job, JobResult, serialize_job
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('arq.connections')
@@ -54,8 +54,8 @@ class ArqRedis(Redis):
     def __init__(
         self,
         pool_or_conn,
-        _job_serializer: Optional[Callable[[Any], bytes]] = None,
-        _job_deserializer: Optional[Callable[[bytes], Any]] = None,
+        _job_serializer: Optional[Serializer] = None,
+        _job_deserializer: Optional[Deserializer] = None,
         **kwargs,
     ) -> None:
         self._job_serializer = _job_serializer
@@ -146,8 +146,8 @@ async def create_pool(
     settings: RedisSettings = None,
     *,
     _retry: int = 0,
-    _job_serializer: Optional[Callable[[Any], bytes]] = None,
-    _job_deserializer: Optional[Callable[[bytes], Any]] = None,
+    _job_serializer: Optional[Serializer] = None,
+    _job_deserializer: Optional[Deserializer] = None,
 ) -> ArqRedis:
     """
     Create a new redis pool, retrying up to ``conn_retries`` times if the connection fails.
