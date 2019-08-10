@@ -7,7 +7,7 @@ from datetime import datetime
 from functools import partial
 from signal import Signals
 from time import time
-from typing import Awaitable, Any, Callable, Dict, List, Optional, Sequence, Union
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Union
 
 import async_timeout
 from aioredis import MultiExecError
@@ -340,7 +340,9 @@ class Worker:
             )
             return await asyncio.shield(self.abort_job(job_id, result_data))
 
-        function_name, args, kwargs, enqueue_job_try, enqueue_time_ms = unpickle_job_raw(v, _deserialize=self.deserialize)
+        function_name, args, kwargs, enqueue_job_try, enqueue_time_ms = unpickle_job_raw(
+            v, _deserialize=self.deserialize
+        )
 
         try:
             function: Union[Function, CronJob] = self.functions[function_name]

@@ -1,10 +1,10 @@
 import asyncio
-import logging
 import functools
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
-from typing import Any, List, Optional, Union, Callable
+from typing import Any, Callable, List, Optional, Union
 from uuid import uuid4
 
 import aioredis
@@ -164,9 +164,7 @@ async def create_pool(
             password=settings.password,
             timeout=settings.conn_timeout,
             encoding='utf8',
-            commands_factory=functools.partial(
-                ArqRedis, _serialize=_serialize, _deserialize=_deserialize,
-            ),
+            commands_factory=functools.partial(ArqRedis, _serialize=_serialize, _deserialize=_deserialize),
         )
     except (ConnectionError, OSError, aioredis.RedisError, asyncio.TimeoutError) as e:
         if _retry < settings.conn_retries:

@@ -4,7 +4,7 @@ import pickle
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional, Callable
+from typing import Any, Callable, Optional
 
 from .constants import default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
 from .utils import ms_to_datetime, poll, timestamp_ms
@@ -55,7 +55,13 @@ class Job:
 
     __slots__ = 'job_id', '_redis', '_queue_name', '_deserialize'
 
-    def __init__(self, job_id: str, redis, _queue_name: str = default_queue_name, _deserialize: Optional[Callable[[bytes], Any]] = None):
+    def __init__(
+        self,
+        job_id: str,
+        redis,
+        _queue_name: str = default_queue_name,
+        _deserialize: Optional[Callable[[bytes], Any]] = None,
+    ):
         self.job_id = job_id
         self._redis = redis
         self._queue_name = _queue_name
@@ -191,7 +197,12 @@ def unpickle_job(r: bytes, _deserialize: Optional[Callable[[bytes], Any]] = None
     try:
         d = _deserialize(r)
         return JobDef(
-            function=d['f'], args=d['a'], kwargs=d['k'], job_try=d['t'], enqueue_time=ms_to_datetime(d['et']), score=None
+            function=d['f'],
+            args=d['a'],
+            kwargs=d['k'],
+            job_try=d['t'],
+            enqueue_time=ms_to_datetime(d['et']),
+            score=None,
         )
     except Exception as e:
         raise SerializationError(f'unable to deserialize job: {r!r}') from e
