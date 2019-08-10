@@ -124,6 +124,10 @@ class SerializationError(RuntimeError):
     pass
 
 
+class PickleError(SerializationError):
+    pass
+
+
 def pickle_job(
     function_name: str,
     args: tuple,
