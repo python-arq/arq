@@ -145,7 +145,7 @@ def serialize_job(
     try:
         return _serialize(data)
     except Exception as e:
-        raise SerializationError(f'unable to pickle job "{function_name}"') from e
+        raise SerializationError(f'unable to serialize job "{function_name}"') from e
 
 
 def serialize_result(
@@ -178,7 +178,7 @@ def serialize_result(
     try:
         return _serialize(data)
     except Exception:
-        logger.warning('error pickling result of %s', ref, exc_info=True)
+        logger.warning('error serializing result of %s', ref, exc_info=True)
 
     data.update(r=SerializationError('unable to serialize result'), s=False)
     try:

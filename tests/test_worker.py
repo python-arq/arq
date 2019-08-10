@@ -1,15 +1,17 @@
 import asyncio
+import functools
 import logging
 import re
 import signal
 from unittest.mock import MagicMock
 
 import pytest
+import msgpack
 from aioredis import create_redis_pool
 
 from arq.connections import ArqRedis
 from arq.constants import default_queue_name, health_check_key_suffix, job_key_prefix
-from arq.jobs import Job, JobStatus
+from arq.jobs import Job, JobStatus, SerializationError
 from arq.worker import FailedJobs, JobExecutionFailed, Retry, Worker, async_check_health, check_health, func, run_worker
 
 
@@ -334,7 +336,7 @@ async def test_unpickleable(arq_redis: ArqRedis, worker, caplog):
     await worker.main()
 
     log = re.sub(r'(\d+).\d\ds', r'\1.XXs', '\n'.join(r.message for r in caplog.records))
-    assert 'error pickling result of testing:example' in log
+    assert 'error serializing result of testing:example' in log
 
 
 async def test_log_health_check(arq_redis: ArqRedis, worker, caplog):
@@ -449,3 +451,26 @@ async def test_repeat_job_result(arq_redis: ArqRedis, worker):
     assert await j1.status() == JobStatus.complete
 
     assert await arq_redis.enqueue_job('foobar', _job_id='job_id') is None
+
+
+async def test_custom_serializers(arq_redis_msgpack: ArqRedis, worker):
+    j = await arq_redis_msgpack.enqueue_job('foobar', _job_id='job_id')
+    worker: Worker = worker(functions=[foobar], job_serializer=msgpack.packb, job_deserializer=functools.partial(msgpack.unpackb, raw=False))
+    await worker.main()
+    assert await j.result() == 42
+    r = await j.info()
+    assert r.result == 42
+
+
+async def test_incompatible_serializers_1(arq_redis_msgpack: ArqRedis, worker):
+    await arq_redis_msgpack.enqueue_job('foobar', _job_id='job_id')
+    worker: Worker = worker(functions=[foobar])
+    with pytest.raises(SerializationError) as exc_info:
+        await worker.main()
+
+
+async def test_incompatible_serializers_2(arq_redis: ArqRedis, worker):
+    await arq_redis.enqueue_job('foobar', _job_id='job_id')
+    worker: Worker = worker(functions=[foobar], job_serializer=msgpack.packb, job_deserializer=functools.partial(msgpack.unpackb, raw=False))
+    with pytest.raises(SerializationError) as exc_info:
+        await worker.main()

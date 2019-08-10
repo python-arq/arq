@@ -72,7 +72,7 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker):
     ]
 
 
-async def test_cant_unpickel_at_all():
+async def test_cant_unpickle_at_all():
     class Foobar:
         def __getstate__(self):
             raise TypeError("this doesn't pickle")
@@ -81,3 +81,17 @@ async def test_cant_unpickel_at_all():
     assert isinstance(r1, bytes)
     r2 = serialize_result('foobar', (Foobar(),), {}, 1, 123, True, Foobar(), 123, 123, 'testing')
     assert r2 is None
+
+
+async def test_custom_serializer():
+    class Foobar:
+        def __getstate__(self):
+            raise TypeError("this doesn't pickle")
+
+    def custom_serialize(x):
+        return b'0123456789'
+
+    r1 = serialize_result('foobar', (1,), {}, 1, 123, True, Foobar(), 123, 123, 'testing', _serialize=custom_serialize)
+    assert r1 == b'0123456789'
+    r2 = serialize_result('foobar', (Foobar(),), {}, 1, 123, True, Foobar(), 123, 123, 'testing', _serialize=custom_serialize)
+    assert r2 == b'0123456789'
