@@ -11,7 +11,7 @@ import aioredis
 from aioredis import MultiExecError, Redis
 
 from .constants import default_queue_name, job_key_prefix, result_key_prefix
-from .jobs import Serializer, Deserializer, Job, JobResult, serialize_job
+from .jobs import Deserializer, Job, JobResult, Serializer, serialize_job
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('arq.connections')
@@ -164,7 +164,9 @@ async def create_pool(
             password=settings.password,
             timeout=settings.conn_timeout,
             encoding='utf8',
-            commands_factory=functools.partial(ArqRedis, _job_serializer=job_serializer, _job_deserializer=job_deserializer),
+            commands_factory=functools.partial(
+                ArqRedis, _job_serializer=job_serializer, _job_deserializer=job_deserializer
+            ),
         )
     except (ConnectionError, OSError, aioredis.RedisError, asyncio.TimeoutError) as e:
         if retry < settings.conn_retries:
@@ -186,7 +188,9 @@ async def create_pool(
 
     # recursively attempt to create the pool outside the except block to avoid
     # "During handling of the above exception..." madness
-    return await create_pool(settings, retry=retry + 1, job_serializer=job_serializer, job_deserializer=job_deserializer)
+    return await create_pool(
+        settings, retry=retry + 1, job_serializer=job_serializer, job_deserializer=job_deserializer
+    )
 
 
 async def log_redis_info(redis, log_func):

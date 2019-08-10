@@ -1,7 +1,7 @@
 import functools
 
-import pytest
 import msgpack
+import pytest
 from aioredis import create_redis_pool
 
 from arq.connections import ArqRedis
@@ -19,10 +19,14 @@ async def arq_redis(loop):
 
 @pytest.yield_fixture
 async def arq_redis_msgpack(loop):
-    redis_ = await create_redis_pool(('localhost', 6379), encoding='utf8',
-            loop=loop, commands_factory=functools.partial(ArqRedis,
-                _job_serializer=msgpack.packb,
-                _job_deserializer=functools.partial(msgpack.unpackb, raw=False)))
+    redis_ = await create_redis_pool(
+        ('localhost', 6379),
+        encoding='utf8',
+        loop=loop,
+        commands_factory=functools.partial(
+            ArqRedis, _job_serializer=msgpack.packb, _job_deserializer=functools.partial(msgpack.unpackb, raw=False)
+        ),
+    )
     await redis_.flushall()
     yield redis_
     redis_.close()

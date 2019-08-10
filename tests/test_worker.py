@@ -5,8 +5,8 @@ import re
 import signal
 from unittest.mock import MagicMock
 
-import pytest
 import msgpack
+import pytest
 from aioredis import create_redis_pool
 
 from arq.connections import ArqRedis
@@ -455,7 +455,9 @@ async def test_repeat_job_result(arq_redis: ArqRedis, worker):
 
 async def test_custom_serializers(arq_redis_msgpack: ArqRedis, worker):
     j = await arq_redis_msgpack.enqueue_job('foobar', _job_id='job_id')
-    worker: Worker = worker(functions=[foobar], job_serializer=msgpack.packb, job_deserializer=functools.partial(msgpack.unpackb, raw=False))
+    worker: Worker = worker(
+        functions=[foobar], job_serializer=msgpack.packb, job_deserializer=functools.partial(msgpack.unpackb, raw=False)
+    )
     await worker.main()
     assert await j.result() == 42
     r = await j.info()
@@ -472,7 +474,9 @@ async def test_incompatible_serializers_1(arq_redis_msgpack: ArqRedis, worker):
 
 async def test_incompatible_serializers_2(arq_redis: ArqRedis, worker):
     await arq_redis.enqueue_job('foobar', _job_id='job_id')
-    worker: Worker = worker(functions=[foobar], job_serializer=msgpack.packb, job_deserializer=functools.partial(msgpack.unpackb, raw=False))
+    worker: Worker = worker(
+        functions=[foobar], job_serializer=msgpack.packb, job_deserializer=functools.partial(msgpack.unpackb, raw=False)
+    )
     with pytest.raises(SerializationError) as exc_info:
         await worker.main()
         assert exc_info.value.startswith('unable to deserialize job: ')

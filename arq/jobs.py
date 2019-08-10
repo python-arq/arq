@@ -59,11 +59,7 @@ class Job:
     __slots__ = 'job_id', '_redis', '_queue_name', '_deserializer'
 
     def __init__(
-        self,
-        job_id: str,
-        redis,
-        _queue_name: str = default_queue_name,
-        _deserializer: Optional[Deserializer] = None,
+        self, job_id: str, redis, _queue_name: str = default_queue_name, _deserializer: Optional[Deserializer] = None
     ):
         self.job_id = job_id
         self._redis = redis

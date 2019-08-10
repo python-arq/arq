@@ -14,7 +14,7 @@ from aioredis import MultiExecError
 from pydantic.utils import import_string
 
 from arq.cron import CronJob
-from arq.jobs import Serializer, Deserializer, serialize_result, deserialize_job_raw
+from arq.jobs import Deserializer, Serializer, deserialize_job_raw, serialize_result
 
 from .connections import ArqRedis, RedisSettings, create_pool, log_redis_info
 from .constants import (

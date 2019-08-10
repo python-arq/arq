@@ -93,5 +93,7 @@ async def test_custom_serializer():
 
     r1 = serialize_result('foobar', (1,), {}, 1, 123, True, Foobar(), 123, 123, 'testing', serializer=custom_serializer)
     assert r1 == b'0123456789'
-    r2 = serialize_result('foobar', (Foobar(),), {}, 1, 123, True, Foobar(), 123, 123, 'testing', serializer=custom_serializer)
+    r2 = serialize_result(
+        'foobar', (Foobar(),), {}, 1, 123, True, Foobar(), 123, 123, 'testing', serializer=custom_serializer
+    )
     assert r2 == b'0123456789'
