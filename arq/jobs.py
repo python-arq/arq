@@ -94,7 +94,7 @@ class Job:
         if not info:
             v = await self._redis.get(job_key_prefix + self.job_id, encoding=None)
             if v:
-                info = unpickle_job(v, _deserialize=self._deserialize)
+                info = deserialize_job(v, _deserialize=self._deserialize)
         if info:
             info.score = await self._redis.zscore(self._queue_name, self.job_id)
         return info
@@ -106,7 +106,7 @@ class Job:
         """
         v = await self._redis.get(result_key_prefix + self.job_id, encoding=None)
         if v:
-            return unpickle_result(v, _deserialize=self._deserialize)
+            return deserialize_result(v, _deserialize=self._deserialize)
 
     async def status(self) -> JobStatus:
         """
@@ -130,11 +130,7 @@ class SerializationError(RuntimeError):
     pass
 
 
-class PickleError(SerializationError):
-    pass
-
-
-def pickle_job(
+def serialize_job(
     function_name: str,
     args: tuple,
     kwargs: dict,
@@ -152,7 +148,7 @@ def pickle_job(
         raise SerializationError(f'unable to pickle job "{function_name}"') from e
 
 
-def pickle_result(
+def serialize_result(
     function: str,
     args: tuple,
     kwargs: dict,
@@ -191,7 +187,7 @@ def pickle_result(
         logger.critical('error serializing result of %s even after replacing result', ref, exc_info=True)
 
 
-def unpickle_job(r: bytes, _deserialize: Optional[Callable[[bytes], Any]] = None) -> JobDef:
+def deserialize_job(r: bytes, _deserialize: Optional[Callable[[bytes], Any]] = None) -> JobDef:
     if _deserialize is None:
         _deserialize = pickle.loads
     try:
@@ -208,7 +204,7 @@ def unpickle_job(r: bytes, _deserialize: Optional[Callable[[bytes], Any]] = None
         raise SerializationError(f'unable to deserialize job: {r!r}') from e
 
 
-def unpickle_job_raw(r: bytes, _deserialize: Optional[Callable[[bytes], Any]] = None) -> tuple:
+def deserialize_job_raw(r: bytes, _deserialize: Optional[Callable[[bytes], Any]] = None) -> tuple:
     if _deserialize is None:
         _deserialize = pickle.loads
     try:
@@ -218,7 +214,7 @@ def unpickle_job_raw(r: bytes, _deserialize: Optional[Callable[[bytes], Any]] = 
         raise SerializationError(f'unable to deserialize job: {r!r}') from e
 
 
-def unpickle_result(r: bytes, _deserialize: Optional[Callable[[bytes], Any]] = None) -> JobResult:
+def deserialize_result(r: bytes, _deserialize: Optional[Callable[[bytes], Any]] = None) -> JobResult:
     if _deserialize is None:
         _deserialize = pickle.loads
     try:
