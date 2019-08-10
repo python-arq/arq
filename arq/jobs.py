@@ -56,19 +56,19 @@ class Job:
     Holds data a reference to a job.
     """
 
-    __slots__ = 'job_id', '_redis', '_queue_name', '_deserialize'
+    __slots__ = 'job_id', '_redis', '_queue_name', '_deserializer'
 
     def __init__(
         self,
         job_id: str,
         redis,
         _queue_name: str = default_queue_name,
-        _deserialize: Optional[Deserializer] = None,
+        _deserializer: Optional[Deserializer] = None,
     ):
         self.job_id = job_id
         self._redis = redis
         self._queue_name = _queue_name
-        self._deserialize = _deserialize
+        self._deserializer = _deserializer
 
     async def result(self, timeout: Optional[float] = None, *, pole_delay: float = 0.5) -> Any:
         """
@@ -97,7 +97,7 @@ class Job:
         if not info:
             v = await self._redis.get(job_key_prefix + self.job_id, encoding=None)
             if v:
-                info = deserialize_job(v, _deserialize=self._deserialize)
+                info = deserialize_job(v, deserializer=self._deserializer)
         if info:
             info.score = await self._redis.zscore(self._queue_name, self.job_id)
         return info
@@ -109,7 +109,7 @@ class Job:
         """
         v = await self._redis.get(result_key_prefix + self.job_id, encoding=None)
         if v:
-            return deserialize_result(v, _deserialize=self._deserialize)
+            return deserialize_result(v, deserializer=self._deserializer)
 
     async def status(self) -> JobStatus:
         """
@@ -140,13 +140,13 @@ def serialize_job(
     job_try: int,
     enqueue_time_ms: int,
     *,
-    _serialize: Optional[Serializer] = None,
+    serializer: Optional[Serializer] = None,
 ) -> Optional[bytes]:
     data = {'t': job_try, 'f': function_name, 'a': args, 'k': kwargs, 'et': enqueue_time_ms}
-    if _serialize is None:
-        _serialize = pickle.dumps
+    if serializer is None:
+        serializer = pickle.dumps
     try:
-        return _serialize(data)
+        return serializer(data)
     except Exception as e:
         raise SerializationError(f'unable to serialize job "{function_name}"') from e
 
@@ -163,7 +163,7 @@ def serialize_result(
     finished_ms: int,
     ref: str,
     *,
-    _serialize: Optional[Serializer] = None,
+    serializer: Optional[Serializer] = None,
 ) -> Optional[bytes]:
     data = {
         't': job_try,
@@ -176,25 +176,25 @@ def serialize_result(
         'st': start_ms,
         'ft': finished_ms,
     }
-    if _serialize is None:
-        _serialize = pickle.dumps
+    if serializer is None:
+        serializer = pickle.dumps
     try:
-        return _serialize(data)
+        return serializer(data)
     except Exception:
         logger.warning('error serializing result of %s', ref, exc_info=True)
 
     data.update(r=SerializationError('unable to serialize result'), s=False)
     try:
-        return _serialize(data)
+        return serializer(data)
     except Exception:
         logger.critical('error serializing result of %s even after replacing result', ref, exc_info=True)
 
 
-def deserialize_job(r: bytes, _deserialize: Optional[Deserializer] = None) -> JobDef:
-    if _deserialize is None:
-        _deserialize = pickle.loads
+def deserialize_job(r: bytes, *, deserializer: Optional[Deserializer] = None) -> JobDef:
+    if deserializer is None:
+        deserializer = pickle.loads
     try:
-        d = _deserialize(r)
+        d = deserializer(r)
         return JobDef(
             function=d['f'],
             args=d['a'],
@@ -207,21 +207,21 @@ def deserialize_job(r: bytes, _deserialize: Optional[Deserializer] = None) -> Jo
         raise SerializationError(f'unable to deserialize job: {r!r}') from e
 
 
-def deserialize_job_raw(r: bytes, _deserialize: Optional[Deserializer] = None) -> tuple:
-    if _deserialize is None:
-        _deserialize = pickle.loads
+def deserialize_job_raw(r: bytes, *, deserializer: Optional[Deserializer] = None) -> tuple:
+    if deserializer is None:
+        deserializer = pickle.loads
     try:
-        d = _deserialize(r)
+        d = deserializer(r)
         return d['f'], d['a'], d['k'], d['t'], d['et']
     except Exception as e:
         raise SerializationError(f'unable to deserialize job: {r!r}') from e
 
 
-def deserialize_result(r: bytes, _deserialize: Optional[Deserializer] = None) -> JobResult:
-    if _deserialize is None:
-        _deserialize = pickle.loads
+def deserialize_result(r: bytes, *, deserializer: Optional[Deserializer] = None) -> JobResult:
+    if deserializer is None:
+        deserializer = pickle.loads
     try:
-        d = _deserialize(r)
+        d = deserializer(r)
         return JobResult(
             job_try=d['t'],
             function=d['f'],

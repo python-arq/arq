@@ -115,7 +115,7 @@ class ArqRedis(Redis):
 
             expires_ms = expires_ms or score - enqueue_time_ms + expires_extra_ms
 
-            job = serialize_job(function, args, kwargs, _job_try, enqueue_time_ms, _serialize=self._job_serializer)
+            job = serialize_job(function, args, kwargs, _job_try, enqueue_time_ms, serializer=self._job_serializer)
             tr = conn.multi_exec()
             tr.psetex(job_key, expires_ms, job)
             tr.zadd(_queue_name, score, job_id)
@@ -124,11 +124,11 @@ class ArqRedis(Redis):
             except MultiExecError:
                 # job got enqueued since we checked 'job_exists'
                 return
-        return Job(job_id, redis=self, _deserialize=self._job_deserializer)
+        return Job(job_id, redis=self, _deserializer=self._job_deserializer)
 
     async def _get_job_result(self, key):
         job_id = key[len(result_key_prefix) :]
-        job = Job(job_id, self, _deserialize=self._job_deserializer)
+        job = Job(job_id, self, _deserializer=self._job_deserializer)
         r = await job.result_info()
         r.job_id = job_id
         return r

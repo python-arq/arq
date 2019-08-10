@@ -336,12 +336,12 @@ class Worker:
                 start_ms,
                 timestamp_ms(),
                 f'{job_id}:<unknown function>',
-                _serialize=self.job_serializer,
+                serializer=self.job_serializer,
             )
             return await asyncio.shield(self.abort_job(job_id, result_data))
 
         function_name, args, kwargs, enqueue_job_try, enqueue_time_ms = deserialize_job_raw(
-            v, _deserialize=self.job_deserializer
+            v, deserializer=self.job_deserializer
         )
 
         try:
@@ -360,7 +360,7 @@ class Worker:
                 start_ms,
                 timestamp_ms(),
                 f'{job_id}:{function_name}',
-                _serialize=self.job_serializer,
+                serializer=self.job_serializer,
             )
             return await asyncio.shield(self.abort_job(job_id, result_data))
 
@@ -390,7 +390,7 @@ class Worker:
                 start_ms,
                 timestamp_ms(),
                 ref,
-                _serialize=self.job_serializer,
+                serializer=self.job_serializer,
             )
             return await asyncio.shield(self.abort_job(job_id, result_data))
 
@@ -465,7 +465,7 @@ class Worker:
                 start_ms,
                 finished_ms,
                 ref,
-                _serialize=self.job_serializer,
+                serializer=self.job_serializer,
             )
 
         await asyncio.shield(self.finish_job(job_id, finish, result_data, result_timeout_s, incr_score))
