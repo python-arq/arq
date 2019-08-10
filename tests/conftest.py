@@ -20,7 +20,14 @@ async def worker(arq_redis):
 
     def create(functions=[], burst=True, poll_delay=0, queue_read_limit=40, **kwargs):
         nonlocal worker_
-        worker_ = Worker(functions=functions, redis_pool=arq_redis, burst=burst, poll_delay=poll_delay, queue_read_limit=queue_read_limit, **kwargs)
+        worker_ = Worker(
+            functions=functions,
+            redis_pool=arq_redis,
+            burst=burst,
+            poll_delay=poll_delay,
+            queue_read_limit=queue_read_limit,
+            **kwargs,
+        )
         return worker_
 
     yield create
