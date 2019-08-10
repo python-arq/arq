@@ -145,9 +145,9 @@ class ArqRedis(Redis):
 async def create_pool(
     settings: RedisSettings = None,
     *,
-    _retry: int = 0,
-    _job_serializer: Optional[Serializer] = None,
-    _job_deserializer: Optional[Deserializer] = None,
+    retry: int = 0,
+    job_serializer: Optional[Serializer] = None,
+    job_deserializer: Optional[Deserializer] = None,
 ) -> ArqRedis:
     """
     Create a new redis pool, retrying up to ``conn_retries`` times if the connection fails.
@@ -164,29 +164,29 @@ async def create_pool(
             password=settings.password,
             timeout=settings.conn_timeout,
             encoding='utf8',
-            commands_factory=functools.partial(ArqRedis, _job_serializer=_job_serializer, _job_deserializer=_job_deserializer),
+            commands_factory=functools.partial(ArqRedis, _job_serializer=job_serializer, _job_deserializer=job_deserializer),
         )
     except (ConnectionError, OSError, aioredis.RedisError, asyncio.TimeoutError) as e:
-        if _retry < settings.conn_retries:
+        if retry < settings.conn_retries:
             logger.warning(
                 'redis connection error %s:%s %s %s, %d retries remaining...',
                 settings.host,
                 settings.port,
                 e.__class__.__name__,
                 e,
-                settings.conn_retries - _retry,
+                settings.conn_retries - retry,
             )
             await asyncio.sleep(settings.conn_retry_delay)
         else:
             raise
     else:
-        if _retry > 0:
+        if retry > 0:
             logger.info('redis connection successful')
         return pool
 
     # recursively attempt to create the pool outside the except block to avoid
     # "During handling of the above exception..." madness
-    return await create_pool(settings, retry=_retry + 1, _job_serializer=_job_serializer, _job_deserializer=_job_deserializer)
+    return await create_pool(settings, retry=retry + 1, job_serializer=job_serializer, job_deserializer=job_deserializer)
 
 
 async def log_redis_info(redis, log_func):

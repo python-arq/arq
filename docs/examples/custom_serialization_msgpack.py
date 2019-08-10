@@ -13,8 +13,8 @@ async def the_task(ctx):
 async def main():
     redis = await create_pool(
         RedisSettings(),
-        _job_serializer=msgpack.packb,
-        _job_deserializer=lambda b: msgpack.unpackb(b, raw=False),
+        job_serializer=msgpack.packb,
+        job_deserializer=lambda b: msgpack.unpackb(b, raw=False),
     )
     await redis.enqueue_job('the_task', _defer_by=10)
 
