@@ -186,7 +186,7 @@ async def create_pool(
 
     # recursively attempt to create the pool outside the except block to avoid
     # "During handling of the above exception..." madness
-    return await create_pool(settings, _retry=_retry + 1)
+    return await create_pool(settings, retry=_retry + 1, _job_serializer=_job_serializer, _job_deserializer=_job_deserializer)
 
 
 async def log_redis_info(redis, log_func):
