@@ -185,9 +185,7 @@ class Worker:
         self.job_timeout_s = to_seconds(job_timeout)
         self.keep_result_s = to_seconds(keep_result)
         self.poll_delay_s = to_seconds(poll_delay)
-        self.queue_read_limit = queue_read_limit
-        if self.queue_read_limit is None:
-            self.queue_read_limit = max_jobs
+        self.queue_read_limit = queue_read_limit or max_jobs
         self._queue_read_offset = 0
         self.max_tries = max_tries
         self.health_check_interval = to_seconds(health_check_interval)
