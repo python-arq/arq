@@ -138,7 +138,7 @@ class Worker:
     :param job_timeout: default job timeout (max run time)
     :param keep_result: default duration to keep job results for
     :param poll_delay: duration between polling the queue for new jobs
-    :param queue_read_limit: the maximum number of jobs to pull from the queue each time it's polled
+    :param queue_read_limit: the maximum number of jobs to pull from the queue each time it's polled; by default it equals ``max_jobs``
     :param max_tries: default maximum number of times to retry a job
     :param health_check_interval: how often to set the health check key
     :param health_check_key: redis key under which health check is set
@@ -186,10 +186,8 @@ class Worker:
         self.poll_delay_s = to_seconds(poll_delay)
         self.queue_read_limit = queue_read_limit
         if self.queue_read_limit is None:
-            # Redis requires offset and count to be both set or both unset
-            self.queue_read_offset = None
-        else:
-            self.queue_read_offset = 0
+            self.queue_read_limit = max_jobs
+        self._queue_read_offset = 0
         self.max_tries = max_tries
         self.health_check_interval = to_seconds(health_check_interval)
         if health_check_key is None:
@@ -271,7 +269,7 @@ class Worker:
             async with self.sem:  # don't bother with zrangebyscore until we have "space" to run the jobs
                 now = timestamp_ms()
                 job_ids = await self.pool.zrangebyscore(
-                    self.queue_name, offset=self.queue_read_offset, count=self.queue_read_limit, max=now
+                    self.queue_name, offset=self._queue_read_offset, count=self.queue_read_limit, max=now
                 )
             await self.run_jobs(job_ids)
 
