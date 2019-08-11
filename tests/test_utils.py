@@ -32,7 +32,7 @@ async def test_redis_success_log(caplog):
     pool.close()
     await pool.wait_closed()
 
-    pool = await create_pool(settings, _retry=1)
+    pool = await create_pool(settings, retry=1)
     assert 'redis connection successful' in [r.message for r in caplog.records]
     pool.close()
     await pool.wait_closed()

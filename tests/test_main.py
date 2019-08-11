@@ -9,7 +9,7 @@ from pytest_toolbox.comparison import CloseToNow
 
 from arq.connections import ArqRedis
 from arq.constants import default_queue_name
-from arq.jobs import Job, PickleError
+from arq.jobs import Job, SerializationError
 from arq.utils import timestamp_ms
 from arq.worker import Retry, Worker, func
 
@@ -145,7 +145,7 @@ async def test_cant_pickle_arg(arq_redis: ArqRedis, worker):
         def __getstate__(self):
             raise TypeError("this doesn't pickle")
 
-    with pytest.raises(PickleError):
+    with pytest.raises(SerializationError):
         await arq_redis.enqueue_job('foobar', Foobar())
 
 
@@ -160,5 +160,5 @@ async def test_cant_pickle_result(arq_redis: ArqRedis, worker):
     j1 = await arq_redis.enqueue_job('foobar')
     w: Worker = worker(functions=[func(foobar, name='foobar')])
     await w.main()
-    with pytest.raises(PickleError):
+    with pytest.raises(SerializationError):
         await j1.result(pole_delay=0)
