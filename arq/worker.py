@@ -278,12 +278,6 @@ class Worker:
                 queued_jobs = await self.pool.zcard(self.queue_name)
                 if queued_jobs == 0:
                     return
-            async with self.sem:  # don't bother with zrangebyscore until we have "space" to run the jobs
-                now = timestamp_ms()
-                job_ids = await self.pool.zrangebyscore(
-                    self.queue_name, offset=self._queue_read_offset, count=self.queue_read_limit, max=now
-                )
-            await self.run_jobs(job_ids)
 
     async def _poll_iteration(self):
         async with self.sem:  # don't bother with zrangebyscore until we have "space" to run the jobs
