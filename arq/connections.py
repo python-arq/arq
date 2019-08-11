@@ -46,8 +46,8 @@ class ArqRedis(Redis):
     Thin subclass of ``aioredis.Redis`` which adds :func:`arq.connections.enqueue_job`.
 
     :param redis_settings: an instance of ``arq.connections.RedisSettings``.
-    :param _job_serializer: a function that serializes Python objects to bytes, defaults to pickle.dumps
-    :param _job_deserializer: a function that deserializes bytes into Python objects, defaults to pickle.loads
+    :param job_serializer: a function that serializes Python objects to bytes, defaults to pickle.dumps
+    :param job_deserializer: a function that deserializes bytes into Python objects, defaults to pickle.loads
     :param kwargs: keyword arguments directly passed to ``aioredis.Redis``.
     """
 
