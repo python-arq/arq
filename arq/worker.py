@@ -138,9 +138,13 @@ class Worker:
     :param job_timeout: default job timeout (max run time)
     :param keep_result: default duration to keep job results for
     :param poll_delay: duration between polling the queue for new jobs
+    :param queue_read_limit: the maximum number of jobs to pull from the queue each time it's polled; by default it
+                             equals ``max_jobs``
     :param max_tries: default maximum number of times to retry a job
     :param health_check_interval: how often to set the health check key
     :param health_check_key: redis key under which health check is set
+    :param retry_jobs: whether to retry jobs on Retry or CancelledError or not
+    :param max_burst_jobs: the maximum number of jobs to process in burst mode (disabled with negative values)
     :param job_serializer: a function that serializes Python objects to bytes, defaults to pickle.dumps
     :param job_deserializer: a function that deserializes bytes into Python objects, defaults to pickle.loads
     """
@@ -160,6 +164,7 @@ class Worker:
         job_timeout: SecondsTimedelta = 300,
         keep_result: SecondsTimedelta = 3600,
         poll_delay: SecondsTimedelta = 0.5,
+        queue_read_limit: Optional[int] = None,
         max_tries: int = 5,
         health_check_interval: SecondsTimedelta = 3600,
         health_check_key: Optional[str] = None,
@@ -184,6 +189,8 @@ class Worker:
         self.job_timeout_s = to_seconds(job_timeout)
         self.keep_result_s = to_seconds(keep_result)
         self.poll_delay_s = to_seconds(poll_delay)
+        self.queue_read_limit = queue_read_limit or max_jobs
+        self._queue_read_offset = 0
         self.max_tries = max_tries
         self.health_check_interval = to_seconds(health_check_interval)
         if health_check_key is None:
@@ -264,18 +271,7 @@ class Worker:
             await self.on_startup(self.ctx)
 
         async for _ in poll(self.poll_delay_s):  # noqa F841
-            async with self.sem:  # don't bother with zrangebyscore until we have "space" to run the jobs
-                now = timestamp_ms()
-                job_ids = await self.pool.zrangebyscore(self.queue_name, max=now)
-            await self.run_jobs(job_ids)
-
-            # required to make sure errors in run_job get propagated
-            for t in self.tasks:
-                if t.done():
-                    self.tasks.remove(t)
-                    t.result()
-
-            await self.heart_beat()
+            await self._poll_iteration()
 
             if self.burst:
                 if (
@@ -286,6 +282,22 @@ class Worker:
                 queued_jobs = await self.pool.zcard(self.queue_name)
                 if queued_jobs == 0:
                     return
+
+    async def _poll_iteration(self):
+        async with self.sem:  # don't bother with zrangebyscore until we have "space" to run the jobs
+            now = timestamp_ms()
+            job_ids = await self.pool.zrangebyscore(
+                self.queue_name, offset=self._queue_read_offset, count=self.queue_read_limit, max=now
+            )
+        await self.run_jobs(job_ids)
+
+        # required to make sure errors in run_job get propagated
+        for t in self.tasks:
+            if t.done():
+                self.tasks.remove(t)
+                t.result()
+
+        await self.heart_beat()
 
     async def run_jobs(self, job_ids):
         for job_id in job_ids:
