@@ -469,7 +469,7 @@ async def test_incompatible_serializers_1(arq_redis_msgpack: ArqRedis, worker):
     worker: Worker = worker(functions=[foobar])
     with pytest.raises(SerializationError) as exc_info:
         await worker.main()
-        assert exc_info.value.startswith('unable to deserialize job: ')
+    assert exc_info.value.startswith('unable to deserialize job: ')
 
 
 async def test_incompatible_serializers_2(arq_redis: ArqRedis, worker):
@@ -479,4 +479,4 @@ async def test_incompatible_serializers_2(arq_redis: ArqRedis, worker):
     )
     with pytest.raises(SerializationError) as exc_info:
         await worker.main()
-        assert exc_info.value.startswith('unable to deserialize job: ')
+    assert exc_info.value.startswith('unable to deserialize job: ')
