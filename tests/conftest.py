@@ -21,12 +21,7 @@ async def worker(arq_redis):
     def create(functions=[], burst=True, poll_delay=0, max_jobs=10, **kwargs):
         nonlocal worker_
         worker_ = Worker(
-            functions=functions,
-            redis_pool=arq_redis,
-            burst=burst,
-            poll_delay=poll_delay,
-            max_jobs=max_jobs,
-            **kwargs,
+            functions=functions, redis_pool=arq_redis, burst=burst, poll_delay=poll_delay, max_jobs=max_jobs, **kwargs
         )
         return worker_
 
