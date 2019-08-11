@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 from aioredis import create_redis_pool
 
-from arq.connections import ArqRedis
+from arq.connections import ArqRedis, create_pool
 from arq.constants import default_queue_name, health_check_key_suffix, job_key_prefix
 from arq.jobs import Job, JobStatus
 from arq.worker import FailedJobs, JobExecutionFailed, Retry, Worker, async_check_health, check_health, func, run_worker
@@ -450,3 +450,55 @@ async def test_repeat_job_result(arq_redis: ArqRedis, worker):
     assert await j1.status() == JobStatus.complete
 
     assert await arq_redis.enqueue_job('foobar', _job_id='job_id') is None
+
+
+async def test_queue_read_limit_equals_max_jobs(arq_redis: ArqRedis, worker):
+    for _ in range(4):
+        await arq_redis.enqueue_job('foobar')
+
+    assert await arq_redis.zcard(default_queue_name) == 4
+    worker: Worker = worker(functions=[foobar], max_jobs=2)
+    worker.pool = await create_pool(worker.redis_settings)
+    assert worker.jobs_complete == 0
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+
+    await worker._poll_iteration()
+    await asyncio.sleep(0.01)
+    assert await arq_redis.zcard(default_queue_name) == 2
+    assert worker.jobs_complete == 2
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+
+    await worker._poll_iteration()
+    await asyncio.sleep(0.01)
+    assert await arq_redis.zcard(default_queue_name) == 0
+    assert worker.jobs_complete == 4
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+
+
+async def test_custom_queue_read_limit(arq_redis: ArqRedis, worker):
+    for _ in range(4):
+        await arq_redis.enqueue_job('foobar')
+
+    assert await arq_redis.zcard(default_queue_name) == 4
+    worker: Worker = worker(functions=[foobar], max_jobs=4, queue_read_limit=2)
+    worker.pool = await create_pool(worker.redis_settings)
+    assert worker.jobs_complete == 0
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+
+    await worker._poll_iteration()
+    await asyncio.sleep(0.01)
+    assert await arq_redis.zcard(default_queue_name) == 2
+    assert worker.jobs_complete == 2
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+
+    await worker._poll_iteration()
+    await asyncio.sleep(0.01)
+    assert await arq_redis.zcard(default_queue_name) == 0
+    assert worker.jobs_complete == 4
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0

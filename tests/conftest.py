@@ -18,14 +18,14 @@ async def arq_redis(loop):
 async def worker(arq_redis):
     worker_: Worker = None
 
-    def create(functions=[], burst=True, poll_delay=0, queue_read_limit=40, **kwargs):
+    def create(functions=[], burst=True, poll_delay=0, max_jobs=10, **kwargs):
         nonlocal worker_
         worker_ = Worker(
             functions=functions,
             redis_pool=arq_redis,
             burst=burst,
             poll_delay=poll_delay,
-            queue_read_limit=queue_read_limit,
+            max_jobs=max_jobs,
             **kwargs,
         )
         return worker_

@@ -266,20 +266,7 @@ class Worker:
             await self.on_startup(self.ctx)
 
         async for _ in poll(self.poll_delay_s):  # noqa F841
-            async with self.sem:  # don't bother with zrangebyscore until we have "space" to run the jobs
-                now = timestamp_ms()
-                job_ids = await self.pool.zrangebyscore(
-                    self.queue_name, offset=self._queue_read_offset, count=self.queue_read_limit, max=now
-                )
-            await self.run_jobs(job_ids)
-
-            # required to make sure errors in run_job get propagated
-            for t in self.tasks:
-                if t.done():
-                    self.tasks.remove(t)
-                    t.result()
-
-            await self.heart_beat()
+            await self._poll_iteration()
 
             if self.burst:
                 if (
@@ -290,6 +277,28 @@ class Worker:
                 queued_jobs = await self.pool.zcard(self.queue_name)
                 if queued_jobs == 0:
                     return
+            async with self.sem:  # don't bother with zrangebyscore until we have "space" to run the jobs
+                now = timestamp_ms()
+                job_ids = await self.pool.zrangebyscore(
+                    self.queue_name, offset=self._queue_read_offset, count=self.queue_read_limit, max=now
+                )
+            await self.run_jobs(job_ids)
+
+    async def _poll_iteration(self):
+        async with self.sem:  # don't bother with zrangebyscore until we have "space" to run the jobs
+            now = timestamp_ms()
+            job_ids = await self.pool.zrangebyscore(
+                self.queue_name, offset=self._queue_read_offset, count=self.queue_read_limit, max=now
+            )
+        await self.run_jobs(job_ids)
+
+        # required to make sure errors in run_job get propagated
+        for t in self.tasks:
+            if t.done():
+                self.tasks.remove(t)
+                t.result()
+
+        await self.heart_beat()
 
     async def run_jobs(self, job_ids):
         for job_id in job_ids:
