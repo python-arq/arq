@@ -3,7 +3,7 @@
 History
 -------
 
-v0.17 (unreleased)
+v0.17 (2019-08-11)
 ..................
 * add ``worker.queue_read_limit``, fix #141, by @rubik
 * custom serializers, eg. to use msgpack rather than pickle, #143 by @rubik
