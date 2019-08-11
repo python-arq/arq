@@ -3,10 +3,11 @@
 History
 -------
 
-v0.17.0 (unreleased)
-....................
+v0.17 (unreleased)
+..................
 * add ``worker.queue_read_limit``, fix #141, by @rubik
 * custom serializers, eg. to use msgpack rather than pickle, #143 by @rubik
+* add ``ArqRedis.queued_jobs`` utility method for getting queued jobs while testing, fix #145 by @samuelcolvin
 
 v0.16.1 (2019-08-02)
 ....................
