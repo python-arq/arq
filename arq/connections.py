@@ -11,7 +11,7 @@ import aioredis
 from aioredis import MultiExecError, Redis
 
 from .constants import default_queue_name, job_key_prefix, result_key_prefix
-from .jobs import Deserializer, Job, JobResult, Serializer, serialize_job
+from .jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('arq.connections')
@@ -126,7 +126,7 @@ class ArqRedis(Redis):
                 return
         return Job(job_id, redis=self, _deserializer=self.job_deserializer)
 
-    async def _get_job_result(self, key):
+    async def _get_job_result(self, key) -> JobResult:
         job_id = key[len(result_key_prefix) :]
         job = Job(job_id, self, _deserializer=self.job_deserializer)
         r = await job.result_info()
@@ -140,6 +140,19 @@ class ArqRedis(Redis):
         keys = await self.keys(result_key_prefix + '*')
         results = await asyncio.gather(*[self._get_job_result(k) for k in keys])
         return sorted(results, key=attrgetter('enqueue_time'))
+
+    async def _get_job_def(self, job_id, score) -> JobDef:
+        v = await self.get(job_key_prefix + job_id, encoding=None)
+        jd = deserialize_job(v, deserializer=self.job_deserializer)
+        jd.score = score
+        return jd
+
+    async def queued_jobs(self, *, queue_name: str = default_queue_name) -> List[JobDef]:
+        """
+        Get information about queued, mostly useful when testing.
+        """
+        jobs = await self.zrange(queue_name, withscores=True)
+        return await asyncio.gather(*[self._get_job_def(job_id, score) for job_id, score in jobs])
 
 
 async def create_pool(

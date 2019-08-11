@@ -1,15 +1,16 @@
 import asyncio
+import dataclasses
 from collections import Counter
 from datetime import datetime
 from random import shuffle
 from time import time
 
 import pytest
-from pytest_toolbox.comparison import CloseToNow
+from pytest_toolbox.comparison import AnyInt, CloseToNow
 
 from arq.connections import ArqRedis
 from arq.constants import default_queue_name
-from arq.jobs import Job, SerializationError
+from arq.jobs import Job, JobDef, SerializationError
 from arq.utils import timestamp_ms
 from arq.worker import Retry, Worker, func
 
@@ -162,3 +163,42 @@ async def test_cant_pickle_result(arq_redis: ArqRedis, worker):
     await w.main()
     with pytest.raises(SerializationError):
         await j1.result(pole_delay=0)
+
+
+async def test_get_jobs(arq_redis: ArqRedis):
+    await arq_redis.enqueue_job('foobar', a=1, b=2, c=3)
+    await asyncio.sleep(0.01)
+    await arq_redis.enqueue_job('second', 4, b=5, c=6)
+    await asyncio.sleep(0.01)
+    await arq_redis.enqueue_job('third', 7, b=8)
+    jobs = await arq_redis.queued_jobs()
+    assert [dataclasses.asdict(j) for j in jobs] == [
+        {
+            'function': 'foobar',
+            'args': (),
+            'kwargs': {'a': 1, 'b': 2, 'c': 3},
+            'job_try': None,
+            'enqueue_time': CloseToNow(),
+            'score': AnyInt(),
+        },
+        {
+            'function': 'second',
+            'args': (4,),
+            'kwargs': {'b': 5, 'c': 6},
+            'job_try': None,
+            'enqueue_time': CloseToNow(),
+            'score': AnyInt(),
+        },
+        {
+            'function': 'third',
+            'args': (7,),
+            'kwargs': {'b': 8},
+            'job_try': None,
+            'enqueue_time': CloseToNow(),
+            'score': AnyInt(),
+        },
+    ]
+    assert jobs[0].score < jobs[1].score < jobs[2].score
+    assert isinstance(jobs[0], JobDef)
+    assert isinstance(jobs[1], JobDef)
+    assert isinstance(jobs[2], JobDef)
