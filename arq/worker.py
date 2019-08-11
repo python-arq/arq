@@ -14,7 +14,7 @@ from aioredis import MultiExecError
 from pydantic.utils import import_string
 
 from arq.cron import CronJob
-from arq.jobs import pickle_result, unpickle_job_raw
+from arq.jobs import Deserializer, Serializer, deserialize_job_raw, serialize_result
 
 from .connections import ArqRedis, RedisSettings, create_pool, log_redis_info
 from .constants import (
@@ -141,6 +141,8 @@ class Worker:
     :param max_tries: default maximum number of times to retry a job
     :param health_check_interval: how often to set the health check key
     :param health_check_key: redis key under which health check is set
+    :param job_serializer: a function that serializes Python objects to bytes, defaults to pickle.dumps
+    :param job_deserializer: a function that deserializes bytes into Python objects, defaults to pickle.loads
     """
 
     def __init__(
@@ -164,6 +166,8 @@ class Worker:
         ctx: Optional[Dict] = None,
         retry_jobs: bool = True,
         max_burst_jobs: int = -1,
+        job_serializer: Optional[Serializer] = None,
+        job_deserializer: Optional[Deserializer] = None,
     ):
         self.functions: Dict[str, Union[Function, CronJob]] = {f.name: f for f in map(func, functions)}
         self.queue_name = queue_name
@@ -208,6 +212,8 @@ class Worker:
         # whether or not to retry jobs on Retry and CancelledError
         self.retry_jobs = retry_jobs
         self.max_burst_jobs = max_burst_jobs
+        self.job_serializer = job_serializer
+        self.job_deserializer = job_deserializer
 
     def run(self) -> None:
         """
@@ -319,7 +325,7 @@ class Worker:
         if not v:
             logger.warning('job %s expired', job_id)
             self.jobs_failed += 1
-            result_data = pickle_result(
+            result_data = serialize_result(
                 '<unknown>',
                 (),
                 {},
@@ -330,17 +336,20 @@ class Worker:
                 start_ms,
                 timestamp_ms(),
                 f'{job_id}:<unknown function>',
+                serializer=self.job_serializer,
             )
             return await asyncio.shield(self.abort_job(job_id, result_data))
 
-        function_name, args, kwargs, enqueue_job_try, enqueue_time_ms = unpickle_job_raw(v)
+        function_name, args, kwargs, enqueue_job_try, enqueue_time_ms = deserialize_job_raw(
+            v, deserializer=self.job_deserializer
+        )
 
         try:
             function: Union[Function, CronJob] = self.functions[function_name]
         except KeyError:
             logger.warning('job %s, function %r not found', job_id, function_name)
             self.jobs_failed += 1
-            result_data = pickle_result(
+            result_data = serialize_result(
                 function_name,
                 args,
                 kwargs,
@@ -351,6 +360,7 @@ class Worker:
                 start_ms,
                 timestamp_ms(),
                 f'{job_id}:{function_name}',
+                serializer=self.job_serializer,
             )
             return await asyncio.shield(self.abort_job(job_id, result_data))
 
@@ -369,7 +379,7 @@ class Worker:
             t = (timestamp_ms() - enqueue_time_ms) / 1000
             logger.warning('%6.2fs ! %s max retries %d exceeded', t, ref, max_tries)
             self.jobs_failed += 1
-            result_data = pickle_result(
+            result_data = serialize_result(
                 function_name,
                 args,
                 kwargs,
@@ -380,6 +390,7 @@ class Worker:
                 start_ms,
                 timestamp_ms(),
                 ref,
+                serializer=self.job_serializer,
             )
             return await asyncio.shield(self.abort_job(job_id, result_data))
 
@@ -443,8 +454,18 @@ class Worker:
         result_timeout_s = self.keep_result_s if function.keep_result_s is None else function.keep_result_s
         result_data = None
         if result is not no_result and result_timeout_s > 0:
-            result_data = pickle_result(
-                function_name, args, kwargs, job_try, enqueue_time_ms, success, result, start_ms, finished_ms, ref
+            result_data = serialize_result(
+                function_name,
+                args,
+                kwargs,
+                job_try,
+                enqueue_time_ms,
+                success,
+                result,
+                start_ms,
+                finished_ms,
+                ref,
+                serializer=self.job_serializer,
             )
 
         await asyncio.shield(self.finish_job(job_id, finish, result_data, result_timeout_s, incr_score))

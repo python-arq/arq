@@ -1,3 +1,6 @@
+import functools
+
+import msgpack
 import pytest
 from aioredis import create_redis_pool
 
@@ -8,6 +11,22 @@ from arq.worker import Worker
 @pytest.yield_fixture
 async def arq_redis(loop):
     redis_ = await create_redis_pool(('localhost', 6379), encoding='utf8', loop=loop, commands_factory=ArqRedis)
+    await redis_.flushall()
+    yield redis_
+    redis_.close()
+    await redis_.wait_closed()
+
+
+@pytest.yield_fixture
+async def arq_redis_msgpack(loop):
+    redis_ = await create_redis_pool(
+        ('localhost', 6379),
+        encoding='utf8',
+        loop=loop,
+        commands_factory=functools.partial(
+            ArqRedis, job_serializer=msgpack.packb, job_deserializer=functools.partial(msgpack.unpackb, raw=False)
+        ),
+    )
     await redis_.flushall()
     yield redis_
     redis_.close()

@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -10,7 +11,7 @@ import aioredis
 from aioredis import MultiExecError, Redis
 
 from .constants import default_queue_name, job_key_prefix, result_key_prefix
-from .jobs import Job, JobResult, pickle_job
+from .jobs import Deserializer, Job, JobResult, Serializer, serialize_job
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('arq.connections')
@@ -43,7 +44,23 @@ expires_extra_ms = 86_400_000
 class ArqRedis(Redis):
     """
     Thin subclass of ``aioredis.Redis`` which adds :func:`arq.connections.enqueue_job`.
+
+    :param redis_settings: an instance of ``arq.connections.RedisSettings``.
+    :param job_serializer: a function that serializes Python objects to bytes, defaults to pickle.dumps
+    :param job_deserializer: a function that deserializes bytes into Python objects, defaults to pickle.loads
+    :param kwargs: keyword arguments directly passed to ``aioredis.Redis``.
     """
+
+    def __init__(
+        self,
+        pool_or_conn,
+        job_serializer: Optional[Serializer] = None,
+        job_deserializer: Optional[Deserializer] = None,
+        **kwargs,
+    ) -> None:
+        self.job_serializer = job_serializer
+        self.job_deserializer = job_deserializer
+        super().__init__(pool_or_conn, **kwargs)
 
     async def enqueue_job(
         self,
@@ -98,7 +115,7 @@ class ArqRedis(Redis):
 
             expires_ms = expires_ms or score - enqueue_time_ms + expires_extra_ms
 
-            job = pickle_job(function, args, kwargs, _job_try, enqueue_time_ms)
+            job = serialize_job(function, args, kwargs, _job_try, enqueue_time_ms, serializer=self.job_serializer)
             tr = conn.multi_exec()
             tr.psetex(job_key, expires_ms, job)
             tr.zadd(_queue_name, score, job_id)
@@ -107,11 +124,11 @@ class ArqRedis(Redis):
             except MultiExecError:
                 # job got enqueued since we checked 'job_exists'
                 return
-        return Job(job_id, self)
+        return Job(job_id, redis=self, _deserializer=self.job_deserializer)
 
     async def _get_job_result(self, key):
         job_id = key[len(result_key_prefix) :]
-        job = Job(job_id, self)
+        job = Job(job_id, self, _deserializer=self.job_deserializer)
         r = await job.result_info()
         r.job_id = job_id
         return r
@@ -125,7 +142,13 @@ class ArqRedis(Redis):
         return sorted(results, key=attrgetter('enqueue_time'))
 
 
-async def create_pool(settings: RedisSettings = None, *, _retry: int = 0) -> ArqRedis:
+async def create_pool(
+    settings: RedisSettings = None,
+    *,
+    retry: int = 0,
+    job_serializer: Optional[Serializer] = None,
+    job_deserializer: Optional[Deserializer] = None,
+) -> ArqRedis:
     """
     Create a new redis pool, retrying up to ``conn_retries`` times if the connection fails.
 
@@ -141,29 +164,33 @@ async def create_pool(settings: RedisSettings = None, *, _retry: int = 0) -> Arq
             password=settings.password,
             timeout=settings.conn_timeout,
             encoding='utf8',
-            commands_factory=ArqRedis,
+            commands_factory=functools.partial(
+                ArqRedis, job_serializer=job_serializer, job_deserializer=job_deserializer
+            ),
         )
     except (ConnectionError, OSError, aioredis.RedisError, asyncio.TimeoutError) as e:
-        if _retry < settings.conn_retries:
+        if retry < settings.conn_retries:
             logger.warning(
                 'redis connection error %s:%s %s %s, %d retries remaining...',
                 settings.host,
                 settings.port,
                 e.__class__.__name__,
                 e,
-                settings.conn_retries - _retry,
+                settings.conn_retries - retry,
             )
             await asyncio.sleep(settings.conn_retry_delay)
         else:
             raise
     else:
-        if _retry > 0:
+        if retry > 0:
             logger.info('redis connection successful')
         return pool
 
     # recursively attempt to create the pool outside the except block to avoid
     # "During handling of the above exception..." madness
-    return await create_pool(settings, _retry=_retry + 1)
+    return await create_pool(
+        settings, retry=retry + 1, job_serializer=job_serializer, job_deserializer=job_deserializer
+    )
 
 
 async def log_redis_info(redis, log_func):
