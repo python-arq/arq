@@ -488,14 +488,14 @@ async def test_custom_queue_read_limit(arq_redis: ArqRedis, worker):
     assert worker.jobs_retried == 0
 
     await worker._poll_iteration()
-    await asyncio.sleep(0.01)
+    await asyncio.sleep(0.1)
     assert await arq_redis.zcard(default_queue_name) == 2
     assert worker.jobs_complete == 2
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
 
     await worker._poll_iteration()
-    await asyncio.sleep(0.01)
+    await asyncio.sleep(0.1)
     assert await arq_redis.zcard(default_queue_name) == 0
     assert worker.jobs_complete == 4
     assert worker.jobs_failed == 0
