@@ -3,6 +3,10 @@
 History
 -------
 
+v0.17.0 (unreleased)
+....................
+* add ``worker.queue_read_limit``, fix #141, by @rubik
+
 v0.16.1 (2019-08-02)
 ....................
 * prevent duplicate ``job_id`` when job result exists, fix #137
