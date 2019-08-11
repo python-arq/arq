@@ -138,7 +138,8 @@ class Worker:
     :param job_timeout: default job timeout (max run time)
     :param keep_result: default duration to keep job results for
     :param poll_delay: duration between polling the queue for new jobs
-    :param queue_read_limit: the maximum number of jobs to pull from the queue each time it's polled; by default it equals ``max_jobs``
+    :param queue_read_limit: the maximum number of jobs to pull from the queue each time it's polled; by default it
+                             equals ``max_jobs``
     :param max_tries: default maximum number of times to retry a job
     :param health_check_interval: how often to set the health check key
     :param health_check_key: redis key under which health check is set
