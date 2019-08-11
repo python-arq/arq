@@ -458,7 +458,6 @@ async def test_queue_read_limit_equals_max_jobs(arq_redis: ArqRedis, worker):
 
     assert await arq_redis.zcard(default_queue_name) == 4
     worker: Worker = worker(functions=[foobar], max_jobs=2)
-    worker.pool = await create_pool(worker.redis_settings)
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
@@ -484,7 +483,6 @@ async def test_custom_queue_read_limit(arq_redis: ArqRedis, worker):
 
     assert await arq_redis.zcard(default_queue_name) == 4
     worker: Worker = worker(functions=[foobar], max_jobs=4, queue_read_limit=2)
-    worker.pool = await create_pool(worker.redis_settings)
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
