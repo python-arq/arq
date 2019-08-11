@@ -54,12 +54,12 @@ class ArqRedis(Redis):
     def __init__(
         self,
         pool_or_conn,
-        _job_serializer: Optional[Serializer] = None,
-        _job_deserializer: Optional[Deserializer] = None,
+        job_serializer: Optional[Serializer] = None,
+        job_deserializer: Optional[Deserializer] = None,
         **kwargs,
     ) -> None:
-        self._job_serializer = _job_serializer
-        self._job_deserializer = _job_deserializer
+        self.job_serializer = job_serializer
+        self.job_deserializer = job_deserializer
         super().__init__(pool_or_conn, **kwargs)
 
     async def enqueue_job(
@@ -115,7 +115,7 @@ class ArqRedis(Redis):
 
             expires_ms = expires_ms or score - enqueue_time_ms + expires_extra_ms
 
-            job = serialize_job(function, args, kwargs, _job_try, enqueue_time_ms, serializer=self._job_serializer)
+            job = serialize_job(function, args, kwargs, _job_try, enqueue_time_ms, serializer=self.job_serializer)
             tr = conn.multi_exec()
             tr.psetex(job_key, expires_ms, job)
             tr.zadd(_queue_name, score, job_id)
@@ -124,11 +124,11 @@ class ArqRedis(Redis):
             except MultiExecError:
                 # job got enqueued since we checked 'job_exists'
                 return
-        return Job(job_id, redis=self, _deserializer=self._job_deserializer)
+        return Job(job_id, redis=self, _deserializer=self.job_deserializer)
 
     async def _get_job_result(self, key):
         job_id = key[len(result_key_prefix) :]
-        job = Job(job_id, self, _deserializer=self._job_deserializer)
+        job = Job(job_id, self, _deserializer=self.job_deserializer)
         r = await job.result_info()
         r.job_id = job_id
         return r
@@ -165,7 +165,7 @@ async def create_pool(
             timeout=settings.conn_timeout,
             encoding='utf8',
             commands_factory=functools.partial(
-                ArqRedis, _job_serializer=job_serializer, _job_deserializer=job_deserializer
+                ArqRedis, job_serializer=job_serializer, job_deserializer=job_deserializer
             ),
         )
     except (ConnectionError, OSError, aioredis.RedisError, asyncio.TimeoutError) as e:

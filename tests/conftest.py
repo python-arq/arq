@@ -24,7 +24,7 @@ async def arq_redis_msgpack(loop):
         encoding='utf8',
         loop=loop,
         commands_factory=functools.partial(
-            ArqRedis, _job_serializer=msgpack.packb, _job_deserializer=functools.partial(msgpack.unpackb, raw=False)
+            ArqRedis, job_serializer=msgpack.packb, job_deserializer=functools.partial(msgpack.unpackb, raw=False)
         ),
     )
     await redis_.flushall()
