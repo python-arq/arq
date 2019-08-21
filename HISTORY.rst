@@ -3,6 +3,10 @@
 History
 -------
 
+v0.17.1 (unreleased)
+....................
+* deal better with failed job deserialization, #149 by @samuelcolvin
+
 v0.17 (2019-08-11)
 ..................
 * add ``worker.queue_read_limit``, fix #141, by @rubik

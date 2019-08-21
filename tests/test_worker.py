@@ -239,7 +239,6 @@ async def test_job_expired_run_check(arq_redis: ArqRedis, worker, caplog):
     with pytest.raises(FailedJobs) as exc_info:
         await worker.run_check()
 
-    debug(exc_info.value)
     assert str(exc_info.value) in {
         "1 job failed JobExecutionFailed('job expired',)",  # python 3.6
         "1 job failed JobExecutionFailed('job expired')",  # python 3.7
