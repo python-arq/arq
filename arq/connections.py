@@ -169,18 +169,28 @@ async def create_pool(
     thus allowing job enqueuing.
     """
     settings = settings or RedisSettings()
-    addr = settings.host, settings.port
+
     try:
-        pool = await aioredis.create_redis_pool(
+        if settings.sentinels:
+            pool_factory = aioredis.create_sentinel_pool
+            addr = [(s['host'], s['port']) for s in settings.sentinels['hosts']]
+            
+            settings.host = addr[0][0]
+            settings.port = addr[0][1]
+        
+        else:
+            pool_factory = aioredis.create_redis_pool
+            addr = settings.host, settings.port
+
+        pool = await pool_factory(
             addr,
             db=settings.database,
             password=settings.password,
             timeout=settings.conn_timeout,
-            encoding='utf8',
-            commands_factory=functools.partial(
-                ArqRedis, job_serializer=job_serializer, job_deserializer=job_deserializer
-            ),
+            encoding='utf8'
         )
+
+        pool = ArqRedis(pool, job_serializer=job_serializer, job_deserializer=job_deserializer)
     except (ConnectionError, OSError, aioredis.RedisError, asyncio.TimeoutError) as e:
         if retry < settings.conn_retries:
             logger.warning(
