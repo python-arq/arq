@@ -11,7 +11,7 @@ from aioredis import create_redis_pool
 
 from arq.connections import ArqRedis
 from arq.constants import default_queue_name, health_check_key_suffix, job_key_prefix
-from arq.jobs import Job, JobStatus, SerializationError
+from arq.jobs import Job, JobStatus
 from arq.worker import FailedJobs, JobExecutionFailed, Retry, Worker, async_check_health, check_health, func, run_worker
 
 
@@ -239,6 +239,7 @@ async def test_job_expired_run_check(arq_redis: ArqRedis, worker, caplog):
     with pytest.raises(FailedJobs) as exc_info:
         await worker.run_check()
 
+    debug(exc_info.value)
     assert str(exc_info.value) in {
         "1 job failed JobExecutionFailed('job expired',)",  # python 3.6
         "1 job failed JobExecutionFailed('job expired')",  # python 3.7
@@ -515,12 +516,29 @@ async def test_custom_serializers(arq_redis_msgpack: ArqRedis, worker):
     assert r.result == 42
 
 
+class UnpickleFails:
+    def __init__(self, v):
+        self.v = v
+
+    def __setstate__(self, state):
+        raise ValueError('this broke')
+
+
+async def test_deserialization_error(arq_redis: ArqRedis, worker):
+    await arq_redis.enqueue_job('foobar', UnpickleFails('hello'), _job_id='job_id')
+    worker: Worker = worker(functions=[foobar])
+    with pytest.raises(FailedJobs) as exc_info:
+        await worker.run_check()
+    assert str(exc_info.value) == "1 job failed DeserializationError('unable to deserialize job')"
+
+
 async def test_incompatible_serializers_1(arq_redis_msgpack: ArqRedis, worker):
     await arq_redis_msgpack.enqueue_job('foobar', _job_id='job_id')
     worker: Worker = worker(functions=[foobar])
-    with pytest.raises(SerializationError) as exc_info:
-        await worker.main()
-    assert exc_info.value.args[0].startswith('unable to deserialize job: ')
+    await worker.main()
+    assert worker.jobs_complete == 0
+    assert worker.jobs_failed == 1
+    assert worker.jobs_retried == 0
 
 
 async def test_incompatible_serializers_2(arq_redis: ArqRedis, worker):
@@ -528,6 +546,7 @@ async def test_incompatible_serializers_2(arq_redis: ArqRedis, worker):
     worker: Worker = worker(
         functions=[foobar], job_serializer=msgpack.packb, job_deserializer=functools.partial(msgpack.unpackb, raw=False)
     )
-    with pytest.raises(SerializationError) as exc_info:
-        await worker.main()
-    assert exc_info.value.args[0].startswith('unable to deserialize job: ')
+    await worker.main()
+    assert worker.jobs_complete == 0
+    assert worker.jobs_failed == 1
+    assert worker.jobs_retried == 0
