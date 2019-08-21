@@ -32,6 +32,7 @@ class RedisSettings:
     conn_timeout: int = 1
     conn_retries: int = 5
     conn_retry_delay: int = 1
+    sentinels: dict = None
 
     def __repr__(self):
         return '<RedisSettings {}>'.format(' '.join(f'{k}={v}' for k, v in self.__dict__.items()))
@@ -174,7 +175,7 @@ async def create_pool(
         if settings.sentinels:
             pool_factory = aioredis.create_sentinel_pool
             addr = [(s['host'], s['port']) for s in settings.sentinels['hosts']]
-            
+
             settings.host = addr[0][0]
             settings.port = addr[0][1]
         
