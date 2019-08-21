@@ -168,7 +168,9 @@ async def test_job_job_not_found_run_check(arq_redis: ArqRedis, worker, caplog):
 
     assert exc_info.value.count == 1
     assert len(exc_info.value.job_results) == 1
-    assert exc_info.value.job_results[0].result == JobExecutionFailed("function 'missing' not found")
+    failure = exc_info.value.job_results[0].result
+    assert failure == JobExecutionFailed("function 'missing' not found")
+    assert failure != 123  # check the __eq__ method of JobExecutionFailed
 
 
 async def test_retry_lots(arq_redis: ArqRedis, worker, caplog):
@@ -551,3 +553,20 @@ async def test_incompatible_serializers_2(arq_redis: ArqRedis, worker):
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 1
     assert worker.jobs_retried == 0
+
+
+async def test_max_jobs_completes(arq_redis: ArqRedis, worker):
+    v = 0
+
+    async def raise_second_time(ctx):
+        nonlocal v
+        v += 1
+        if v > 1:
+            raise ValueError('xxx')
+
+    await arq_redis.enqueue_job('raise_second_time')
+    await arq_redis.enqueue_job('raise_second_time')
+    worker: Worker = worker(functions=[func(raise_second_time, name='foobar')])
+    with pytest.raises(FailedJobs) as exc_info:
+        await worker.run_check(max_burst_jobs=1)
+    assert repr(exc_info.value).startswith('<2 jobs failed:')

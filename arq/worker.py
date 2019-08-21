@@ -274,13 +274,12 @@ class Worker:
             await self._poll_iteration()
 
             if self.burst:
-                if (
-                    self.max_burst_jobs >= 0
-                    and self.jobs_complete + self.jobs_retried + self.jobs_failed >= self.max_burst_jobs
-                ):
+                if 0 <= self.max_burst_jobs <= self.jobs_complete + self.jobs_retried + self.jobs_failed:
+                    await asyncio.gather(*self.tasks)
                     return
                 queued_jobs = await self.pool.zcard(self.queue_name)
                 if queued_jobs == 0:
+                    await asyncio.gather(*self.tasks)
                     return
 
     async def _poll_iteration(self):
@@ -291,10 +290,10 @@ class Worker:
             )
         await self.run_jobs(job_ids)
 
-        # required to make sure errors in run_job get propagated
         for t in self.tasks:
             if t.done():
                 self.tasks.remove(t)
+                # required to make sure errors in run_job get propagated
                 t.result()
 
         await self.heart_beat()

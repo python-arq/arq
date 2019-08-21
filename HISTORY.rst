@@ -6,6 +6,7 @@ History
 v0.17.1 (unreleased)
 ....................
 * deal better with failed job deserialization, #149 by @samuelcolvin
+* fix ``run_check(xmax_burst_jobs=...)`` when a jobs fails, #150 by @samuelcolvin
 
 v0.17 (2019-08-11)
 ..................
