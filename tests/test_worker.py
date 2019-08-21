@@ -3,6 +3,7 @@ import functools
 import logging
 import re
 import signal
+import sys
 from unittest.mock import MagicMock
 
 import msgpack
@@ -523,6 +524,7 @@ class UnpickleFails:
         raise ValueError('this broke')
 
 
+@pytest.mark.skipif(sys.version_info < (3, 7), reason='repr(exc) is ugly in 3.6')
 async def test_deserialization_error(arq_redis: ArqRedis, worker):
     await arq_redis.enqueue_job('foobar', UnpickleFails('hello'), _job_id='job_id')
     worker: Worker = worker(functions=[foobar])
