@@ -14,7 +14,7 @@ from aioredis import MultiExecError
 from pydantic.utils import import_string
 
 from arq.cron import CronJob
-from arq.jobs import Deserializer, Serializer, deserialize_job_raw, serialize_result
+from arq.jobs import Deserializer, SerializationError, Serializer, deserialize_job_raw, serialize_result
 
 from .connections import ArqRedis, RedisSettings, create_pool, log_redis_info
 from .constants import (
@@ -334,47 +334,42 @@ class Worker:
             self.pool.incr(retry_key_prefix + job_id),
             self.pool.expire(retry_key_prefix + job_id, 88400),
         )
-        if not v:
-            logger.warning('job %s expired', job_id)
+        function_name, args, kwargs, enqueue_time_ms = '<unknown>', (), {}, 0
+
+        async def job_failed(exc: Exception):
             self.jobs_failed += 1
-            result_data = serialize_result(
-                '<unknown>',
-                (),
-                {},
-                job_try,
-                0,
-                False,
-                JobExecutionFailed('job expired'),
-                start_ms,
-                timestamp_ms(),
-                f'{job_id}:<unknown function>',
+            result_data_ = serialize_result(
+                function=function_name,
+                args=args,
+                kwargs=kwargs,
+                job_try=job_try,
+                enqueue_time_ms=enqueue_time_ms,
+                success=False,
+                result=exc,
+                start_ms=start_ms,
+                finished_ms=timestamp_ms(),
+                ref=f'{job_id}:{function_name}',
                 serializer=self.job_serializer,
             )
-            return await asyncio.shield(self.abort_job(job_id, result_data))
+            await asyncio.shield(self.abort_job(job_id, result_data_))
 
-        function_name, args, kwargs, enqueue_job_try, enqueue_time_ms = deserialize_job_raw(
-            v, deserializer=self.job_deserializer
-        )
+        if not v:
+            logger.warning('job %s expired', job_id)
+            return await job_failed(JobExecutionFailed('job expired'))
+
+        try:
+            function_name, args, kwargs, enqueue_job_try, enqueue_time_ms = deserialize_job_raw(
+                v, deserializer=self.job_deserializer
+            )
+        except SerializationError as e:
+            logger.exception('deserializing job %s failed', job_id)
+            return await job_failed(e)
 
         try:
             function: Union[Function, CronJob] = self.functions[function_name]
         except KeyError:
             logger.warning('job %s, function %r not found', job_id, function_name)
-            self.jobs_failed += 1
-            result_data = serialize_result(
-                function_name,
-                args,
-                kwargs,
-                job_try,
-                enqueue_time_ms,
-                False,
-                JobExecutionFailed(f'function {function_name!r} not found'),
-                start_ms,
-                timestamp_ms(),
-                f'{job_id}:{function_name}',
-                serializer=self.job_serializer,
-            )
-            return await asyncio.shield(self.abort_job(job_id, result_data))
+            return await job_failed(JobExecutionFailed(f'function {function_name!r} not found'))
 
         if hasattr(function, 'next_run'):
             # cron_job
@@ -499,13 +494,14 @@ class Worker:
             tr.delete(*delete_keys)
             await tr.execute()
 
-    async def abort_job(self, job_id: str, result_data: bytes):
+    async def abort_job(self, job_id: str, result_data: Optional[bytes]):
         with await self.pool as conn:
             await conn.unwatch()
             tr = conn.multi_exec()
             tr.delete(retry_key_prefix + job_id, in_progress_key_prefix + job_id, job_key_prefix + job_id)
             tr.zrem(self.queue_name, job_id)
-            tr.setex(result_key_prefix + job_id, self.keep_result_s, result_data)
+            if result_data is not None:
+                tr.setex(result_key_prefix + job_id, self.keep_result_s, result_data)
             await tr.execute()
 
     async def heart_beat(self):

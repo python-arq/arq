@@ -80,8 +80,10 @@ class Job:
                 result = info.result
                 if info.success:
                     return result
-                else:
+                elif isinstance(result, Exception):
                     raise result
+                else:
+                    raise SerializationError(result)
             if timeout is not None and delay > timeout:
                 raise asyncio.TimeoutError()
 
@@ -126,6 +128,10 @@ class Job:
 
 
 class SerializationError(RuntimeError):
+    pass
+
+
+class DeserializationError(SerializationError):
     pass
 
 
@@ -179,7 +185,8 @@ def serialize_result(
     except Exception:
         logger.warning('error serializing result of %s', ref, exc_info=True)
 
-    data.update(r=SerializationError('unable to serialize result'), s=False)
+    # use string in case serialization fails again
+    data.update(r='unable to serialize result', s=False)
     try:
         return serializer(data)
     except Exception:
@@ -200,7 +207,7 @@ def deserialize_job(r: bytes, *, deserializer: Optional[Deserializer] = None) ->
             score=None,
         )
     except Exception as e:
-        raise SerializationError(f'unable to deserialize job: {r!r}') from e
+        raise DeserializationError('unable to deserialize job') from e
 
 
 def deserialize_job_raw(r: bytes, *, deserializer: Optional[Deserializer] = None) -> tuple:
@@ -210,7 +217,7 @@ def deserialize_job_raw(r: bytes, *, deserializer: Optional[Deserializer] = None
         d = deserializer(r)
         return d['f'], d['a'], d['k'], d['t'], d['et']
     except Exception as e:
-        raise SerializationError(f'unable to deserialize job: {r!r}') from e
+        raise DeserializationError('unable to deserialize job') from e
 
 
 def deserialize_result(r: bytes, *, deserializer: Optional[Deserializer] = None) -> JobResult:
@@ -231,4 +238,4 @@ def deserialize_result(r: bytes, *, deserializer: Optional[Deserializer] = None)
             finish_time=ms_to_datetime(d['ft']),
         )
     except Exception as e:
-        raise SerializationError(f'unable to deserialize job result: {r!r}') from e
+        raise DeserializationError('unable to deserialize job result') from e

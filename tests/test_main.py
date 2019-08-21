@@ -146,7 +146,7 @@ async def test_cant_pickle_arg(arq_redis: ArqRedis, worker):
         def __getstate__(self):
             raise TypeError("this doesn't pickle")
 
-    with pytest.raises(SerializationError):
+    with pytest.raises(SerializationError, match='unable to serialize job "foobar"'):
         await arq_redis.enqueue_job('foobar', Foobar())
 
 
@@ -161,7 +161,7 @@ async def test_cant_pickle_result(arq_redis: ArqRedis, worker):
     j1 = await arq_redis.enqueue_job('foobar')
     w: Worker = worker(functions=[func(foobar, name='foobar')])
     await w.main()
-    with pytest.raises(SerializationError):
+    with pytest.raises(SerializationError, match='unable to serialize result'):
         await j1.result(pole_delay=0)
 
 

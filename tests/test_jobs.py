@@ -1,12 +1,13 @@
 import asyncio
+import pickle
 
 import pytest
 from pytest_toolbox.comparison import CloseToNow
 
 from arq import Worker, func
 from arq.connections import ArqRedis
-from arq.constants import in_progress_key_prefix
-from arq.jobs import Job, JobResult, JobStatus, serialize_result
+from arq.constants import in_progress_key_prefix, job_key_prefix, result_key_prefix
+from arq.jobs import DeserializationError, Job, JobResult, JobStatus, deserialize_job_raw, serialize_result
 
 
 async def test_job_in_progress(arq_redis: ArqRedis):
@@ -97,3 +98,35 @@ async def test_custom_serializer():
         'foobar', (Foobar(),), {}, 1, 123, True, Foobar(), 123, 123, 'testing', serializer=custom_serializer
     )
     assert r2 == b'0123456789'
+
+
+async def test_deserialize_result(arq_redis: ArqRedis, worker):
+    async def foobar(ctx, a, b):
+        return a + b
+
+    j = await arq_redis.enqueue_job('foobar', 1, 2)
+    assert JobStatus.queued == await j.status()
+    worker: Worker = worker(functions=[func(foobar, name='foobar')])
+    await worker.run_check()
+    assert await j.result(pole_delay=0) == 3
+    assert await j.result(pole_delay=0) == 3
+    info = await j.info()
+    assert info.args == (1, 2)
+    await arq_redis.set(result_key_prefix + j.job_id, b'invalid pickle data')
+    with pytest.raises(DeserializationError, match='unable to deserialize job result'):
+        assert await j.result(pole_delay=0) == 3
+
+
+async def test_deserialize_info(arq_redis: ArqRedis):
+    j = await arq_redis.enqueue_job('foobar', 1, 2)
+    assert JobStatus.queued == await j.status()
+    await arq_redis.set(job_key_prefix + j.job_id, b'invalid pickle data')
+
+    with pytest.raises(DeserializationError, match='unable to deserialize job'):
+        assert await j.info()
+
+
+async def test_deserialize_job_raw():
+    assert deserialize_job_raw(pickle.dumps({'f': 1, 'a': 2, 'k': 3, 't': 4, 'et': 5})) == (1, 2, 3, 4, 5)
+    with pytest.raises(DeserializationError, match='unable to deserialize job'):
+        deserialize_job_raw(b'123')
