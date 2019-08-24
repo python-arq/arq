@@ -173,7 +173,10 @@ async def create_pool(
 
     try:
         if settings.sentinels:
-            def pool_factory(*args, **kwargs): aioredis.sentinel.create_sentinel_pool(*args, **kwargs).master_for("mymaster")
+            async def pool_factory(*args, **kwargs):
+                client = await aioredis.sentinel.create_sentinel_pool(*args, **kwargs)
+                return client.master_for("mymaster")
+
             addr = [(s['host'], s['port']) for s in settings.sentinels['hosts']]
 
             settings.host = addr[0][0]
