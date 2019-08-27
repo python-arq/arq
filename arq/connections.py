@@ -1,6 +1,8 @@
 import asyncio
 import functools
 import logging
+import socket
+
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
@@ -15,7 +17,6 @@ from .jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('arq.connections')
-
 
 @dataclass
 class RedisSettings:
@@ -32,7 +33,10 @@ class RedisSettings:
     conn_timeout: int = 1
     conn_retries: int = 5
     conn_retry_delay: int = 1
-    sentinels: dict = None
+    sentinel: dict = {
+        'master': '',
+        'hosts': [('localhost', 26379)]
+    }
 
     def __repr__(self):
         return '<RedisSettings {}>'.format(' '.join(f'{k}={v}' for k, v in self.__dict__.items()))
@@ -172,12 +176,12 @@ async def create_pool(
     settings = settings or RedisSettings()
 
     try:
-        if settings.sentinels:
+        if settings.sentinel.master:
             async def pool_factory(*args, **kwargs):
                 client = await aioredis.sentinel.create_sentinel_pool(*args, **kwargs)
-                return client.master_for("mymaster")
+                return client.master_for(settings.sentinel['master'])
 
-            addr = [(s['host'], s['port']) for s in settings.sentinels['hosts']]
+            addr = [(s['host'], s['port']) for s in settings.sentinel['hosts']]
 
             settings.host = addr[0][0]
             settings.port = addr[0][1]
