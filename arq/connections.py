@@ -1,12 +1,11 @@
 import asyncio
 import functools
 import logging
-import socket
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
-from typing import Any, List, Optional, Union
+from typing import Any, List, Optional, Union, Tuple
 from uuid import uuid4
 
 import aioredis
