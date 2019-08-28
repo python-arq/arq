@@ -26,17 +26,16 @@ class RedisSettings:
     Used by :func:`arq.connections.create_pool` and :class:`arq.worker.Worker`.
     """
 
-    host: str = 'localhost'
+    host: Union[str, List[Tuple[str, int]]] = 'localhost'
     port: int = 6379
     database: int = 0
     password: str = None
     conn_timeout: int = 1
     conn_retries: int = 5
     conn_retry_delay: int = 1
-    sentinel: dict = {
-        'master': '',
-        'hosts': [('localhost', 26379)]
-    }
+
+    sentinel: bool = False
+    sentinel_master: str = 'mymaster'
 
     def __repr__(self):
         return '<RedisSettings {}>'.format(' '.join(f'{k}={v}' for k, v in self.__dict__.items()))
@@ -175,21 +174,19 @@ async def create_pool(
     """
     settings = settings or RedisSettings()
 
+    assert not (type(settings.host) is str and settings.sentinel), "str provided for 'host' but 'sentinel' is true; list of sentinels expected"
+    assert not (_defer_until and _defer_by), "use either 'defer_until' or 'defer_by' or neither, not both"
+
+    if settings.sentinel:
+        addr = settings.host
+        async def pool_factory(*args, **kwargs):
+            client = await aioredis.sentinel.create_sentinel_pool(*args, **kwargs)
+            return client.master_for(settings.sentinel_master)
+    else:
+        pool_factory = aioredis.create_redis_pool
+        addr = settings.host, settings.port
+
     try:
-        if settings.sentinel.master:
-            async def pool_factory(*args, **kwargs):
-                client = await aioredis.sentinel.create_sentinel_pool(*args, **kwargs)
-                return client.master_for(settings.sentinel['master'])
-
-            addr = [(s['host'], s['port']) for s in settings.sentinel['hosts']]
-
-            settings.host = addr[0][0]
-            settings.port = addr[0][1]
-        
-        else:
-            pool_factory = aioredis.create_redis_pool
-            addr = settings.host, settings.port
-
         pool = await pool_factory(
             addr,
             db=settings.database,
@@ -199,12 +196,12 @@ async def create_pool(
         )
 
         pool = ArqRedis(pool, job_serializer=job_serializer, job_deserializer=job_deserializer)
+
     except (ConnectionError, OSError, aioredis.RedisError, asyncio.TimeoutError) as e:
         if retry < settings.conn_retries:
             logger.warning(
-                'redis connection error %s:%s %s %s, %d retries remaining...',
-                settings.host,
-                settings.port,
+                'redis connection error %s %s %s, %d retries remaining...',
+                addr,
                 e.__class__.__name__,
                 e,
                 settings.conn_retries - retry,
