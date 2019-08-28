@@ -1,11 +1,9 @@
 import asyncio
-import functools
 import logging
-
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
-from typing import Any, List, Optional, Union, Tuple
+from typing import Any, List, Optional, Tuple, Union
 from uuid import uuid4
 
 import aioredis
@@ -16,6 +14,7 @@ from .jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('arq.connections')
+
 
 @dataclass
 class RedisSettings:
@@ -173,25 +172,24 @@ async def create_pool(
     """
     settings = settings or RedisSettings()
 
-    assert not (type(settings.host) is str and settings.sentinel), "str provided for 'host' but 'sentinel' is true; list of sentinels expected"
-    assert not (_defer_until and _defer_by), "use either 'defer_until' or 'defer_by' or neither, not both"
+    assert not (
+        type(settings.host) is str and settings.sentinel
+    ), "str provided for 'host' but 'sentinel' is true; list of sentinels expected"
 
     if settings.sentinel:
         addr = settings.host
+
         async def pool_factory(*args, **kwargs):
             client = await aioredis.sentinel.create_sentinel_pool(*args, **kwargs)
             return client.master_for(settings.sentinel_master)
+
     else:
         pool_factory = aioredis.create_redis_pool
         addr = settings.host, settings.port
 
     try:
         pool = await pool_factory(
-            addr,
-            db=settings.database,
-            password=settings.password,
-            timeout=settings.conn_timeout,
-            encoding='utf8'
+            addr, db=settings.database, password=settings.password, timeout=settings.conn_timeout, encoding='utf8'
         )
 
         pool = ArqRedis(pool, job_serializer=job_serializer, job_deserializer=job_deserializer)
