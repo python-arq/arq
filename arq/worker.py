@@ -328,6 +328,9 @@ class Worker:
                 except MultiExecError:
                     # job already started elsewhere since we got 'existing'
                     self.sem.release()
+                    logger.debug('multi-exec error, job %s already started elsewhere', job_id)
+                    # https://github.com/samuelcolvin/arq/issues/131, avoid warnings in log
+                    await asyncio.gather(*tr._results, return_exceptions=True)
                 else:
                     t = self.loop.create_task(self.run_job(job_id, score))
                     t.add_done_callback(lambda _: self.sem.release())
@@ -506,7 +509,8 @@ class Worker:
             tr = conn.multi_exec()
             tr.delete(retry_key_prefix + job_id, in_progress_key_prefix + job_id, job_key_prefix + job_id)
             tr.zrem(self.queue_name, job_id)
-            if result_data is not None:
+            # result_data would only be None if serializing the result fails
+            if result_data is not None:  # pragma: no branch
                 tr.setex(result_key_prefix + job_id, self.keep_result_s, result_data)
             await tr.execute()
 

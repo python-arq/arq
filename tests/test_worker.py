@@ -352,9 +352,9 @@ async def test_log_health_check(arq_redis: ArqRedis, worker, caplog):
     await worker.main()
     assert worker.jobs_complete == 1
 
-    log = re.sub(r'\d+.\d\ds', 'X.XXs', '\n'.join(r.message for r in caplog.records))
-    assert 'j_complete=1 j_failed=0 j_retried=0 j_ongoing=0 queued=0' in log
-    assert log.count('recording health') == 1
+    assert 'j_complete=1 j_failed=0 j_retried=0 j_ongoing=0 queued=0' in caplog.text
+    # assert log.count('recording health') == 1 can happen more than once due to redis pool size
+    assert 'recording health' in caplog.text
 
 
 async def test_remain_keys(arq_redis: ArqRedis, worker):
@@ -638,3 +638,16 @@ async def test_non_burst(arq_redis: ArqRedis, worker, caplog, loop):
     assert worker.jobs_retried == 0
     assert worker.jobs_failed == 0
     assert '← testing:foo ● 2' in caplog.text
+
+
+async def test_multi_exec(arq_redis: ArqRedis, worker, caplog):
+    async def foo(ctx, v):
+        return v + 1
+
+    caplog.set_level(logging.DEBUG, logger='arq.worker')
+    await arq_redis.enqueue_job('foo', 1, _job_id='testing')
+    worker: Worker = worker(functions=[func(foo, name='foo')])
+    await asyncio.gather(*[worker.run_jobs(['testing']) for _ in range(5)])
+    # debug(caplog.text)
+    assert 'multi-exec error, job testing already started elsewhere' in caplog.text
+    assert 'WatchVariableError' not in caplog.text
