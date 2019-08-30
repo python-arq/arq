@@ -329,7 +329,6 @@ class Worker:
                     # job already started elsewhere since we got 'existing'
                     self.sem.release()
                     logger.debug('multi-exec error, job %s already started elsewhere', job_id)
-
                     # https://github.com/samuelcolvin/arq/issues/131, avoid warnings in log
                     await asyncio.gather(*tr._results, return_exceptions=True)
                 else:
