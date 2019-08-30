@@ -123,6 +123,8 @@ class ArqRedis(Redis):
                 await tr.execute()
             except MultiExecError:
                 # job got enqueued since we checked 'job_exists'
+                # https://github.com/samuelcolvin/arq/issues/131, avoid warnings in log
+                await asyncio.gather(*tr._results, return_exceptions=True)
                 return
         return Job(job_id, redis=self, _deserializer=self.job_deserializer)
 
