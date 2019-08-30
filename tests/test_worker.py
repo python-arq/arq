@@ -623,7 +623,7 @@ async def test_max_bursts_dont_get(arq_redis: ArqRedis, worker):
     assert len(worker.tasks) == 0
 
 
-async def test_non_burst(arq_redis: ArqRedis, worker, caplog):
+async def test_non_burst(arq_redis: ArqRedis, worker, caplog, loop):
     async def foo(ctx, v):
         return v + 1
 
@@ -631,7 +631,7 @@ async def test_non_burst(arq_redis: ArqRedis, worker, caplog):
     await arq_redis.enqueue_job('foo', 1, _job_id='testing')
     worker: Worker = worker(functions=[func(foo, name='foo')])
     worker.burst = False
-    t = asyncio.create_task(worker.main())
+    t = loop.create_task(worker.main())
     await asyncio.sleep(0.1)
     t.cancel()
     assert worker.jobs_complete == 1
