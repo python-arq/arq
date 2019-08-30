@@ -3,7 +3,7 @@
 History
 -------
 
-v0.18 (unreleased)
+v0.18 (2019-08-30)
 ..................
 * fix usage of ``max_burst_jobs``, improve coverage fix #152
 * stop lots of ``WatchVariableError`` errors in log, #153

@@ -409,7 +409,7 @@ async def test_return_exception(arq_redis: ArqRedis, worker):
 
     j = await arq_redis.enqueue_job('return_error')
     worker: Worker = worker(functions=[func(return_error, name='return_error')])
-    await worker.async_run()
+    await worker.main()
     assert (worker.jobs_complete, worker.jobs_failed, worker.jobs_retried) == (1, 0, 0)
     r = await j.result(pole_delay=0)
     assert isinstance(r, TypeError)
@@ -420,7 +420,7 @@ async def test_return_exception(arq_redis: ArqRedis, worker):
 async def test_error_success(arq_redis: ArqRedis, worker):
     j = await arq_redis.enqueue_job('fails')
     worker: Worker = worker(functions=[func(fails, name='fails')])
-    await worker.async_run()
+    await worker.main()
     assert (worker.jobs_complete, worker.jobs_failed, worker.jobs_retried) == (0, 1, 0)
     info = await j.result_info()
     assert info.success is False
@@ -540,7 +540,7 @@ async def test_deserialization_error(arq_redis: ArqRedis, worker):
 async def test_incompatible_serializers_1(arq_redis_msgpack: ArqRedis, worker):
     await arq_redis_msgpack.enqueue_job('foobar', _job_id='job_id')
     worker: Worker = worker(functions=[foobar])
-    await worker.async_run()
+    await worker.main()
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 1
     assert worker.jobs_retried == 0
@@ -551,7 +551,7 @@ async def test_incompatible_serializers_2(arq_redis: ArqRedis, worker):
     worker: Worker = worker(
         functions=[foobar], job_serializer=msgpack.packb, job_deserializer=functools.partial(msgpack.unpackb, raw=False)
     )
-    await worker.async_run()
+    await worker.main()
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 1
     assert worker.jobs_retried == 0
