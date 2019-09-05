@@ -270,8 +270,8 @@ class Worker:
         if self.on_startup:
             await self.on_startup(self.ctx)
 
-        async for _ in poll(self.poll_delay_s):  # noqa F841
-            await self._poll_iteration()
+        while True:  # noqa F841
+            jobs_present = await self._poll_iteration()
 
             if self.burst:
                 if 0 <= self.max_burst_jobs <= self._jobs_started():
@@ -281,6 +281,9 @@ class Worker:
                 if queued_jobs == 0:
                     await asyncio.gather(*self.tasks)
                     return
+
+            if not jobs_present:
+                await asyncio.sleep(self.poll_delay_s)
 
     async def _poll_iteration(self):
         count = self.queue_read_limit
@@ -304,6 +307,7 @@ class Worker:
                 t.result()
 
         await self.heart_beat()
+        return bool(job_ids)
 
     async def run_jobs(self, job_ids):
         for job_id in job_ids:
