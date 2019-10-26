@@ -229,7 +229,7 @@ class Worker:
         self.main_task = self.loop.create_task(self.main())
         try:
             self.loop.run_until_complete(self.main_task)
-        except asyncio.CancelledError:
+        except asyncio.CancelledError:  # pragma: no cover
             # happens on shutdown, fine
             pass
         finally:
@@ -274,7 +274,7 @@ class Worker:
             await self._poll_iteration()
 
             if self.burst:
-                if 0 <= self.max_burst_jobs <= self.jobs_complete + self.jobs_retried + self.jobs_failed:
+                if 0 <= self.max_burst_jobs <= self._jobs_started():
                     await asyncio.gather(*self.tasks)
                     return
                 queued_jobs = await self.pool.zcard(self.queue_name)
@@ -283,10 +283,17 @@ class Worker:
                     return
 
     async def _poll_iteration(self):
+        count = self.queue_read_limit
+        if self.burst and self.max_burst_jobs >= 0:
+            burst_jobs_remaining = self.max_burst_jobs - self._jobs_started()
+            if burst_jobs_remaining < 1:
+                return
+            count = min(burst_jobs_remaining, count)
+
         async with self.sem:  # don't bother with zrangebyscore until we have "space" to run the jobs
             now = timestamp_ms()
             job_ids = await self.pool.zrangebyscore(
-                self.queue_name, offset=self._queue_read_offset, count=self.queue_read_limit, max=now
+                self.queue_name, offset=self._queue_read_offset, count=count, max=now
             )
         await self.run_jobs(job_ids)
 
@@ -321,6 +328,9 @@ class Worker:
                 except MultiExecError:
                     # job already started elsewhere since we got 'existing'
                     self.sem.release()
+                    logger.debug('multi-exec error, job %s already started elsewhere', job_id)
+                    # https://github.com/samuelcolvin/arq/issues/131, avoid warnings in log
+                    await asyncio.gather(*tr._results, return_exceptions=True)
                 else:
                     t = self.loop.create_task(self.run_job(job_id, score))
                     t.add_done_callback(lambda _: self.sem.release())
@@ -499,7 +509,8 @@ class Worker:
             tr = conn.multi_exec()
             tr.delete(retry_key_prefix + job_id, in_progress_key_prefix + job_id, job_key_prefix + job_id)
             tr.zrem(self.queue_name, job_id)
-            if result_data is not None:
+            # result_data would only be None if serializing the result fails
+            if result_data is not None:  # pragma: no branch
                 tr.setex(result_key_prefix + job_id, self.keep_result_s, result_data)
             await tr.execute()
 
@@ -546,6 +557,9 @@ class Worker:
 
     def _add_signal_handler(self, signal, handler):
         self.loop.add_signal_handler(signal, partial(handler, signal))
+
+    def _jobs_started(self):
+        return self.jobs_complete + self.jobs_retried + self.jobs_failed + len(self.tasks)
 
     def handle_sig(self, signum):
         sig = Signals(signum)

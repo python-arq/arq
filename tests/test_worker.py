@@ -352,9 +352,9 @@ async def test_log_health_check(arq_redis: ArqRedis, worker, caplog):
     await worker.main()
     assert worker.jobs_complete == 1
 
-    log = re.sub(r'\d+.\d\ds', 'X.XXs', '\n'.join(r.message for r in caplog.records))
-    assert 'j_complete=1 j_failed=0 j_retried=0 j_ongoing=0 queued=0' in log
-    assert log.count('recording health') == 1
+    assert 'j_complete=1 j_failed=0 j_retried=0 j_ongoing=0 queued=0' in caplog.text
+    # assert log.count('recording health') == 1 can happen more than once due to redis pool size
+    assert 'recording health' in caplog.text
 
 
 async def test_remain_keys(arq_redis: ArqRedis, worker):
@@ -409,7 +409,7 @@ async def test_return_exception(arq_redis: ArqRedis, worker):
 
     j = await arq_redis.enqueue_job('return_error')
     worker: Worker = worker(functions=[func(return_error, name='return_error')])
-    await worker.async_run()
+    await worker.main()
     assert (worker.jobs_complete, worker.jobs_failed, worker.jobs_retried) == (1, 0, 0)
     r = await j.result(pole_delay=0)
     assert isinstance(r, TypeError)
@@ -420,7 +420,7 @@ async def test_return_exception(arq_redis: ArqRedis, worker):
 async def test_error_success(arq_redis: ArqRedis, worker):
     j = await arq_redis.enqueue_job('fails')
     worker: Worker = worker(functions=[func(fails, name='fails')])
-    await worker.async_run()
+    await worker.main()
     assert (worker.jobs_complete, worker.jobs_failed, worker.jobs_retried) == (0, 1, 0)
     info = await j.result_info()
     assert info.success is False
@@ -512,7 +512,9 @@ async def test_custom_serializers(arq_redis_msgpack: ArqRedis, worker):
     worker: Worker = worker(
         functions=[foobar], job_serializer=msgpack.packb, job_deserializer=functools.partial(msgpack.unpackb, raw=False)
     )
-    await worker.main()
+    info = await j.info()
+    assert info.function == 'foobar'
+    assert await worker.run_check() == 1
     assert await j.result() == 42
     r = await j.info()
     assert r.result == 42
@@ -566,7 +568,86 @@ async def test_max_jobs_completes(arq_redis: ArqRedis, worker):
 
     await arq_redis.enqueue_job('raise_second_time')
     await arq_redis.enqueue_job('raise_second_time')
-    worker: Worker = worker(functions=[func(raise_second_time, name='foobar')])
+    await arq_redis.enqueue_job('raise_second_time')
+    worker: Worker = worker(functions=[func(raise_second_time, name='raise_second_time')])
     with pytest.raises(FailedJobs) as exc_info:
-        await worker.run_check(max_burst_jobs=1)
+        await worker.run_check(max_burst_jobs=3)
     assert repr(exc_info.value).startswith('<2 jobs failed:')
+
+
+async def test_max_bursts_sub_call(arq_redis: ArqRedis, worker, caplog):
+    async def foo(ctx, v):
+        return v + 1
+
+    async def bar(ctx, v):
+        await ctx['redis'].enqueue_job('foo', v + 1)
+
+    caplog.set_level(logging.INFO)
+    await arq_redis.enqueue_job('bar', 10)
+    worker: Worker = worker(functions=[func(foo, name='foo'), func(bar, name='bar')])
+    assert await worker.run_check(max_burst_jobs=1) == 1
+    assert worker.jobs_complete == 1
+    assert worker.jobs_retried == 0
+    assert worker.jobs_failed == 0
+    assert 'bar(10)' in caplog.text
+    assert 'foo' in caplog.text
+
+
+async def test_max_bursts_multiple(arq_redis: ArqRedis, worker, caplog):
+    async def foo(ctx, v):
+        return v + 1
+
+    caplog.set_level(logging.INFO)
+    await arq_redis.enqueue_job('foo', 1)
+    await arq_redis.enqueue_job('foo', 2)
+    worker: Worker = worker(functions=[func(foo, name='foo')])
+    assert await worker.run_check(max_burst_jobs=1) == 1
+    assert worker.jobs_complete == 1
+    assert worker.jobs_retried == 0
+    assert worker.jobs_failed == 0
+    assert 'foo(1)' in caplog.text
+    assert 'foo(2)' not in caplog.text
+
+
+async def test_max_bursts_dont_get(arq_redis: ArqRedis, worker):
+    async def foo(ctx, v):
+        return v + 1
+
+    await arq_redis.enqueue_job('foo', 1)
+    await arq_redis.enqueue_job('foo', 2)
+    worker: Worker = worker(functions=[func(foo, name='foo')])
+
+    worker.max_burst_jobs = 0
+    assert len(worker.tasks) == 0
+    await worker._poll_iteration()
+    assert len(worker.tasks) == 0
+
+
+async def test_non_burst(arq_redis: ArqRedis, worker, caplog, loop):
+    async def foo(ctx, v):
+        return v + 1
+
+    caplog.set_level(logging.INFO)
+    await arq_redis.enqueue_job('foo', 1, _job_id='testing')
+    worker: Worker = worker(functions=[func(foo, name='foo')])
+    worker.burst = False
+    t = loop.create_task(worker.main())
+    await asyncio.sleep(0.1)
+    t.cancel()
+    assert worker.jobs_complete == 1
+    assert worker.jobs_retried == 0
+    assert worker.jobs_failed == 0
+    assert '← testing:foo ● 2' in caplog.text
+
+
+async def test_multi_exec(arq_redis: ArqRedis, worker, caplog):
+    async def foo(ctx, v):
+        return v + 1
+
+    caplog.set_level(logging.DEBUG, logger='arq.worker')
+    await arq_redis.enqueue_job('foo', 1, _job_id='testing')
+    worker: Worker = worker(functions=[func(foo, name='foo')])
+    await asyncio.gather(*[worker.run_jobs(['testing']) for _ in range(5)])
+    # debug(caplog.text)
+    assert 'multi-exec error, job testing already started elsewhere' in caplog.text
+    assert 'WatchVariableError' not in caplog.text
