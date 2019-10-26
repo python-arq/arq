@@ -184,7 +184,7 @@ async def create_pool(
             return client.master_for(settings.sentinel_master)
 
     else:
-        pool_factory = aioredis.pool.create_pool
+        pool_factory = aioredis.create_redis_pool
         addr = settings.host, settings.port
 
     try:
