@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from operator import attrgetter
 from typing import Any, List, Optional, Tuple, Union
 from uuid import uuid4
+import functools
 
 import aioredis
 from aioredis import MultiExecError, Redis
@@ -173,7 +174,7 @@ async def create_pool(
     thus allowing job enqueuing.
     """
     settings = settings or RedisSettings()
-
+    
     assert not (
         type(settings.host) is str and settings.sentinel
     ), "str provided for 'host' but 'sentinel' is true; list of sentinels expected"
@@ -186,12 +187,12 @@ async def create_pool(
             return client.master_for(settings.sentinel_master)
 
     else:
-        pool_factory = aioredis.create_redis_pool
+        pool_factory = functools.partial(aioredis.create_pool, create_connection_timeout=settings.conn_timeout)
         addr = settings.host, settings.port
 
     try:
         pool = await pool_factory(
-            addr, db=settings.database, password=settings.password, timeout=settings.conn_timeout, encoding='utf8'
+            addr, db=settings.database, password=settings.password, encoding='utf8'
         )
 
         pool = ArqRedis(pool, job_serializer=job_serializer, job_deserializer=job_deserializer)
@@ -212,6 +213,7 @@ async def create_pool(
         if retry > 0:
             logger.info('redis connection successful')
         return pool
+
 
     # recursively attempt to create the pool outside the except block to avoid
     # "During handling of the above exception..." madness
