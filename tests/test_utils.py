@@ -23,6 +23,7 @@ async def test_redis_timeout(mocker):
         await create_pool(RedisSettings(port=0, conn_retry_delay=0))
     assert arq.utils.asyncio.sleep.call_count == 5
 
+
 async def test_redis_sentinel_failure():
     settings = RedisSettings()
     settings.host = [('localhost', 6379), ('localhost', 6379)]
