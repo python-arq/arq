@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import msgpack
 import pytest
-from aioredis import create_redis_pool
+from aioredis import create_redis_pool, MultiExecError
 
 from arq.connections import ArqRedis
 from arq.constants import default_queue_name, health_check_key_suffix, job_key_prefix
@@ -187,6 +187,18 @@ async def test_retry_lots(arq_redis: ArqRedis, worker, caplog):
 
     log = re.sub(r'\d+.\d\ds', 'X.XXs', '\n'.join(r.message for r in caplog.records))
     assert '  X.XXs ! testing:retry max retries 5 exceeded' in log
+
+
+async def test_retry_lots_without_keep_result(arq_redis: ArqRedis, worker):
+    async def retry(ctx):
+        raise Retry()
+
+    await arq_redis.enqueue_job('retry', _job_id='testing')
+    worker: Worker = worker(functions=[func(retry, name='retry')], keep_result=0)
+    try:
+        await worker.main()
+    except MultiExecError:  # raises on invalid expire time in setex
+        raise pytest.fail(f'DID RAISE {MultiExecError}')
 
 
 async def test_retry_lots_check(arq_redis: ArqRedis, worker, caplog):

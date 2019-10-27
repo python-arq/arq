@@ -510,7 +510,7 @@ class Worker:
             tr.delete(retry_key_prefix + job_id, in_progress_key_prefix + job_id, job_key_prefix + job_id)
             tr.zrem(self.queue_name, job_id)
             # result_data would only be None if serializing the result fails
-            if result_data is not None:  # pragma: no branch
+            if result_data is not None and self.keep_result_s > 0:  # pragma: no branch
                 tr.setex(result_key_prefix + job_id, self.keep_result_s, result_data)
             await tr.execute()
 
