@@ -6,6 +6,7 @@ History
 v0.18.1 (unreleased)
 ....................
 * add support for Redis Sentinel fix #132
+* fix ``Worker.abort_job`` invalid expire time error, by @dmvass
 
 v0.18 (2019-08-30)
 ..................

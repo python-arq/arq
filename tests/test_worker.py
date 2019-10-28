@@ -195,10 +195,7 @@ async def test_retry_lots_without_keep_result(arq_redis: ArqRedis, worker):
 
     await arq_redis.enqueue_job('retry', _job_id='testing')
     worker: Worker = worker(functions=[func(retry, name='retry')], keep_result=0)
-    try:
-        await worker.main()
-    except MultiExecError:  # raises on invalid expire time in setex
-        raise pytest.fail(f'DID RAISE {MultiExecError}')
+    await worker.main()  # Should not raise MultiExecError
 
 
 async def test_retry_lots_check(arq_redis: ArqRedis, worker, caplog):
