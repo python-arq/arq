@@ -13,7 +13,7 @@ def test_settings_changed():
     assert settings.port == 123
     assert (
         '<RedisSettings host=localhost port=123 database=0 password=None conn_timeout=1 conn_retries=5 '
-        'conn_retry_delay=1>'
+        'conn_retry_delay=1 sentinel=False sentinel_master=mymaster>'
     ) == str(settings)
 
 
@@ -22,6 +22,17 @@ async def test_redis_timeout(mocker):
     with pytest.raises(OSError):
         await create_pool(RedisSettings(port=0, conn_retry_delay=0))
     assert arq.utils.asyncio.sleep.call_count == 5
+
+
+async def test_redis_sentinel_failure():
+    settings = RedisSettings()
+    settings.host = [('localhost', 6379), ('localhost', 6379)]
+    settings.sentinel = True
+    try:
+        pool = await create_pool(settings)
+        await pool.ping('ping')
+    except Exception as e:
+        assert 'unknown command `SENTINEL`' in str(e)
 
 
 async def test_redis_success_log(caplog):
