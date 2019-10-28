@@ -189,6 +189,15 @@ async def test_retry_lots(arq_redis: ArqRedis, worker, caplog):
     assert '  X.XXs ! testing:retry max retries 5 exceeded' in log
 
 
+async def test_retry_lots_without_keep_result(arq_redis: ArqRedis, worker):
+    async def retry(ctx):
+        raise Retry()
+
+    await arq_redis.enqueue_job('retry', _job_id='testing')
+    worker: Worker = worker(functions=[func(retry, name='retry')], keep_result=0)
+    await worker.main()  # Should not raise MultiExecError
+
+
 async def test_retry_lots_check(arq_redis: ArqRedis, worker, caplog):
     async def retry(ctx):
         raise Retry()
