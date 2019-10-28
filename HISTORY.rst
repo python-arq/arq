@@ -2,8 +2,9 @@
 
 History
 -------
-v0.18.1 (2019-10-27)
-..................
+
+v0.18.1 (unreleased)
+....................
 * add support for Redis Sentinel fix #132
 
 v0.18 (2019-08-30)
