@@ -131,6 +131,18 @@ class ArqRedis(Redis):
                 return
         return Job(job_id, redis=self, _deserializer=self.job_deserializer)
 
+    def close(self):
+        super().close()
+        if hasattr(self, '_sentinel'):
+            self._sentinel.close()
+        return
+
+    async def wait_closed(self):
+        await super().wait_closed()
+        if hasattr(self, '_sentinel'):
+            await self._sentinel.wait_closed()
+        return
+
     async def _get_job_result(self, key) -> JobResult:
         job_id = key[len(result_key_prefix) :]
         job = Job(job_id, self, _deserializer=self.job_deserializer)
