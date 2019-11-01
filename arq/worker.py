@@ -531,7 +531,7 @@ class Worker:
 
             if n >= cron_job.next_run:
                 job_id = f'{cron_job.name}:{to_unix_ms(cron_job.next_run)}' if cron_job.unique else None
-                job_futures.add(self.pool.enqueue_job(cron_job.name, _job_id=job_id))
+                job_futures.add(self.pool.enqueue_job(cron_job.name, _job_id=job_id, _queue_name=self.queue_name))
                 cron_job.set_next(n)
 
         job_futures and await asyncio.gather(*job_futures)
