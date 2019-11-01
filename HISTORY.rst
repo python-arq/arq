@@ -3,7 +3,7 @@
 History
 -------
 
-v0.18.2 (unreleased)
+v0.18.2 (2019-11-01)
 ....................
 * Fix cron scheduling on a specific queue, by @dmvass and @Tinche
 
