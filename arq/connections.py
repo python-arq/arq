@@ -141,7 +141,6 @@ class ArqRedis(Redis):
         await super().wait_closed()
         if hasattr(self, '_sentinel'):
             await self._sentinel.wait_closed()
-        return
 
     async def _get_job_result(self, key) -> JobResult:
         job_id = key[len(result_key_prefix) :]
