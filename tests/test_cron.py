@@ -101,6 +101,18 @@ async def test_job_successful(worker, caplog):
     assert '  0.XXs → cron:foobar()\n  0.XXs ← cron:foobar ● 42' in log
 
 
+async def test_job_successful_on_specific_queue(worker, caplog):
+    caplog.set_level(logging.INFO)
+    worker: Worker = worker(queue_name='arq:test-cron-queue', cron_jobs=[cron(foobar, hour=1, run_at_startup=True)])
+    await worker.main()
+    assert worker.jobs_complete == 1
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+
+    log = re.sub(r'(\d+).\d\ds', r'\1.XXs', '\n'.join(r.message for r in caplog.records))
+    assert '  0.XXs → cron:foobar()\n  0.XXs ← cron:foobar ● 42' in log
+
+
 async def test_not_run(worker, caplog):
     caplog.set_level(logging.INFO)
     worker: Worker = worker(cron_jobs=[cron(foobar, hour=1, run_at_startup=False)])
