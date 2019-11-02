@@ -129,7 +129,7 @@ class ArqRedis(Redis):
                 # https://github.com/samuelcolvin/arq/issues/131, avoid warnings in log
                 await asyncio.gather(*tr._results, return_exceptions=True)
                 return
-        return Job(job_id, redis=self, _deserializer=self.job_deserializer)
+        return Job(job_id, redis=self, _queue_name=_queue_name, _deserializer=self.job_deserializer)
 
     async def _get_job_result(self, key) -> JobResult:
         job_id = key[len(result_key_prefix) :]
