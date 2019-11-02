@@ -6,7 +6,7 @@ from pytest_toolbox.comparison import CloseToNow
 
 from arq import Worker, func
 from arq.connections import ArqRedis
-from arq.constants import in_progress_key_prefix, job_key_prefix, result_key_prefix, default_queue_name
+from arq.constants import default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
 from arq.jobs import DeserializationError, Job, JobResult, JobStatus, deserialize_job_raw, serialize_result
 
 
@@ -72,8 +72,10 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker, queue_name=default_queue
         )
     ]
 
+
 async def test_enqueue_job_alt_queue(arq_redis: ArqRedis, worker):
     await test_enqueue_job(arq_redis, worker, queue_name='custom_queue')
+
 
 async def test_cant_unpickle_at_all():
     class Foobar:

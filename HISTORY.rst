@@ -3,6 +3,10 @@
 History
 -------
 
+v0.18.2 (unreleased)
+....................
+* Include ``queue_name`` when for job object in response to ``enqueue_job``, #160
+
 v0.18.2 (2019-11-01)
 ....................
 * Fix cron scheduling on a specific queue, by @dmvass and @Tinche
