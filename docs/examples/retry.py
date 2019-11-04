@@ -7,7 +7,7 @@ async def download_content(ctx, url):
     session: ClientSession = ctx['session']
     async with session.get(url) as response:
         if response.status != 200:
-            # retry the job with increasing backup
+            # retry the job with increasing back-off
             # delays will be 5s, 10s, 15s, 20s
             # after max_tries (default 5) the job will permanently fail
             raise Retry(defer=ctx['job_try'] * 5)
