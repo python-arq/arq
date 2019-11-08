@@ -6,7 +6,7 @@ from pytest_toolbox.comparison import CloseToNow
 
 from arq import Worker, func
 from arq.connections import ArqRedis
-from arq.constants import in_progress_key_prefix, job_key_prefix, result_key_prefix
+from arq.constants import default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
 from arq.jobs import DeserializationError, Job, JobResult, JobStatus, deserialize_job_raw, serialize_result
 
 
@@ -30,14 +30,14 @@ async def test_result_timeout(arq_redis: ArqRedis):
         await j.result(0.1, pole_delay=0)
 
 
-async def test_enqueue_job(arq_redis: ArqRedis, worker):
+async def test_enqueue_job(arq_redis: ArqRedis, worker, queue_name=default_queue_name):
     async def foobar(ctx, *args, **kwargs):
         return 42
 
-    j = await arq_redis.enqueue_job('foobar', 1, 2, c=3)
+    j = await arq_redis.enqueue_job('foobar', 1, 2, c=3, _queue_name=queue_name)
     assert isinstance(j, Job)
     assert JobStatus.queued == await j.status()
-    worker: Worker = worker(functions=[func(foobar, name='foobar')])
+    worker: Worker = worker(functions=[func(foobar, name='foobar')], queue_name=queue_name)
     await worker.main()
     r = await j.result(pole_delay=0)
     assert r == 42
@@ -71,6 +71,10 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker):
             job_id=j.job_id,
         )
     ]
+
+
+async def test_enqueue_job_alt_queue(arq_redis: ArqRedis, worker):
+    await test_enqueue_job(arq_redis, worker, queue_name='custom_queue')
 
 
 async def test_cant_unpickle_at_all():
