@@ -3,7 +3,7 @@
 History
 -------
 
-v0.18.2 (unreleased)
+v0.18.3 (2019-11-13)
 ....................
 * Include ``queue_name`` when for job object in response to ``enqueue_job``, #160
 
