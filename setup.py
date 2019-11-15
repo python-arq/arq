@@ -45,6 +45,7 @@ setup(
     url='https://github.com/samuelcolvin/arq',
     license='MIT',
     packages=['arq'],
+    package_data={'arq': ['py.typed']},
     zip_safe=True,
     entry_points="""
         [console_scripts]
