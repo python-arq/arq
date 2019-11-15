@@ -5,7 +5,7 @@ History
 
 v0.18.4 (unreleased)
 ....................
-* Add ``py.typed`` file to tell mypy the package has type hints
+* Add ``py.typed`` file to tell mypy the package has type hints, #163
 
 v0.18.3 (2019-11-13)
 ....................
