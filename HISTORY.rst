@@ -3,7 +3,7 @@
 History
 -------
 
-v0.18.4 (2019-11-15)
+v0.18.4 (unreleased)
 ....................
 * Add ``py.typed`` file to tell mypy the package has type hints
 
