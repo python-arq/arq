@@ -190,8 +190,7 @@ async def create_pool(
 
     else:
         pool_factory = functools.partial(
-            aioredis.create_pool,
-            create_connection_timeout=settings.conn_timeout, ssl=settings.ssl
+            aioredis.create_pool, create_connection_timeout=settings.conn_timeout, ssl=settings.ssl
         )
         addr = settings.host, settings.port
 
