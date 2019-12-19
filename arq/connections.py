@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
+from ssl import SSLContext
 from typing import Any, List, Optional, Tuple, Union
 from uuid import uuid4
 
@@ -29,6 +30,7 @@ class RedisSettings:
     port: int = 6379
     database: int = 0
     password: str = None
+    ssl: [bool, None, SSLContext] = None
     conn_timeout: int = 1
     conn_retries: int = 5
     conn_retry_delay: int = 1
@@ -183,16 +185,17 @@ async def create_pool(
         addr = settings.host
 
         async def pool_factory(*args, **kwargs):
-            client = await aioredis.sentinel.create_sentinel_pool(*args, **kwargs)
+            client = await aioredis.sentinel.create_sentinel_pool(*args, ssl=settings.ssl, **kwargs)
             return client.master_for(settings.sentinel_master)
 
     else:
-        pool_factory = functools.partial(aioredis.create_pool, create_connection_timeout=settings.conn_timeout)
+        pool_factory = functools.partial(
+            aioredis.create_pool, create_connection_timeout=settings.conn_timeout, ssl=settings.ssl
+        )
         addr = settings.host, settings.port
 
     try:
         pool = await pool_factory(addr, db=settings.database, password=settings.password, encoding='utf8')
-
         pool = ArqRedis(pool, job_serializer=job_serializer, job_deserializer=job_deserializer)
 
     except (ConnectionError, OSError, aioredis.RedisError, asyncio.TimeoutError) as e:
