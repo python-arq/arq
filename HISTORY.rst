@@ -3,10 +3,10 @@
 History
 -------
 
-v0.18.4 (unreleased)
+v0.18.4 (2019-12-19)
 ....................
 * Add ``py.typed`` file to tell mypy the package has type hints, #163
-* Added the SSL option for RedisSettings dataclass
+* Added ``ssl`` option to ``RedisSettings``, #165
 
 v0.18.3 (2019-11-13)
 ....................
