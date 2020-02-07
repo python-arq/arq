@@ -151,7 +151,7 @@ class Worker:
 
     def __init__(
         self,
-        functions: Sequence[Function] = (),
+        functions: Sequence[Union[Function, Callable]] = (),
         *,
         queue_name: str = default_queue_name,
         cron_jobs: Optional[Sequence[CronJob]] = None,
