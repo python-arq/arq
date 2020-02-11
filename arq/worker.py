@@ -319,8 +319,10 @@ class Worker:
                 if ongoing_exists or not score:
                     # job already started elsewhere, or already finished and removed from queue
                     self.sem.release()
+                    self._queue_read_offset += 1
                     continue
 
+                self._queue_read_offset = 0
                 tr = conn.multi_exec()
                 tr.setex(in_progress_key, self.in_progress_timeout_s, b'1')
                 try:
