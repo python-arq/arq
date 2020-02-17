@@ -295,6 +295,8 @@ class Worker:
             job_ids = await self.pool.zrangebyscore(
                 self.queue_name, offset=self._queue_read_offset, count=count, max=now
             )
+            if job_ids == [] and self._queue_read_offset > 0:
+                self._queue_read_offset = 0
         await self.run_jobs(job_ids)
 
         for t in self.tasks:
