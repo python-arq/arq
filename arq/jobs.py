@@ -6,7 +6,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Dict, Optional
 
-from .constants import default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
+from .constants import abort_key_prefix, default_queue_name, in_progress_key_prefix, \
+    job_key_prefix, result_key_prefix
 from .utils import ms_to_datetime, poll, timestamp_ms
 
 logger = logging.getLogger('arq.jobs')
@@ -65,6 +66,10 @@ class Job:
         self._redis = redis
         self._queue_name = _queue_name
         self._deserializer = _deserializer
+
+    async def abort(self, timeout: Optional[float] = None, *, pole_delay: float = 0.5) -> Any:
+        await self._redis.set('%s%s' % (abort_key_prefix, self.job_id), 1, expire=timeout)
+        return await self.result(timeout=timeout, pole_delay=pole_delay)
 
     async def result(self, timeout: Optional[float] = None, *, pole_delay: float = 0.5) -> Any:
         """

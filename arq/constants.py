@@ -1,3 +1,4 @@
+abort_key_prefix = 'arq:abort:'
 default_queue_name = 'arq:queue'
 job_key_prefix = 'arq:job:'
 in_progress_key_prefix = 'arq:in-progress:'

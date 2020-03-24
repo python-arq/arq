@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import logging
 import signal
+from copy import copy
 from dataclasses import dataclass
 from datetime import datetime
 from functools import partial
@@ -18,6 +19,7 @@ from arq.jobs import Deserializer, SerializationError, Serializer, deserialize_j
 
 from .connections import ArqRedis, RedisSettings, create_pool, log_redis_info
 from .constants import (
+    abort_key_prefix,
     default_queue_name,
     health_check_key_suffix,
     in_progress_key_prefix,
@@ -202,7 +204,8 @@ class Worker:
             self.redis_settings = redis_settings or RedisSettings()
         else:
             self.redis_settings = None
-        self.tasks = []
+        self.tasks = {}
+        self.abort_tasks = []
         self.main_task = None
         self.loop = asyncio.get_event_loop()
         self.ctx = ctx or {}
@@ -275,11 +278,11 @@ class Worker:
 
             if self.burst:
                 if 0 <= self.max_burst_jobs <= self._jobs_started():
-                    await asyncio.gather(*self.tasks)
+                    await asyncio.gather(*list(self.tasks.values()))
                     return
                 queued_jobs = await self.pool.zcard(self.queue_name)
                 if queued_jobs == 0:
-                    await asyncio.gather(*self.tasks)
+                    await asyncio.gather(*(self.tasks.values()))
                     return
 
     async def _poll_iteration(self):
@@ -295,13 +298,20 @@ class Worker:
             job_ids = await self.pool.zrangebyscore(
                 self.queue_name, offset=self._queue_read_offset, count=count, max=now
             )
+            self.abort_tasks = [
+                k[len(abort_key_prefix):]
+                for k in await self.pool.keys('%s*' % abort_key_prefix)
+            ]
         await self.run_jobs(job_ids)
 
-        for t in self.tasks:
-            if t.done():
-                self.tasks.remove(t)
+        jobs = copy(self.tasks)
+        for job_id, t in jobs.items():
+            if t.done() :
+                del self.tasks[job_id]
                 # required to make sure errors in run_job get propagated
                 t.result()
+            elif job_id in self.abort_tasks:
+                t.cancel()
 
         await self.heart_beat()
 
@@ -334,7 +344,7 @@ class Worker:
                 else:
                     t = self.loop.create_task(self.run_job(job_id, score))
                     t.add_done_callback(lambda _: self.sem.release())
-                    self.tasks.append(t)
+                    self.tasks[job_id] = t
 
     async def run_job(self, job_id, score):  # noqa: C901
         start_ms = timestamp_ms()
@@ -432,7 +442,7 @@ class Worker:
             logger.info('%6.2fs → %s(%s)%s', (start_ms - enqueue_time_ms) / 1000, ref, s, extra)
             # run repr(result) and extra inside try/except as they can raise exceptions
             try:
-                async with async_timeout.timeout(timeout_s):
+                async with async_timeout.timeout(timeout_s or None):
                     result = await function.coroutine(ctx, *args, **kwargs)
             except Exception as e:
                 exc_extra = getattr(e, 'extra', None)
@@ -450,9 +460,15 @@ class Worker:
                 if e.defer_score:
                     incr_score = e.defer_score + (timestamp_ms() - score)
                 self.jobs_retried += 1
-            elif self.retry_jobs and isinstance(e, asyncio.CancelledError):
-                logger.info('%6.2fs ↻ %s cancelled, will be run again', t, ref)
-                self.jobs_retried += 1
+            elif isinstance(e, asyncio.CancelledError):
+                if job_id in self.abort_tasks:
+                    logger.info('%6.2fs 🛇  %s aborted', t, ref)
+                    result = e
+                    finish = True
+                    self.abort_tasks.remove(job_id)
+                elif self.retry_jobs:
+                    logger.info('%6.2fs ↻ %s cancelled, will be run again', t, ref)
+                    self.jobs_retried += 1
             else:
                 logger.exception(
                     '%6.2fs ! %s failed, %s: %s', t, ref, e.__class__.__name__, e, extra={'extra': exc_extra}
@@ -507,7 +523,12 @@ class Worker:
         with await self.pool as conn:
             await conn.unwatch()
             tr = conn.multi_exec()
-            tr.delete(retry_key_prefix + job_id, in_progress_key_prefix + job_id, job_key_prefix + job_id)
+            tr.delete(
+                abort_key_prefix + job_id,
+                retry_key_prefix + job_id,
+                in_progress_key_prefix + job_id,
+                job_key_prefix + job_id
+            )
             tr.zrem(self.queue_name, job_id)
             # result_data would only be None if serializing the result fails
             if result_data is not None and self.keep_result_s > 0:  # pragma: no branch
@@ -541,7 +562,7 @@ class Worker:
         if (now_ts - self._last_health_check) < self.health_check_interval:
             return
         self._last_health_check = now_ts
-        pending_tasks = sum(not t.done() for t in self.tasks)
+        pending_tasks = sum(not t.done() for t in self.tasks.values())
         queued = await self.pool.zcard(self.queue_name)
         info = (
             f'{datetime.now():%b-%d %H:%M:%S} j_complete={self.jobs_complete} j_failed={self.jobs_failed} '
@@ -571,7 +592,7 @@ class Worker:
             self.jobs_retried,
             len(self.tasks),
         )
-        for t in self.tasks:
+        for jid, t in self.tasks.items():
             if not t.done():
                 t.cancel()
         self.main_task and self.main_task.cancel()
@@ -580,7 +601,7 @@ class Worker:
     async def close(self):
         if not self.pool:
             return
-        await asyncio.gather(*self.tasks)
+        await asyncio.gather(*list(self.tasks.values()))
         await self.pool.delete(self.health_check_key)
         if self.on_shutdown:
             await self.on_shutdown(self.ctx)
@@ -591,7 +612,7 @@ class Worker:
     def __repr__(self):
         return (
             f'<Worker j_complete={self.jobs_complete} j_failed={self.jobs_failed} j_retried={self.jobs_retried} '
-            f'j_ongoing={sum(not t.done() for t in self.tasks)}>'
+            f'j_ongoing={sum(not t.done() for t in self.tasks.values())}>'
         )
 
 
