@@ -63,7 +63,3 @@ async def watch_reload(path, worker_settings, loop):
             loop.create_task(worker.async_run())
     finally:
         await worker.close()
-
-
-if __name__ == '__main__':
-    cli()

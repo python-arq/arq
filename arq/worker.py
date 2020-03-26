@@ -2,7 +2,6 @@ import asyncio
 import inspect
 import logging
 import signal
-from copy import copy
 from dataclasses import dataclass
 from datetime import datetime
 from functools import partial
@@ -172,6 +171,7 @@ class Worker:
         health_check_key: Optional[str] = None,
         ctx: Optional[Dict] = None,
         retry_jobs: bool = True,
+        abort_jobs: bool = False,
         max_burst_jobs: int = -1,
         job_serializer: Optional[Serializer] = None,
         job_deserializer: Optional[Deserializer] = None,
@@ -205,7 +205,6 @@ class Worker:
         else:
             self.redis_settings = None
         self.tasks = {}
-        self.abort_tasks = []
         self.main_task = None
         self.loop = asyncio.get_event_loop()
         self.ctx = ctx or {}
@@ -221,6 +220,8 @@ class Worker:
         self.on_stop = None
         # whether or not to retry jobs on Retry and CancelledError
         self.retry_jobs = retry_jobs
+        self.abort_jobs = abort_jobs
+        self._aborting_tasks = set()
         self.max_burst_jobs = max_burst_jobs
         self.job_serializer = job_serializer
         self.job_deserializer = job_deserializer
@@ -278,12 +279,26 @@ class Worker:
 
             if self.burst:
                 if 0 <= self.max_burst_jobs <= self._jobs_started():
-                    await asyncio.gather(*list(self.tasks.values()))
+                    await asyncio.gather(*self.tasks.values())
                     return
                 queued_jobs = await self.pool.zcard(self.queue_name)
                 if queued_jobs == 0:
-                    await asyncio.gather(*(self.tasks.values()))
+                    await asyncio.gather(*self.tasks.values())
                     return
+
+    async def _scan_abort_jobs(self):
+        todel, cur = [], b'0'
+        lk, mk = len(abort_key_prefix), f'{abort_key_prefix}*'
+        while cur:
+            cur, keys = await self.pool.scan(cur, match=mk)
+            for job_key in keys:
+                job_id = job_key[lk:]
+                if job_id not in self.tasks:
+                    todel.append(job_key)
+                    continue
+                self._aborting_tasks.add(job_id)
+        if todel:
+            await self.pool.delete(*todel)
 
     async def _poll_iteration(self):
         count = self.queue_read_limit
@@ -298,19 +313,18 @@ class Worker:
             job_ids = await self.pool.zrangebyscore(
                 self.queue_name, offset=self._queue_read_offset, count=count, max=now
             )
-            self.abort_tasks = [
-                k[len(abort_key_prefix):]
-                for k in await self.pool.keys('%s*' % abort_key_prefix)
-            ]
+
         await self.run_jobs(job_ids)
 
-        jobs = copy(self.tasks)
-        for job_id, t in jobs.items():
-            if t.done() :
+        if self.abort_jobs:
+            await self._scan_abort_jobs()
+
+        for job_id, t in list(self.tasks.items()):
+            if t.done():
                 del self.tasks[job_id]
                 # required to make sure errors in run_job get propagated
                 t.result()
-            elif job_id in self.abort_tasks:
+            elif job_id in self._aborting_tasks:
                 t.cancel()
 
         await self.heart_beat()
@@ -345,6 +359,7 @@ class Worker:
                     t = self.loop.create_task(self.run_job(job_id, score))
                     t.add_done_callback(lambda _: self.sem.release())
                     self.tasks[job_id] = t
+        print('end')
 
     async def run_job(self, job_id, score):  # noqa: C901
         start_ms = timestamp_ms()
@@ -454,21 +469,22 @@ class Worker:
         except Exception as e:
             finished_ms = timestamp_ms()
             t = (finished_ms - start_ms) / 1000
+            was_cancelled = isinstance(e, asyncio.CancelledError)
             if self.retry_jobs and isinstance(e, Retry):
                 incr_score = e.defer_score
                 logger.info('%6.2fs ↻ %s retrying job in %0.2fs', t, ref, (e.defer_score or 0) / 1000)
                 if e.defer_score:
                     incr_score = e.defer_score + (timestamp_ms() - score)
                 self.jobs_retried += 1
-            elif isinstance(e, asyncio.CancelledError):
-                if job_id in self.abort_tasks:
-                    logger.info('%6.2fs 🛇  %s aborted', t, ref)
-                    result = e
-                    finish = True
-                    self.abort_tasks.remove(job_id)
-                elif self.retry_jobs:
-                    logger.info('%6.2fs ↻ %s cancelled, will be run again', t, ref)
-                    self.jobs_retried += 1
+            elif was_cancelled and job_id in self._aborting_tasks:
+                logger.info('%6.2fs 🛇  %s aborted', t, ref)
+                result = e
+                finish = True
+                self._aborting_tasks.remove(job_id)
+                self.jobs_failed += 1
+            elif was_cancelled and self.retry_jobs:
+                logger.info('%6.2fs ↻ %s cancelled, will be run again', t, ref)
+                self.jobs_retried += 1
             else:
                 logger.exception(
                     '%6.2fs ! %s failed, %s: %s', t, ref, e.__class__.__name__, e, extra={'extra': exc_extra}
@@ -527,7 +543,7 @@ class Worker:
                 abort_key_prefix + job_id,
                 retry_key_prefix + job_id,
                 in_progress_key_prefix + job_id,
-                job_key_prefix + job_id
+                job_key_prefix + job_id,
             )
             tr.zrem(self.queue_name, job_id)
             # result_data would only be None if serializing the result fails
@@ -592,7 +608,7 @@ class Worker:
             self.jobs_retried,
             len(self.tasks),
         )
-        for jid, t in self.tasks.items():
+        for t in self.tasks.values():
             if not t.done():
                 t.cancel()
         self.main_task and self.main_task.cancel()
@@ -601,7 +617,7 @@ class Worker:
     async def close(self):
         if not self.pool:
             return
-        await asyncio.gather(*list(self.tasks.values()))
+        await asyncio.gather(*self.tasks.values())
         await self.pool.delete(self.health_check_key)
         if self.on_shutdown:
             await self.on_shutdown(self.ctx)

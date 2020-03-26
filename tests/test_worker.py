@@ -11,7 +11,7 @@ import pytest
 from aioredis import create_redis_pool
 
 from arq.connections import ArqRedis
-from arq.constants import default_queue_name, health_check_key_suffix, job_key_prefix
+from arq.constants import abort_key_prefix, default_queue_name, health_check_key_suffix, job_key_prefix
 from arq.jobs import Job, JobStatus
 from arq.worker import FailedJobs, JobExecutionFailed, Retry, Worker, async_check_health, check_health, func, run_worker
 
@@ -64,7 +64,7 @@ async def test_handle_sig(caplog):
     caplog.set_level(logging.INFO)
     worker = Worker([foobar])
     worker.main_task = MagicMock()
-    worker.tasks = [MagicMock(done=MagicMock(return_value=True)), MagicMock(done=MagicMock(return_value=False))]
+    worker.tasks = {0: MagicMock(done=MagicMock(return_value=True)), 1: MagicMock(done=MagicMock(return_value=False))}
 
     assert len(caplog.records) == 0
     worker.handle_sig(signal.SIGINT)
@@ -660,3 +660,30 @@ async def test_multi_exec(arq_redis: ArqRedis, worker, caplog):
     # debug(caplog.text)
     assert 'multi-exec error, job testing already started elsewhere' in caplog.text
     assert 'WatchVariableError' not in caplog.text
+
+
+async def test_abort_job(arq_redis: ArqRedis, worker, caplog, loop):
+    async def longfunc(ctx):
+        await asyncio.sleep(3600)
+
+    async def wait_and_abort(job, delay=0.1):
+        await asyncio.sleep(delay)
+        await job.abort()
+
+    caplog.set_level(logging.INFO)
+    # try autodelete unknown job_ids
+    await arq_redis.set(f'{abort_key_prefix}todel', b'1')
+    job = await arq_redis.enqueue_job('longfunc', _job_id='testing')
+
+    worker: Worker = worker(
+        functions=[func(longfunc, name='longfunc')], abort_jobs=True, poll_delay=0.1
+    )
+    assert worker.jobs_complete == 0
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+    await asyncio.gather(wait_and_abort(job), worker.main())
+    assert worker.jobs_complete == 0
+    assert worker.jobs_failed == 1
+    assert worker.jobs_retried == 0
+    log = re.sub(r'\d+.\d\ds', 'X.XXs', '\n'.join(r.message for r in caplog.records))
+    assert 'X.XXs → testing:longfunc()\n  X.XXs 🛇  testing:longfunc aborted' in log
