@@ -167,6 +167,10 @@ optionally with a duration to defer rerunning the jobs by:
 
 .. literalinclude:: examples/retry.py
 
+It is also possible to abort long running tasks, passing ``abort_jobs=True`` to ``WorkerSettins``.
+
+.. literalinclude:: examples/job_abort.py
+
 Health checks
 .............
 

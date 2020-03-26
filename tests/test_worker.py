@@ -675,9 +675,7 @@ async def test_abort_job(arq_redis: ArqRedis, worker, caplog, loop):
     await arq_redis.set(f'{abort_key_prefix}todel', b'1')
     job = await arq_redis.enqueue_job('longfunc', _job_id='testing')
 
-    worker: Worker = worker(
-        functions=[func(longfunc, name='longfunc')], abort_jobs=True, poll_delay=0.1
-    )
+    worker: Worker = worker(functions=[func(longfunc, name='longfunc')], abort_jobs=True, poll_delay=0.1)
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0

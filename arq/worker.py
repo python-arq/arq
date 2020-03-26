@@ -359,7 +359,6 @@ class Worker:
                     t = self.loop.create_task(self.run_job(job_id, score))
                     t.add_done_callback(lambda _: self.sem.release())
                     self.tasks[job_id] = t
-        print('end')
 
     async def run_job(self, job_id, score):  # noqa: C901
         start_ms = timestamp_ms()
