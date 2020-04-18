@@ -29,7 +29,7 @@ class RedisSettings:
     host: Union[str, List[Tuple[str, int]]] = 'localhost'
     port: int = 6379
     database: int = 0
-    password: str = None
+    password: Optional[str] = None
     ssl: [bool, None, SSLContext] = None
     conn_timeout: int = 1
     conn_retries: int = 5
