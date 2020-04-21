@@ -5,9 +5,8 @@ import msgpack
 import pytest
 from aioredis import create_redis_pool
 
-from arq.connections import ArqRedis
+from arq.connections import ArqRedis, create_pool
 from arq.worker import Worker
-from arq.connections import create_pool
 
 
 @pytest.yield_fixture

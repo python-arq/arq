@@ -13,8 +13,17 @@ from aioredis import create_redis_pool
 from arq.connections import ArqRedis
 from arq.constants import default_queue_name, health_check_key_suffix, job_key_prefix
 from arq.jobs import Job, JobStatus
-from arq.worker import FailedJobs, JobExecutionFailed, Retry, Worker, async_check_health, check_health, func, \
-    run_worker, RetryJob
+from arq.worker import (
+    FailedJobs,
+    JobExecutionFailed,
+    Retry,
+    RetryJob,
+    Worker,
+    async_check_health,
+    check_health,
+    func,
+    run_worker,
+)
 
 
 async def foobar(ctx):
