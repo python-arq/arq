@@ -15,7 +15,6 @@ format:
 
 .PHONY: lint
 lint:
-	python setup.py check -rms
 	flake8 arq/ tests/
 	$(isort) --check-only -df
 	$(black) --check
@@ -38,6 +37,7 @@ clean:
 	rm -f `find . -type f -name '*~' `
 	rm -f `find . -type f -name '.*~' `
 	rm -rf .cache
+	rm -rf .pytest_cache
 	rm -rf htmlcov
 	rm -rf *.egg-info
 	rm -f .coverage

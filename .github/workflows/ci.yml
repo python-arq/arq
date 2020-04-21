@@ -10,7 +10,7 @@ on:
 
 jobs:
   test:
-    name: test on ${{ matrix.os }}
+    name: test py${{ matrix.python-version }} on ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -22,6 +22,13 @@ jobs:
       OS: ${{ matrix.os }}
 
     runs-on: ${{ format('{0}-latest', matrix.os) }}
+
+    services:
+      redis:
+        image: redis:5
+        ports:
+        - 6379:6379
+        options: --entrypoint redis-server
 
     steps:
     - uses: actions/checkout@v2
@@ -38,11 +45,6 @@ jobs:
 
     - name: lint
       run: make lint
-
-    - name: Start Redis
-      uses: supercharge/redis-github-action@1.1.0
-      with:
-        redis-version: 5
 
     - name: test
       run: |

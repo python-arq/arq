@@ -32,6 +32,7 @@ def test_no_jobs(arq_redis: ArqRedis, loop):
         queue_read_limit = 10
 
     loop.run_until_complete(arq_redis.enqueue_job('foobar'))
+    asyncio.set_event_loop(loop)
     worker = run_worker(Settings)
     assert worker.jobs_complete == 1
     assert str(worker) == '<Worker j_complete=1 j_failed=0 j_retried=0 j_ongoing=0>'
@@ -41,6 +42,7 @@ def test_health_check_direct(loop):
     class Settings:
         pass
 
+    asyncio.set_event_loop(loop)
     assert check_health(Settings) == 1
 
 
