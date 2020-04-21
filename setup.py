@@ -3,20 +3,22 @@ from pathlib import Path
 from importlib.machinery import SourceFileLoader
 from setuptools import setup
 
-readme = Path(__file__).parent.joinpath('README.rst')
+description = 'Job queues in python with asyncio and redis'
+readme = Path(__file__).parent.joinpath('README.md')
 if readme.exists():
     with readme.open() as f:
         long_description = f.read()
 else:
-    long_description = '-'
+    long_description = description + '.\n\nSee https://arq-docs.helpmanual.io/ for documentation.'
 # avoid loading the package before requirements are installed:
 version = SourceFileLoader('version', 'arq/version.py').load_module()
 
 setup(
     name='arq',
-    version=str(version.VERSION),
-    description='Job queues in python with asyncio and redis.',
+    version=version.VERSION,
+    description=description,
     long_description=long_description,
+    long_description_content_type='text/markdown',
     classifiers=[
         'Development Status :: 4 - Beta',
         'Environment :: Console',
@@ -32,6 +34,7 @@ setup(
         'Programming Language :: Python :: 3 :: Only',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
         'Topic :: Internet',
         'Topic :: Software Development :: Libraries :: Python Modules',
         'Topic :: System :: Clustering',
@@ -55,7 +58,7 @@ setup(
         'async-timeout>=3.0.0',
         'aioredis>=1.1.0',
         'click>=6.7',
-        'pydantic>=0.20',
+        'pydantic>=1',
         'dataclasses>=0.6;python_version == "3.6"'
     ],
     extras_require={
