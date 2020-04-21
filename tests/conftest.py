@@ -1,3 +1,4 @@
+import asyncio
 import functools
 
 import msgpack
@@ -6,6 +7,7 @@ from aioredis import create_redis_pool
 
 from arq.connections import ArqRedis
 from arq.worker import Worker
+from arq.connections import create_pool
 
 
 @pytest.yield_fixture
@@ -50,3 +52,20 @@ async def worker(arq_redis):
 
     if worker_:
         await worker_.close()
+
+
+@pytest.fixture(name='create_pool')
+async def fix_create_pool(loop):
+    pools = []
+
+    async def create_pool_(settings, *args, **kwargs):
+        pool = await create_pool(settings, *args, **kwargs)
+        pools.append(pool)
+        return pool
+
+    yield create_pool_
+
+    for p in pools:
+        p.close()
+
+    await asyncio.gather(*[p.wait_closed() for p in pools])
