@@ -29,7 +29,7 @@ testcov:
 	pytest --cov=arq && (echo "building coverage html"; coverage html)
 
 .PHONY: all
-all: testcov lint
+all: lint testcov
 
 .PHONY: clean
 clean:
