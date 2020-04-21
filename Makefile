@@ -17,8 +17,8 @@ format:
 lint:
 	python setup.py check -rms
 	flake8 arq/ tests/
-	$(isort) --check-only
-	$(black) --check arq
+	$(isort) --check-only -df
+	$(black) --check
 
 .PHONY: test
 test:
