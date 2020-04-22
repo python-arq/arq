@@ -5,7 +5,7 @@ from datetime import timedelta
 import pytest
 
 import arq.utils
-from arq.connections import RedisSettings, create_pool, log_redis_info
+from arq.connections import RedisSettings, log_redis_info
 
 
 def test_settings_changed():
@@ -17,14 +17,17 @@ def test_settings_changed():
     ) == str(settings)
 
 
-async def test_redis_timeout(mocker):
+async def test_redis_timeout(mocker, create_pool):
     mocker.spy(arq.utils.asyncio, 'sleep')
     with pytest.raises(OSError):
         await create_pool(RedisSettings(port=0, conn_retry_delay=0))
     assert arq.utils.asyncio.sleep.call_count == 5
 
 
-async def test_redis_sentinel_failure():
+async def test_redis_sentinel_failure(create_pool):
+    """
+    FIXME: this is currently causing 3 "Task was destroyed but it is pending!" warnings
+    """
     settings = RedisSettings()
     settings.host = [('localhost', 6379), ('localhost', 6379)]
     settings.sentinel = True
@@ -35,7 +38,7 @@ async def test_redis_sentinel_failure():
         assert 'unknown command `SENTINEL`' in str(e)
 
 
-async def test_redis_success_log(caplog):
+async def test_redis_success_log(caplog, create_pool):
     caplog.set_level(logging.INFO)
     settings = RedisSettings()
     pool = await create_pool(settings)
@@ -49,7 +52,7 @@ async def test_redis_success_log(caplog):
     await pool.wait_closed()
 
 
-async def test_redis_log():
+async def test_redis_log(create_pool):
     redis = await create_pool(RedisSettings())
     await redis.flushall()
     await redis.set(b'a', b'1')

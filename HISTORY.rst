@@ -3,6 +3,10 @@
 History
 -------
 
+v0.18.5 (unreleased)
+....................
+* Python 3.8 support
+
 v0.18.4 (2019-12-19)
 ....................
 * Add ``py.typed`` file to tell mypy the package has type hints, #163

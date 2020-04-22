@@ -121,6 +121,10 @@ class FailedJobs(RuntimeError):
         return f'<{str(self)}>'
 
 
+class RetryJob(RuntimeError):
+    pass
+
+
 class Worker:
     """
     Main class for running jobs.
@@ -450,7 +454,7 @@ class Worker:
                 if e.defer_score:
                     incr_score = e.defer_score + (timestamp_ms() - score)
                 self.jobs_retried += 1
-            elif self.retry_jobs and isinstance(e, asyncio.CancelledError):
+            elif self.retry_jobs and isinstance(e, (asyncio.CancelledError, RetryJob)):
                 logger.info('%6.2fs ↻ %s cancelled, will be run again', t, ref)
                 self.jobs_retried += 1
             else:

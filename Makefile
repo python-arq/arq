@@ -15,10 +15,9 @@ format:
 
 .PHONY: lint
 lint:
-	python setup.py check -rms
 	flake8 arq/ tests/
-	$(isort) --check-only
-	$(black) --check arq
+	$(isort) --check-only -df
+	$(black) --check
 
 .PHONY: test
 test:
@@ -29,7 +28,7 @@ testcov:
 	pytest --cov=arq && (echo "building coverage html"; coverage html)
 
 .PHONY: all
-all: testcov lint
+all: lint testcov
 
 .PHONY: clean
 clean:
@@ -38,6 +37,7 @@ clean:
 	rm -f `find . -type f -name '*~' `
 	rm -f `find . -type f -name '.*~' `
 	rm -rf .cache
+	rm -rf .pytest_cache
 	rm -rf htmlcov
 	rm -rf *.egg-info
 	rm -f .coverage
