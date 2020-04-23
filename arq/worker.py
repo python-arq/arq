@@ -193,7 +193,7 @@ class Worker:
         self.job_timeout_s = to_seconds(job_timeout)
         self.keep_result_s = to_seconds(keep_result)
         self.poll_delay_s = to_seconds(poll_delay)
-        self.queue_read_limit = queue_read_limit or max_jobs
+        self.queue_read_limit = queue_read_limit or max(max_jobs * 5, 100)
         self._queue_read_offset = 0
         self.max_tries = max_tries
         self.health_check_interval = to_seconds(health_check_interval)
@@ -286,7 +286,11 @@ class Worker:
                     await asyncio.gather(*self.tasks)
                     return
 
-    async def _poll_iteration(self):
+    async def _poll_iteration(self) -> None:
+        """
+        Get ids of pending jobs from the main queue sorted-set data structure and start those jobs, remove
+        any finished tasks from self.tasks.
+        """
         count = self.queue_read_limit
         if self.burst and self.max_burst_jobs >= 0:
             burst_jobs_remaining = self.max_burst_jobs - self._jobs_started()
@@ -299,7 +303,8 @@ class Worker:
             job_ids = await self.pool.zrangebyscore(
                 self.queue_name, offset=self._queue_read_offset, count=count, max=now
             )
-        await self.run_jobs(job_ids)
+
+        await self.start_jobs(job_ids)
 
         for t in self.tasks:
             if t.done():
@@ -309,7 +314,10 @@ class Worker:
 
         await self.heart_beat()
 
-    async def run_jobs(self, job_ids):
+    async def start_jobs(self, job_ids: List[str]) -> None:
+        """
+        For each job id, get the job definition, check it's not running and start it in a task
+        """
         for job_id in job_ids:
             await self.sem.acquire()
             in_progress_key = in_progress_key_prefix + job_id
@@ -323,6 +331,7 @@ class Worker:
                 if ongoing_exists or not score:
                     # job already started elsewhere, or already finished and removed from queue
                     self.sem.release()
+                    logger.debug('job %s already running elsewhere', job_id)
                     continue
 
                 tr = conn.multi_exec()
