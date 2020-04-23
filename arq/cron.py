@@ -2,7 +2,7 @@ import asyncio
 import dataclasses
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Callable, Optional, Union, Set, Any, Awaitable, cast
+from typing import Any, Awaitable, Callable, Optional, Set, Union, cast
 
 from pydantic.utils import import_string
 
@@ -53,7 +53,7 @@ def next_cron(
         dt = next_dt
 
 
-def _get_next_dt(dt_: datetime, options: Options) -> datetime:  # noqa: C901
+def _get_next_dt(dt_: datetime, options: Options) -> Optional[datetime]:  # noqa: C901
     for field, v in dataclasses.asdict(options).items():
         if v is None:
             continue
@@ -89,7 +89,7 @@ def _get_next_dt(dt_: datetime, options: Options) -> datetime:  # noqa: C901
             else:
                 assert field == 'microsecond', field
                 return dt_ + timedelta(microseconds=options.microsecond - dt_.microsecond)
-    raise RuntimeError("_get_next_dt could't find a next datetime")
+    return None
 
 
 @dataclass
