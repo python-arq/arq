@@ -2,7 +2,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from time import time
-from typing import Optional, Union
+from typing import Any, AsyncGenerator, Dict, Optional, Sequence, Union
 
 logger = logging.getLogger('arq.utils')
 
@@ -49,7 +49,7 @@ def to_seconds(td: Optional[SecondsTimedelta]) -> Optional[float]:
     return td
 
 
-async def poll(step: float = 0.5):
+async def poll(step: float = 0.5) -> AsyncGenerator[float, None]:
     loop = asyncio.get_event_loop()
     start = loop.time()
     while True:
@@ -75,7 +75,7 @@ def truncate(s: str, length: int = DEFAULT_CURTAIL) -> str:
     return s
 
 
-def args_to_string(args, kwargs):
+def args_to_string(args: Sequence[Any], kwargs: Dict[str, Any]) -> str:
     arguments = ''
     if args:
         arguments = ', '.join(map(repr, args))

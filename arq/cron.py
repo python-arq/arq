@@ -1,85 +1,47 @@
 import asyncio
+import dataclasses
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import Enum
-from typing import Callable, Optional, Union
+from typing import Callable, Optional, Union, Set, Any, Awaitable, cast
 
 from pydantic.utils import import_string
 
 from arq.utils import SecondsTimedelta, to_seconds
 
-
-class D(str, Enum):
-    month = 'month'
-    day = 'day'
-    weekday = 'weekday'
-    hour = 'hour'
-    minute = 'minute'
-    second = 'second'
-    microsecond = 'microsecond'
-
-
-dt_fields = D.month, D.day, D.weekday, D.hour, D.minute, D.second, D.microsecond
+OptionType = Union[None, Set[int], int]
 weekdays = 'mon', 'tues', 'wed', 'thurs', 'fri', 'sat', 'sun'
+WeekdayType = Union[OptionType, str]
 
 
-def _get_next_dt(dt_, options):  # noqa: C901
-    for field in dt_fields:
-        v = options[field]
-        if v is None:
-            continue
-        if field == D.weekday:
-            next_v = dt_.weekday()
-        else:
-            next_v = getattr(dt_, field)
-        if isinstance(v, int):
-            mismatch = next_v != v
-        else:
-            assert isinstance(v, (set, list, tuple))
-            mismatch = next_v not in v
-        # print(field, v, next_v, mismatch)
-        if mismatch:
-            micro = max(dt_.microsecond - options[D.microsecond], 0)
-            if field == D.month:
-                if dt_.month == 12:
-                    return datetime(dt_.year + 1, 1, 1)
-                else:
-                    return datetime(dt_.year, dt_.month + 1, 1)
-            elif field in (D.day, D.weekday):
-                return (
-                    dt_
-                    + timedelta(days=1)
-                    - timedelta(hours=dt_.hour, minutes=dt_.minute, seconds=dt_.second, microseconds=micro)
-                )
-            elif field == D.hour:
-                return dt_ + timedelta(hours=1) - timedelta(minutes=dt_.minute, seconds=dt_.second, microseconds=micro)
-            elif field == D.minute:
-                return dt_ + timedelta(minutes=1) - timedelta(seconds=dt_.second, microseconds=micro)
-            elif field == D.second:
-                return dt_ + timedelta(seconds=1) - timedelta(microseconds=micro)
-            else:
-                assert field == D.microsecond, field
-                return dt_ + timedelta(microseconds=options['microsecond'] - dt_.microsecond)
+@dataclass
+class Options:
+    month: OptionType
+    day: OptionType
+    weekday: WeekdayType
+    hour: OptionType
+    minute: OptionType
+    second: OptionType
+    microsecond: int
 
 
 def next_cron(
     previous_dt: datetime,
     *,
-    month: Union[None, set, int] = None,
-    day: Union[None, set, int] = None,
-    weekday: Union[None, set, int, str] = None,
-    hour: Union[None, set, int] = None,
-    minute: Union[None, set, int] = None,
-    second: Union[None, set, int] = 0,
+    month: OptionType = None,
+    day: OptionType = None,
+    weekday: WeekdayType = None,
+    hour: OptionType = None,
+    minute: OptionType = None,
+    second: OptionType = 0,
     microsecond: int = 123_456,
-):
+) -> datetime:
     """
     Find the next datetime matching the given parameters.
     """
     dt = previous_dt + timedelta(seconds=1)
     if isinstance(weekday, str):
         weekday = weekdays.index(weekday.lower())
-    options = dict(
+    options = Options(
         month=month, day=day, weekday=weekday, hour=hour, minute=minute, second=second, microsecond=microsecond
     )
 
@@ -91,25 +53,64 @@ def next_cron(
         dt = next_dt
 
 
+def _get_next_dt(dt_: datetime, options: Options) -> datetime:  # noqa: C901
+    for field, v in dataclasses.asdict(options).items():
+        if v is None:
+            continue
+        if field == 'weekday':
+            next_v = dt_.weekday()
+        else:
+            next_v = getattr(dt_, field)
+        if isinstance(v, int):
+            mismatch = next_v != v
+        else:
+            assert isinstance(v, (set, list, tuple))
+            mismatch = next_v not in v
+        # print(field, v, next_v, mismatch)
+        if mismatch:
+            micro = max(dt_.microsecond - options.microsecond, 0)
+            if field == 'month':
+                if dt_.month == 12:
+                    return datetime(dt_.year + 1, 1, 1)
+                else:
+                    return datetime(dt_.year, dt_.month + 1, 1)
+            elif field in ('day', 'weekday'):
+                return (
+                    dt_
+                    + timedelta(days=1)
+                    - timedelta(hours=dt_.hour, minutes=dt_.minute, seconds=dt_.second, microseconds=micro)
+                )
+            elif field == 'hour':
+                return dt_ + timedelta(hours=1) - timedelta(minutes=dt_.minute, seconds=dt_.second, microseconds=micro)
+            elif field == 'minute':
+                return dt_ + timedelta(minutes=1) - timedelta(seconds=dt_.second, microseconds=micro)
+            elif field == 'second':
+                return dt_ + timedelta(seconds=1) - timedelta(microseconds=micro)
+            else:
+                assert field == 'microsecond', field
+                return dt_ + timedelta(microseconds=options.microsecond - dt_.microsecond)
+    raise RuntimeError("_get_next_dt could't find a next datetime")
+
+
 @dataclass
 class CronJob:
     name: str
-    coroutine: Callable
-    month: Union[None, set, int]
-    day: Union[None, set, int]
-    weekday: Union[None, set, int, str]
-    hour: Union[None, set, int]
-    minute: Union[None, set, int]
-    second: Union[None, set, int]
+    coroutine: Callable[..., Awaitable[Any]]
+    month: OptionType
+    day: OptionType
+    weekday: WeekdayType
+    hour: OptionType
+    minute: OptionType
+    second: OptionType
     microsecond: int
     run_at_startup: bool
     unique: bool
     timeout_s: Optional[float]
     keep_result_s: Optional[float]
     max_tries: Optional[int]
-    next_run: datetime = None
+    next_run: Optional[datetime] = None
 
-    def set_next(self, dt: datetime):
+    def set_next(self, dt: datetime) -> None:
         self.next_run = next_cron(
             dt,
             month=self.month,
@@ -121,20 +122,20 @@ class CronJob:
             microsecond=self.microsecond,
         )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return '<CronJob {}>'.format(' '.join(f'{k}={v}' for k, v in self.__dict__.items()))
 
 
 def cron(
-    coroutine: Union[str, Callable],
+    coroutine: Union[str, Callable[..., Awaitable[Any]]],
     *,
     name: Optional[str] = None,
-    month: Union[None, set, int] = None,
-    day: Union[None, set, int] = None,
-    weekday: Union[None, set, int, str] = None,
-    hour: Union[None, set, int] = None,
-    minute: Union[None, set, int] = None,
-    second: Union[None, set, int] = 0,
+    month: OptionType = None,
+    day: OptionType = None,
+    weekday: WeekdayType = None,
+    hour: OptionType = None,
+    minute: OptionType = None,
+    second: OptionType = 0,
     microsecond: int = 123_456,
     run_at_startup: bool = False,
     unique: bool = True,
@@ -169,6 +170,7 @@ def cron(
         name = name or 'cron:' + coroutine
         coroutine = import_string(coroutine)
 
+    coroutine = cast(Callable[..., Awaitable[Any]], coroutine)
     assert asyncio.iscoroutinefunction(coroutine), f'{coroutine} is not a coroutine function'
     timeout = to_seconds(timeout)
     keep_result = to_seconds(keep_result)

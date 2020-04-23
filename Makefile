@@ -27,8 +27,21 @@ test:
 testcov:
 	pytest --cov=arq && (echo "building coverage html"; coverage html)
 
+.PHONY: mypy
+mypy:
+	mypy arq/__init__.py
+	#mypy arq/cli.py
+	mypy arq/connections.py
+	mypy arq/constants.py
+	mypy arq/cron.py
+	mypy arq/jobs.py
+	mypy arq/logs.py
+	mypy arq/utils.py
+	mypy arq/version.py
+	#mypy arq/worker.py
+
 .PHONY: all
-all: lint testcov
+all: lint mypy testcov
 
 .PHONY: clean
 clean:

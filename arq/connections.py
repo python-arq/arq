@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
 from ssl import SSLContext
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple, Union, Callable
 from uuid import uuid4
 
 import aioredis
@@ -30,7 +30,7 @@ class RedisSettings:
     port: int = 6379
     database: int = 0
     password: Optional[str] = None
-    ssl: [bool, None, SSLContext] = None
+    ssl: Union[bool, None, SSLContext] = None
     conn_timeout: int = 1
     conn_retries: int = 5
     conn_retry_delay: int = 1
@@ -38,7 +38,7 @@ class RedisSettings:
     sentinel: bool = False
     sentinel_master: str = 'mymaster'
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return '<RedisSettings {}>'.format(' '.join(f'{k}={v}' for k, v in self.__dict__.items()))
 
 
@@ -46,7 +46,7 @@ class RedisSettings:
 expires_extra_ms = 86_400_000
 
 
-class ArqRedis(Redis):
+class ArqRedis(Redis):  # type: ignore
     """
     Thin subclass of ``aioredis.Redis`` which adds :func:`arq.connections.enqueue_job`.
 
@@ -58,10 +58,10 @@ class ArqRedis(Redis):
 
     def __init__(
         self,
-        pool_or_conn,
+        pool_or_conn: Any,
         job_serializer: Optional[Serializer] = None,
         job_deserializer: Optional[Deserializer] = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         self.job_serializer = job_serializer
         self.job_deserializer = job_deserializer
@@ -108,7 +108,7 @@ class ArqRedis(Redis):
             job_result_exists = pipe.exists(result_key_prefix + job_id)
             await pipe.execute()
             if await job_exists or await job_result_exists:
-                return
+                return None
 
             enqueue_time_ms = timestamp_ms()
             if _defer_until is not None:
@@ -130,13 +130,15 @@ class ArqRedis(Redis):
                 # job got enqueued since we checked 'job_exists'
                 # https://github.com/samuelcolvin/arq/issues/131, avoid warnings in log
                 await asyncio.gather(*tr._results, return_exceptions=True)
-                return
+                return None
         return Job(job_id, redis=self, _queue_name=_queue_name, _deserializer=self.job_deserializer)
 
-    async def _get_job_result(self, key) -> JobResult:
+    async def _get_job_result(self, key: str) -> JobResult:
         job_id = key[len(result_key_prefix) :]
         job = Job(job_id, self, _deserializer=self.job_deserializer)
         r = await job.result_info()
+        if r is None:
+            raise KeyError(f'job {key} not found')
         r.job_id = job_id
         return r
 
@@ -148,7 +150,7 @@ class ArqRedis(Redis):
         results = await asyncio.gather(*[self._get_job_result(k) for k in keys])
         return sorted(results, key=attrgetter('enqueue_time'))
 
-    async def _get_job_def(self, job_id, score) -> JobDef:
+    async def _get_job_def(self, job_id: str, score: int) -> JobDef:
         v = await self.get(job_key_prefix + job_id, encoding=None)
         jd = deserialize_job(v, deserializer=self.job_deserializer)
         jd.score = score
@@ -163,7 +165,7 @@ class ArqRedis(Redis):
 
 
 async def create_pool(
-    settings: RedisSettings = None,
+    settings_: RedisSettings = None,
     *,
     retry: int = 0,
     job_serializer: Optional[Serializer] = None,
@@ -175,16 +177,16 @@ async def create_pool(
     Similar to ``aioredis.create_redis_pool`` except it returns a :class:`arq.connections.ArqRedis` instance,
     thus allowing job enqueuing.
     """
-    settings = settings or RedisSettings()
+    settings: RedisSettings = RedisSettings() if settings_ is None else settings_
 
     assert not (
         type(settings.host) is str and settings.sentinel
     ), "str provided for 'host' but 'sentinel' is true; list of sentinels expected"
 
     if settings.sentinel:
-        addr = settings.host
+        addr: Any = settings.host
 
-        async def pool_factory(*args, **kwargs):
+        async def pool_factory(*args: Any, **kwargs: Any) -> Redis:
             client = await aioredis.sentinel.create_sentinel_pool(*args, ssl=settings.ssl, **kwargs)
             return client.master_for(settings.sentinel_master)
 
@@ -222,7 +224,7 @@ async def create_pool(
     )
 
 
-async def log_redis_info(redis, log_func):
+async def log_redis_info(redis: Redis, log_func: Callable[[str], Any]) -> None:
     with await redis as r:
         info, key_count = await asyncio.gather(r.info(), r.dbsize())
     log_func(
