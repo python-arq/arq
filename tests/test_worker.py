@@ -501,7 +501,8 @@ async def test_queue_read_limit_equals_max_jobs(arq_redis: ArqRedis, worker):
         await arq_redis.enqueue_job('foobar')
 
     assert await arq_redis.zcard(default_queue_name) == 4
-    worker: Worker = worker(functions=[foobar], max_jobs=2)
+    worker: Worker = worker(functions=[foobar], queue_read_limit=2)
+    assert worker.queue_read_limit == 2
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
@@ -519,6 +520,13 @@ async def test_queue_read_limit_equals_max_jobs(arq_redis: ArqRedis, worker):
     assert worker.jobs_complete == 4
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
+
+
+async def test_queue_read_limit_calc(worker):
+    assert worker(functions=[foobar], queue_read_limit=2, max_jobs=1).queue_read_limit == 2
+    assert worker(functions=[foobar], queue_read_limit=200, max_jobs=1).queue_read_limit == 200
+    assert worker(functions=[foobar], max_jobs=18).queue_read_limit == 100
+    assert worker(functions=[foobar], max_jobs=22).queue_read_limit == 110
 
 
 async def test_custom_queue_read_limit(arq_redis: ArqRedis, worker):
@@ -686,7 +694,7 @@ async def test_multi_exec(arq_redis: ArqRedis, worker, caplog):
     caplog.set_level(logging.DEBUG, logger='arq.worker')
     await arq_redis.enqueue_job('foo', 1, _job_id='testing')
     worker: Worker = worker(functions=[func(foo, name='foo')])
-    await asyncio.gather(*[worker.run_jobs(['testing']) for _ in range(5)])
+    await asyncio.gather(*[worker.start_jobs(['testing']) for _ in range(5)])
     # debug(caplog.text)
     assert 'multi-exec error, job testing already started elsewhere' in caplog.text
     assert 'WatchVariableError' not in caplog.text
