@@ -58,7 +58,8 @@ setup(
         'aioredis>=1.1.0',
         'click>=6.7',
         'pydantic>=1',
-        'dataclasses>=0.6;python_version == "3.6"'
+        'dataclasses>=0.6;python_version == "3.6"',
+        'typing-extensions>=3.7;python_version < "3.8"'
     ],
     extras_require={
         'watch': ['watchgod>=0.4'],

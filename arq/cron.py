@@ -2,38 +2,34 @@ import asyncio
 import dataclasses
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Optional, Union
+from typing import Optional, Union
 
 from pydantic.utils import import_string
 
-from arq.utils import to_seconds
-
-if TYPE_CHECKING:
-    from .typing import WorkerCoroutine, OptionType, WeekdayOptionType, SecondsTimedelta  # noqa F401
-
-weekdays = 'mon', 'tues', 'wed', 'thurs', 'fri', 'sat', 'sun'
+from .typing import WEEKDAYS, OptionType, SecondsTimedelta, WeekdayOptionType, WorkerCoroutine
+from .utils import to_seconds
 
 
 @dataclass
 class Options:
-    month: 'OptionType'
-    day: 'OptionType'
-    weekday: 'WeekdayOptionType'
-    hour: 'OptionType'
-    minute: 'OptionType'
-    second: 'OptionType'
+    month: OptionType
+    day: OptionType
+    weekday: WeekdayOptionType
+    hour: OptionType
+    minute: OptionType
+    second: OptionType
     microsecond: int
 
 
 def next_cron(
     previous_dt: datetime,
     *,
-    month: 'OptionType' = None,
-    day: 'OptionType' = None,
-    weekday: 'WeekdayOptionType' = None,
-    hour: 'OptionType' = None,
-    minute: 'OptionType' = None,
-    second: 'OptionType' = 0,
+    month: OptionType = None,
+    day: OptionType = None,
+    weekday: WeekdayOptionType = None,
+    hour: OptionType = None,
+    minute: OptionType = None,
+    second: OptionType = 0,
     microsecond: int = 123_456,
 ) -> datetime:
     """
@@ -41,7 +37,7 @@ def next_cron(
     """
     dt = previous_dt + timedelta(seconds=1)
     if isinstance(weekday, str):
-        weekday = weekdays.index(weekday.lower())
+        weekday = WEEKDAYS.index(weekday.lower())
     options = Options(
         month=month, day=day, weekday=weekday, hour=hour, minute=minute, second=second, microsecond=microsecond
     )
@@ -96,13 +92,13 @@ def _get_next_dt(dt_: datetime, options: Options) -> Optional[datetime]:  # noqa
 @dataclass
 class CronJob:
     name: str
-    coroutine: 'WorkerCoroutine'
-    month: 'OptionType'
-    day: 'OptionType'
-    weekday: 'WeekdayOptionType'
-    hour: 'OptionType'
-    minute: 'OptionType'
-    second: 'OptionType'
+    coroutine: WorkerCoroutine
+    month: OptionType
+    day: OptionType
+    weekday: WeekdayOptionType
+    hour: OptionType
+    minute: OptionType
+    second: OptionType
     microsecond: int
     run_at_startup: bool
     unique: bool
@@ -128,19 +124,19 @@ class CronJob:
 
 
 def cron(
-    coroutine: Union[str, 'WorkerCoroutine'],
+    coroutine: Union[str, WorkerCoroutine],
     *,
     name: Optional[str] = None,
-    month: 'OptionType' = None,
-    day: 'OptionType' = None,
-    weekday: 'WeekdayOptionType' = None,
-    hour: 'OptionType' = None,
-    minute: 'OptionType' = None,
-    second: 'OptionType' = 0,
+    month: OptionType = None,
+    day: OptionType = None,
+    weekday: WeekdayOptionType = None,
+    hour: OptionType = None,
+    minute: OptionType = None,
+    second: OptionType = 0,
     microsecond: int = 123_456,
     run_at_startup: bool = False,
     unique: bool = True,
-    timeout: Optional['SecondsTimedelta'] = None,
+    timeout: Optional[SecondsTimedelta] = None,
     keep_result: Optional[float] = 0,
     max_tries: Optional[int] = 1,
 ) -> CronJob:
@@ -169,7 +165,7 @@ def cron(
 
     if isinstance(coroutine, str):
         name = name or 'cron:' + coroutine
-        coroutine_: 'WorkerCoroutine' = import_string(coroutine)
+        coroutine_: WorkerCoroutine = import_string(coroutine)
     else:
         coroutine_ = coroutine
 

@@ -1,9 +1,16 @@
+import sys
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any, Dict, Optional, Protocol, Sequence, Set, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence, Set, Type, Union
+
+if sys.version_info >= (3, 8):
+    from typing import Protocol, Literal
+else:
+    from typing_extensions import Protocol, Literal
 
 __all__ = (
     'OptionType',
     'WeekdayOptionType',
+    'WEEKDAYS',
     'SecondsTimedelta',
     'WorkerCoroutine',
     'StartupShutdown',
@@ -16,7 +23,8 @@ if TYPE_CHECKING:
     from .cron import CronJob  # noqa F401
 
 OptionType = Union[None, Set[int], int]
-WeekdayOptionType = Union[OptionType, str]
+WEEKDAYS = 'mon', 'tues', 'wed', 'thurs', 'fri', 'sat', 'sun'
+WeekdayOptionType = Union[OptionType, Literal['mon', 'tues', 'wed', 'thurs', 'fri', 'sat', 'sun']]
 SecondsTimedelta = Union[int, float, timedelta]
 
 
