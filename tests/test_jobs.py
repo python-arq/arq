@@ -134,3 +134,8 @@ async def test_deserialize_job_raw():
     assert deserialize_job_raw(pickle.dumps({'f': 1, 'a': 2, 'k': 3, 't': 4, 'et': 5})) == (1, 2, 3, 4, 5)
     with pytest.raises(DeserializationError, match='unable to deserialize job'):
         deserialize_job_raw(b'123')
+
+
+async def test_get_job_result(arq_redis: ArqRedis):
+    with pytest.raises(KeyError, match='job "foobar" not found'):
+        await arq_redis._get_job_result('foobar')

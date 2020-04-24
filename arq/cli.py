@@ -59,7 +59,7 @@ async def watch_reload(path: str, worker_settings: 'WorkerSettingsType', loop: a
     worker = create_worker(worker_settings)
 
     def worker_on_stop(s: Signals) -> None:
-        if s != Signals.SIGUSR1:
+        if s != Signals.SIGUSR1:  # pragma: no cover
             stop_event.set()
 
     worker.on_stop = worker_on_stop

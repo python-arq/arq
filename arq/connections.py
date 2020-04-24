@@ -138,7 +138,7 @@ class ArqRedis(Redis):  # type: ignore
         job = Job(job_id, self, _deserializer=self.job_deserializer)
         r = await job.result_info()
         if r is None:
-            raise KeyError(f'job {key} not found')
+            raise KeyError(f'job "{key}" not found')
         r.job_id = job_id
         return r
 
