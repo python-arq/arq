@@ -24,8 +24,9 @@ test:
 	pytest --cov=arq
 
 .PHONY: testcov
-testcov:
-	pytest --cov=arq && (echo "building coverage html"; coverage html)
+testcov: test
+	@echo "building coverage html"
+	@coverage html
 
 .PHONY: mypy
 mypy:
@@ -42,6 +43,7 @@ clean:
 	rm -f `find . -type f -name '.*~' `
 	rm -rf .cache
 	rm -rf .pytest_cache
+	rm -rf .mypy_cache
 	rm -rf htmlcov
 	rm -rf *.egg-info
 	rm -f .coverage

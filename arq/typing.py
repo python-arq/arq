@@ -31,14 +31,14 @@ SecondsTimedelta = Union[int, float, timedelta]
 class WorkerCoroutine(Protocol):
     __qualname__: str
 
-    async def __call__(self, ctx: Dict[Any, Any], *args: Any, **kwargs: Any) -> Any:
+    async def __call__(self, ctx: Dict[Any, Any], *args: Any, **kwargs: Any) -> Any:  # pragma: no cover
         pass
 
 
 class StartupShutdown(Protocol):
     __qualname__: str
 
-    async def __call__(self, ctx: Dict[Any, Any]) -> Any:
+    async def __call__(self, ctx: Dict[Any, Any]) -> Any:  # pragma: no cover
         pass
 
 
