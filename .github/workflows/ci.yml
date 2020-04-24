@@ -91,3 +91,8 @@ jobs:
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.pypi_token }}
+
+      - name: publish docs
+        run: make publish-docs
+        env:
+          NETLIFY: ${{ secrets.netlify_token }}

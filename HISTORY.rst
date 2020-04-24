@@ -3,7 +3,7 @@
 History
 -------
 
-v0.19.0 (unreleased)
+v0.19.0 (2020-04-24)
 ....................
 * Python 3.8 support, #178
 * fix concurrency with multiple workers, #180
