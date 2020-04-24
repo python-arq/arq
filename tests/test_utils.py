@@ -4,6 +4,7 @@ from datetime import timedelta
 
 import pytest
 
+import arq.typing
 import arq.utils
 from arq.connections import RedisSettings, log_redis_info
 
@@ -89,3 +90,7 @@ def test_to_ms(input, output):
 @pytest.mark.parametrize('input,output', [(timedelta(days=1), 86400), (42, 42), (42.123, 42.123), (None, None)])
 def test_to_seconds(input, output):
     assert arq.utils.to_seconds(input) == output
+
+
+def test_typing():
+    assert 'OptionType' in arq.typing.__all__
