@@ -43,27 +43,27 @@ def cli(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: 
     else:
         kwargs = {} if burst is None else {'burst': burst}
         if watch:
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(watch_reload(watch, worker_settings_, loop))
+            asyncio.get_event_loop().run_until_complete(watch_reload(watch, worker_settings_))
         else:
             run_worker(worker_settings_, **kwargs)
 
 
-async def watch_reload(path: str, worker_settings: 'WorkerSettingsType', loop: asyncio.AbstractEventLoop) -> None:
+async def watch_reload(path: str, worker_settings: 'WorkerSettingsType') -> None:
     try:
         from watchgod import awatch
     except ImportError as e:  # pragma: no cover
         raise ImportError('watchgod not installed, use `pip install watchgod`') from e
 
+    loop = asyncio.get_event_loop()
     stop_event = asyncio.Event()
-    worker = create_worker(worker_settings)
 
     def worker_on_stop(s: Signals) -> None:
         if s != Signals.SIGUSR1:  # pragma: no cover
             stop_event.set()
 
-    worker.on_stop = worker_on_stop
+    worker = create_worker(worker_settings)
     try:
+        worker.on_stop = worker_on_stop
         loop.create_task(worker.async_run())
         async for _ in awatch(path, stop_event=stop_event):
             print('\nfiles changed, reloading arq worker...')
