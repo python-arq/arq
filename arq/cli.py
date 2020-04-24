@@ -3,6 +3,7 @@ import logging.config
 import os
 import sys
 from signal import Signals
+from typing import TYPE_CHECKING, cast
 
 import click
 from pydantic.utils import import_string
@@ -10,6 +11,9 @@ from pydantic.utils import import_string
 from .logs import default_log_config
 from .version import VERSION
 from .worker import check_health, create_worker, run_worker
+
+if TYPE_CHECKING:
+    from .typing import WorkerSettingsType
 
 burst_help = 'Batch mode: exit once no jobs are found in any queue.'
 health_check_help = 'Health Check: run a health check and exit.'
@@ -24,28 +28,28 @@ verbose_help = 'Enable verbose output.'
 @click.option('--check', is_flag=True, help=health_check_help)
 @click.option('--watch', type=click.Path(exists=True, dir_okay=True, file_okay=False), help=watch_help)
 @click.option('-v', '--verbose', is_flag=True, help=verbose_help)
-def cli(*, worker_settings, burst, check, watch, verbose):
+def cli(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: bool) -> None:
     """
     Job queues in python with asyncio and redis.
 
     CLI to run the arq worker.
     """
     sys.path.append(os.getcwd())
-    worker_settings = import_string(worker_settings)
+    worker_settings_ = cast('WorkerSettingsType', import_string(worker_settings))
     logging.config.dictConfig(default_log_config(verbose))
 
     if check:
-        exit(check_health(worker_settings))
+        exit(check_health(worker_settings_))
     else:
         kwargs = {} if burst is None else {'burst': burst}
         if watch:
             loop = asyncio.get_event_loop()
-            loop.run_until_complete(watch_reload(watch, worker_settings, loop))
+            loop.run_until_complete(watch_reload(watch, worker_settings_, loop))
         else:
-            run_worker(worker_settings, **kwargs)
+            run_worker(worker_settings_, **kwargs)
 
 
-async def watch_reload(path, worker_settings, loop):
+async def watch_reload(path: str, worker_settings: 'WorkerSettingsType', loop: asyncio.AbstractEventLoop) -> None:
     try:
         from watchgod import awatch
     except ImportError as e:  # pragma: no cover
@@ -53,8 +57,13 @@ async def watch_reload(path, worker_settings, loop):
 
     stop_event = asyncio.Event()
     worker = create_worker(worker_settings)
+
+    def worker_on_stop(s: Signals) -> None:
+        if s != Signals.SIGUSR1:
+            stop_event.set()
+
+    worker.on_stop = worker_on_stop
     try:
-        worker.on_stop = lambda s: s != Signals.SIGUSR1 and stop_event.set()
         loop.create_task(worker.async_run())
         async for _ in awatch(path, stop_event=stop_event):
             print('\nfiles changed, reloading arq worker...')

@@ -2,37 +2,38 @@ import asyncio
 import dataclasses
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Awaitable, Callable, Optional, Set, Union, cast
+from typing import TYPE_CHECKING, Optional, Union
 
 from pydantic.utils import import_string
 
-from arq.utils import SecondsTimedelta, to_seconds
+from arq.utils import to_seconds
 
-OptionType = Union[None, Set[int], int]
+if TYPE_CHECKING:
+    from .typing import WorkerCoroutine, OptionType, WeekdayOptionType, SecondsTimedelta  # noqa F401
+
 weekdays = 'mon', 'tues', 'wed', 'thurs', 'fri', 'sat', 'sun'
-WeekdayType = Union[OptionType, str]
 
 
 @dataclass
 class Options:
-    month: OptionType
-    day: OptionType
-    weekday: WeekdayType
-    hour: OptionType
-    minute: OptionType
-    second: OptionType
+    month: 'OptionType'
+    day: 'OptionType'
+    weekday: 'WeekdayOptionType'
+    hour: 'OptionType'
+    minute: 'OptionType'
+    second: 'OptionType'
     microsecond: int
 
 
 def next_cron(
     previous_dt: datetime,
     *,
-    month: OptionType = None,
-    day: OptionType = None,
-    weekday: WeekdayType = None,
-    hour: OptionType = None,
-    minute: OptionType = None,
-    second: OptionType = 0,
+    month: 'OptionType' = None,
+    day: 'OptionType' = None,
+    weekday: 'WeekdayOptionType' = None,
+    hour: 'OptionType' = None,
+    minute: 'OptionType' = None,
+    second: 'OptionType' = 0,
     microsecond: int = 123_456,
 ) -> datetime:
     """
@@ -64,7 +65,7 @@ def _get_next_dt(dt_: datetime, options: Options) -> Optional[datetime]:  # noqa
         if isinstance(v, int):
             mismatch = next_v != v
         else:
-            assert isinstance(v, (set, list, tuple))
+            assert isinstance(v, (set, list, tuple)), v
             mismatch = next_v not in v
         # print(field, v, next_v, mismatch)
         if mismatch:
@@ -95,13 +96,13 @@ def _get_next_dt(dt_: datetime, options: Options) -> Optional[datetime]:  # noqa
 @dataclass
 class CronJob:
     name: str
-    coroutine: Callable[..., Awaitable[Any]]
-    month: OptionType
-    day: OptionType
-    weekday: WeekdayType
-    hour: OptionType
-    minute: OptionType
-    second: OptionType
+    coroutine: 'WorkerCoroutine'
+    month: 'OptionType'
+    day: 'OptionType'
+    weekday: 'WeekdayOptionType'
+    hour: 'OptionType'
+    minute: 'OptionType'
+    second: 'OptionType'
     microsecond: int
     run_at_startup: bool
     unique: bool
@@ -127,19 +128,19 @@ class CronJob:
 
 
 def cron(
-    coroutine: Union[str, Callable[..., Awaitable[Any]]],
+    coroutine: Union[str, 'WorkerCoroutine'],
     *,
     name: Optional[str] = None,
-    month: OptionType = None,
-    day: OptionType = None,
-    weekday: WeekdayType = None,
-    hour: OptionType = None,
-    minute: OptionType = None,
-    second: OptionType = 0,
+    month: 'OptionType' = None,
+    day: 'OptionType' = None,
+    weekday: 'WeekdayOptionType' = None,
+    hour: 'OptionType' = None,
+    minute: 'OptionType' = None,
+    second: 'OptionType' = 0,
     microsecond: int = 123_456,
     run_at_startup: bool = False,
     unique: bool = True,
-    timeout: Optional[SecondsTimedelta] = None,
+    timeout: Optional['SecondsTimedelta'] = None,
     keep_result: Optional[float] = 0,
     max_tries: Optional[int] = 1,
 ) -> CronJob:
@@ -168,16 +169,17 @@ def cron(
 
     if isinstance(coroutine, str):
         name = name or 'cron:' + coroutine
-        coroutine = import_string(coroutine)
+        coroutine_: 'WorkerCoroutine' = import_string(coroutine)
+    else:
+        coroutine_ = coroutine
 
-    coroutine = cast(Callable[..., Awaitable[Any]], coroutine)
-    assert asyncio.iscoroutinefunction(coroutine), f'{coroutine} is not a coroutine function'
+    assert asyncio.iscoroutinefunction(coroutine_), f'{coroutine_} is not a coroutine function'
     timeout = to_seconds(timeout)
     keep_result = to_seconds(keep_result)
 
     return CronJob(
-        name or 'cron:' + coroutine.__qualname__,
-        coroutine,
+        name or 'cron:' + coroutine_.__qualname__,
+        coroutine_,
         month,
         day,
         weekday,

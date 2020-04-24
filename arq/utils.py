@@ -2,14 +2,16 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from time import time
-from typing import Any, AsyncGenerator, Dict, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Optional, Sequence, overload
 
 logger = logging.getLogger('arq.utils')
+
+if TYPE_CHECKING:
+    from .typing import SecondsTimedelta
 
 
 epoch = datetime(1970, 1, 1)
 epoch_tz = epoch.replace(tzinfo=timezone.utc)
-SecondsTimedelta = Union[int, float, timedelta]
 
 
 def as_int(f: float) -> int:
@@ -33,7 +35,17 @@ def ms_to_datetime(unix_ms: int) -> datetime:
     return epoch + timedelta(seconds=unix_ms / 1000)
 
 
-def to_ms(td: Optional[SecondsTimedelta]) -> Optional[int]:
+@overload
+def to_ms(td: None) -> None:
+    pass
+
+
+@overload
+def to_ms(td: 'SecondsTimedelta') -> int:
+    pass
+
+
+def to_ms(td: Optional['SecondsTimedelta']) -> Optional[int]:
     if td is None:
         return td
     elif isinstance(td, timedelta):
@@ -41,7 +53,17 @@ def to_ms(td: Optional[SecondsTimedelta]) -> Optional[int]:
     return as_int(td * 1000)
 
 
-def to_seconds(td: Optional[SecondsTimedelta]) -> Optional[float]:
+@overload
+def to_seconds(td: None) -> None:
+    pass
+
+
+@overload
+def to_seconds(td: 'SecondsTimedelta') -> float:
+    pass
+
+
+def to_seconds(td: Optional['SecondsTimedelta']) -> Optional[float]:
     if td is None:
         return td
     elif isinstance(td, timedelta):

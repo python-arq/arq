@@ -29,16 +29,7 @@ testcov:
 
 .PHONY: mypy
 mypy:
-	mypy arq/__init__.py
-	#mypy arq/cli.py
-	mypy arq/connections.py
-	mypy arq/constants.py
-	mypy arq/cron.py
-	mypy arq/jobs.py
-	mypy arq/logs.py
-	mypy arq/utils.py
-	mypy arq/version.py
-	#mypy arq/worker.py
+	mypy arq
 
 .PHONY: all
 all: lint mypy testcov
