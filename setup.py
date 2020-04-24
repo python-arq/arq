@@ -4,10 +4,9 @@ from importlib.machinery import SourceFileLoader
 from setuptools import setup
 
 description = 'Job queues in python with asyncio and redis'
-readme = Path(__file__).parent.joinpath('README.md')
+readme = Path(__file__).parent / 'README.md'
 if readme.exists():
-    with readme.open() as f:
-        long_description = f.read()
+    long_description = readme.read_text()
 else:
     long_description = description + '.\n\nSee https://arq-docs.helpmanual.io/ for documentation.'
 # avoid loading the package before requirements are installed:
@@ -59,7 +58,8 @@ setup(
         'aioredis>=1.1.0',
         'click>=6.7',
         'pydantic>=1',
-        'dataclasses>=0.6;python_version == "3.6"'
+        'dataclasses>=0.6;python_version == "3.6"',
+        'typing-extensions>=3.7;python_version < "3.8"'
     ],
     extras_require={
         'watch': ['watchgod>=0.4'],

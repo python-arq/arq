@@ -46,6 +46,9 @@ jobs:
     - name: lint
       run: make lint
 
+    - name: mypy
+      run: make mypy
+
     - name: test
       run: |
         make test

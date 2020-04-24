@@ -4,7 +4,9 @@ import pickle
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
+
+from aioredis import Redis
 
 from .constants import default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
 from .utils import ms_to_datetime, poll, timestamp_ms
@@ -35,8 +37,8 @@ class JobStatus(str, Enum):
 @dataclass
 class JobDef:
     function: str
-    args: tuple
-    kwargs: dict
+    args: Tuple[Any, ...]
+    kwargs: Dict[str, Any]
     job_try: int
     enqueue_time: datetime
     score: Optional[int]
@@ -59,7 +61,11 @@ class Job:
     __slots__ = 'job_id', '_redis', '_queue_name', '_deserializer'
 
     def __init__(
-        self, job_id: str, redis, _queue_name: str = default_queue_name, _deserializer: Optional[Deserializer] = None
+        self,
+        job_id: str,
+        redis: Redis,
+        _queue_name: str = default_queue_name,
+        _deserializer: Optional[Deserializer] = None,
     ):
         self.job_id = job_id
         self._redis = redis
@@ -91,7 +97,7 @@ class Job:
         """
         All information on a job, including its result if it's available, does not wait for the result.
         """
-        info = await self.result_info()
+        info: Optional[JobDef] = await self.result_info()
         if not info:
             v = await self._redis.get(job_key_prefix + self.job_id, encoding=None)
             if v:
@@ -108,6 +114,8 @@ class Job:
         v = await self._redis.get(result_key_prefix + self.job_id, encoding=None)
         if v:
             return deserialize_result(v, deserializer=self._deserializer)
+        else:
+            return None
 
     async def status(self) -> JobStatus:
         """
@@ -123,7 +131,7 @@ class Job:
                 return JobStatus.not_found
             return JobStatus.deferred if score > timestamp_ms() else JobStatus.queued
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'<arq job {self.job_id}>'
 
 
@@ -137,9 +145,9 @@ class DeserializationError(SerializationError):
 
 def serialize_job(
     function_name: str,
-    args: tuple,
-    kwargs: dict,
-    job_try: int,
+    args: Tuple[Any, ...],
+    kwargs: Dict[str, Any],
+    job_try: Optional[int],
     enqueue_time_ms: int,
     *,
     serializer: Optional[Serializer] = None,
@@ -155,8 +163,8 @@ def serialize_job(
 
 def serialize_result(
     function: str,
-    args: tuple,
-    kwargs: dict,
+    args: Tuple[Any, ...],
+    kwargs: Dict[str, Any],
     job_try: int,
     enqueue_time_ms: int,
     success: bool,
@@ -191,6 +199,7 @@ def serialize_result(
         return serializer(data)
     except Exception:
         logger.critical('error serializing result of %s even after replacing result', ref, exc_info=True)
+    return None
 
 
 def deserialize_job(r: bytes, *, deserializer: Optional[Deserializer] = None) -> JobDef:
@@ -210,7 +219,9 @@ def deserialize_job(r: bytes, *, deserializer: Optional[Deserializer] = None) ->
         raise DeserializationError('unable to deserialize job') from e
 
 
-def deserialize_job_raw(r: bytes, *, deserializer: Optional[Deserializer] = None) -> tuple:
+def deserialize_job_raw(
+    r: bytes, *, deserializer: Optional[Deserializer] = None
+) -> Tuple[str, Tuple[Any, ...], Dict[str, Any], int, int]:
     if deserializer is None:
         deserializer = pickle.loads
     try:

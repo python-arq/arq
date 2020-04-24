@@ -2,14 +2,16 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from time import time
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Optional, Sequence, overload
 
 logger = logging.getLogger('arq.utils')
+
+if TYPE_CHECKING:
+    from .typing import SecondsTimedelta
 
 
 epoch = datetime(1970, 1, 1)
 epoch_tz = epoch.replace(tzinfo=timezone.utc)
-SecondsTimedelta = Union[int, float, timedelta]
 
 
 def as_int(f: float) -> int:
@@ -33,7 +35,17 @@ def ms_to_datetime(unix_ms: int) -> datetime:
     return epoch + timedelta(seconds=unix_ms / 1000)
 
 
-def to_ms(td: Optional[SecondsTimedelta]) -> Optional[int]:
+@overload
+def to_ms(td: None) -> None:
+    pass
+
+
+@overload
+def to_ms(td: 'SecondsTimedelta') -> int:
+    pass
+
+
+def to_ms(td: Optional['SecondsTimedelta']) -> Optional[int]:
     if td is None:
         return td
     elif isinstance(td, timedelta):
@@ -41,7 +53,17 @@ def to_ms(td: Optional[SecondsTimedelta]) -> Optional[int]:
     return as_int(td * 1000)
 
 
-def to_seconds(td: Optional[SecondsTimedelta]) -> Optional[float]:
+@overload
+def to_seconds(td: None) -> None:
+    pass
+
+
+@overload
+def to_seconds(td: 'SecondsTimedelta') -> float:
+    pass
+
+
+def to_seconds(td: Optional['SecondsTimedelta']) -> Optional[float]:
     if td is None:
         return td
     elif isinstance(td, timedelta):
@@ -49,7 +71,7 @@ def to_seconds(td: Optional[SecondsTimedelta]) -> Optional[float]:
     return td
 
 
-async def poll(step: float = 0.5):
+async def poll(step: float = 0.5) -> AsyncGenerator[float, None]:
     loop = asyncio.get_event_loop()
     start = loop.time()
     while True:
@@ -75,7 +97,7 @@ def truncate(s: str, length: int = DEFAULT_CURTAIL) -> str:
     return s
 
 
-def args_to_string(args, kwargs):
+def args_to_string(args: Sequence[Any], kwargs: Dict[str, Any]) -> str:
     arguments = ''
     if args:
         arguments = ', '.join(map(repr, args))

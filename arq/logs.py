@@ -1,4 +1,7 @@
-def default_log_config(verbose: bool) -> dict:
+from typing import Any, Dict
+
+
+def default_log_config(verbose: bool) -> Dict[str, Any]:
     """
     Setup default config. for dictConfig.
 
