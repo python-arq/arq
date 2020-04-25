@@ -133,6 +133,7 @@ class Worker:
     :param burst: whether to stop the worker once all jobs have been run
     :param on_startup: coroutine function to run at startup
     :param on_shutdown: coroutine function to run at shutdown
+    :param no_sig: does not register signal handlers, used when running inside other async framework
     :param max_jobs: maximum number of jobs to run at a time
     :param job_timeout: default job timeout (max run time)
     :param keep_result: default duration to keep job results for
@@ -159,6 +160,7 @@ class Worker:
         burst: bool = False,
         on_startup: Optional['StartupShutdown'] = None,
         on_shutdown: Optional['StartupShutdown'] = None,
+        no_sig: Optional[bool] = False,
         max_jobs: int = 10,
         job_timeout: 'SecondsTimedelta' = 300,
         keep_result: 'SecondsTimedelta' = 3600,
@@ -212,8 +214,10 @@ class Worker:
         self.jobs_failed = 0
         self._last_health_check: float = 0
         self._last_health_check_log: Optional[str] = None
-        self._add_signal_handler(signal.SIGINT, self.handle_sig)
-        self._add_signal_handler(signal.SIGTERM, self.handle_sig)
+        self._no_sig = no_sig
+        if not self._no_sig
+            self._add_signal_handler(signal.SIGINT, self.handle_sig)
+            self._add_signal_handler(signal.SIGTERM, self.handle_sig)
         self.on_stop: Optional[Callable[[Signals], None]] = None
         # whether or not to retry jobs on Retry and CancelledError
         self.retry_jobs = retry_jobs
@@ -598,6 +602,8 @@ class Worker:
         self.on_stop and self.on_stop(sig)
 
     async def close(self) -> None:
+        if self._no_sig:
+            self.handle_sig(signal.SIGUSR1)
         if not self._pool:
             return
         await asyncio.gather(*self.tasks)
