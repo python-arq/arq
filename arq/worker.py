@@ -215,7 +215,7 @@ class Worker:
         self._last_health_check: float = 0
         self._last_health_check_log: Optional[str] = None
         self._no_sig = no_sig
-        if not self._no_sig
+        if not self._no_sig:
             self._add_signal_handler(signal.SIGINT, self.handle_sig)
             self._add_signal_handler(signal.SIGTERM, self.handle_sig)
         self.on_stop: Optional[Callable[[Signals], None]] = None
