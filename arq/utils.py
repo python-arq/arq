@@ -19,6 +19,9 @@ def timestamp_ms() -> int:
 
 
 def to_unix_ms(dt: datetime) -> int:
+    """
+    convert a datetime to epoch with milliseconds as int
+    """
     return as_int(dt.timestamp() * 1000)
 
 
