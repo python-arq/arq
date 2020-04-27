@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from arq import create_pool
 from arq.connections import RedisSettings
@@ -17,7 +17,8 @@ async def main():
     await redis.enqueue_job('the_task', _defer_by=timedelta(minutes=1))
 
     # deferred until jan 28th 2032, you'll be waiting a long time for this...
-    await redis.enqueue_job('the_task', _defer_until=datetime(2032, 1, 28))
+    # when defininig a datetime make sure it includes time zone information otherwise it will be assumed to be utc without conversion
+    await redis.enqueue_job('the_task', _defer_until=datetime(2032, 1, 28, tzinfo=timezone.utc))
 
 class WorkerSettings:
     functions = [the_task]

@@ -127,6 +127,12 @@ By default, when a job is enqueued it will run as soon as possible (provided a w
 you can schedule jobs to run in the future, either by a given duration (``_defer_by``) or
 at a particular time ``_defer_until``, see :func:`arq.connections.ArqRedis.enqueue_job`.
 
+.. warning::
+   When using ``_defer_until`` always provide a ``datetime`` object which includes time zone information.
+   If no time zone information is given it will default to utc without correct conversion. The easiest way to do this
+   is to use the buitin ``datetime.timezone.utc`` when creating the ``datetime`` object.
+   Ex: ``datetime.now(tz=timezone.utc)``, ``datetime(2032, 1, 28, tzinfo=timezone.utc)``
+
 .. literalinclude:: examples/deferred.py
 
 Job Uniqueness
