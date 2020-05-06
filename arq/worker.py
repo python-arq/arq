@@ -576,7 +576,11 @@ class Worker:
             self._last_health_check_log = log_suffix
 
     def _add_signal_handler(self, signum: Signals, handler: Callable[[Signals], None]) -> None:
-        self.loop.add_signal_handler(signum, partial(handler, signum))
+        try:
+            self.loop.add_signal_handler(signum, partial(handler, signum))
+        except NotImplementedError:
+            logger.debug('Oy vey; Windows doesn\'t support adding a signal handler to an eventloop')
+
 
     def _jobs_started(self) -> int:
         return self.jobs_complete + self.jobs_retried + self.jobs_failed + len(self.tasks)
