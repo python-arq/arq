@@ -6,6 +6,7 @@ History
 v0.19.1 (unreleased)
 ....................
 * fix timestamp issue in _defer_until without timezone offset, #182
+* add option to disable signal handler registration for running inside other frameworks, #183
 
 v0.19.0 (2020-04-24)
 ....................
