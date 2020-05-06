@@ -2,12 +2,12 @@ import asyncio
 import pickle
 
 import pytest
-from pytest_toolbox.comparison import CloseToNow
 
 from arq import Worker, func
 from arq.connections import ArqRedis
 from arq.constants import default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
 from arq.jobs import DeserializationError, Job, JobResult, JobStatus, deserialize_job_raw, serialize_result
+from pytest_toolbox.comparison import CloseToNow
 
 
 async def test_job_in_progress(arq_redis: ArqRedis):

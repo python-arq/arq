@@ -581,7 +581,6 @@ class Worker:
         except NotImplementedError:
             logger.debug("Oy vey; Windows does not support adding a signal handler to an eventloop")
 
-
     def _jobs_started(self) -> int:
         return self.jobs_complete + self.jobs_retried + self.jobs_failed + len(self.tasks)
 
