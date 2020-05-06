@@ -579,7 +579,7 @@ class Worker:
         try:
             self.loop.add_signal_handler(signum, partial(handler, signum))
         except NotImplementedError:
-            logger.debug('Oy vey; Windows doesn\'t support adding a signal handler to an eventloop')
+            logger.debug("Oy vey; Windows does not support adding a signal handler to an eventloop")
 
 
     def _jobs_started(self) -> int:
