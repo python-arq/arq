@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from time import time
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Optional, Sequence, overload
 
@@ -8,10 +8,6 @@ logger = logging.getLogger('arq.utils')
 
 if TYPE_CHECKING:
     from .typing import SecondsTimedelta
-
-
-epoch = datetime(1970, 1, 1)
-epoch_tz = epoch.replace(tzinfo=timezone.utc)
 
 
 def as_int(f: float) -> int:
@@ -24,15 +20,13 @@ def timestamp_ms() -> int:
 
 def to_unix_ms(dt: datetime) -> int:
     """
-    convert a datetime to number of milliseconds since 1970 and calculate timezone offset
+    convert a datetime to epoch with milliseconds as int
     """
-    utcoffset = dt.utcoffset()
-    ep = epoch if utcoffset is None else epoch_tz
-    return as_int((dt - ep).total_seconds() * 1000)
+    return as_int(dt.timestamp() * 1000)
 
 
 def ms_to_datetime(unix_ms: int) -> datetime:
-    return epoch + timedelta(seconds=unix_ms / 1000)
+    return datetime.fromtimestamp(unix_ms / 1000)
 
 
 @overload

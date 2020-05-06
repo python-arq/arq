@@ -3,6 +3,10 @@
 History
 -------
 
+v0.19.1 (unreleased)
+....................
+* fix timestamp issue in _defer_until without timezone offset, #182
+
 v0.19.0 (2020-04-24)
 ....................
 * Python 3.8 support, #178
