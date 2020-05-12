@@ -142,6 +142,7 @@ class Worker:
     :param max_tries: default maximum number of times to retry a job
     :param health_check_interval: how often to set the health check key
     :param health_check_key: redis key under which health check is set
+    :param ctx: dictionary to hold extra user defined state
     :param retry_jobs: whether to retry jobs on Retry or CancelledError or not
     :param max_burst_jobs: the maximum number of jobs to process in burst mode (disabled with negative values)
     :param job_serializer: a function that serializes Python objects to bytes, defaults to pickle.dumps
