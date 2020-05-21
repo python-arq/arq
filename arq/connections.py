@@ -53,6 +53,7 @@ class ArqRedis(Redis):  # type: ignore
     :param redis_settings: an instance of ``arq.connections.RedisSettings``.
     :param job_serializer: a function that serializes Python objects to bytes, defaults to pickle.dumps
     :param job_deserializer: a function that deserializes bytes into Python objects, defaults to pickle.loads
+    :param default_queue_name: the default queue name to use, defaults to ``arq.queue``.
     :param kwargs: keyword arguments directly passed to ``aioredis.Redis``.
     """
 
@@ -61,10 +62,12 @@ class ArqRedis(Redis):  # type: ignore
         pool_or_conn: Any,
         job_serializer: Optional[Serializer] = None,
         job_deserializer: Optional[Deserializer] = None,
+        default_queue_name: str = default_queue_name,
         **kwargs: Any,
     ) -> None:
         self.job_serializer = job_serializer
         self.job_deserializer = job_deserializer
+        self.default_queue_name = default_queue_name
         super().__init__(pool_or_conn, **kwargs)
 
     async def enqueue_job(
@@ -72,7 +75,7 @@ class ArqRedis(Redis):  # type: ignore
         function: str,
         *args: Any,
         _job_id: Optional[str] = None,
-        _queue_name: str = default_queue_name,
+        _queue_name: Optional[str] = None,
         _defer_until: Optional[datetime] = None,
         _defer_by: Union[None, int, float, timedelta] = None,
         _expires: Union[None, int, float, timedelta] = None,
@@ -93,6 +96,8 @@ class ArqRedis(Redis):  # type: ignore
         :param kwargs: any keyword arguments to pass to the function
         :return: :class:`arq.jobs.Job` instance or ``None`` if a job with this ID already exists
         """
+        if _queue_name is None:
+            _queue_name = self.default_queue_name
         job_id = _job_id or uuid4().hex
         job_key = job_key_prefix + job_id
         assert not (_defer_until and _defer_by), "use either 'defer_until' or 'defer_by' or neither, not both"
@@ -170,6 +175,7 @@ async def create_pool(
     retry: int = 0,
     job_serializer: Optional[Serializer] = None,
     job_deserializer: Optional[Deserializer] = None,
+    default_queue_name: str = default_queue_name,
 ) -> ArqRedis:
     """
     Create a new redis pool, retrying up to ``conn_retries`` times if the connection fails.
@@ -198,7 +204,12 @@ async def create_pool(
 
     try:
         pool = await pool_factory(addr, db=settings.database, password=settings.password, encoding='utf8')
-        pool = ArqRedis(pool, job_serializer=job_serializer, job_deserializer=job_deserializer)
+        pool = ArqRedis(
+            pool,
+            job_serializer=job_serializer,
+            job_deserializer=job_deserializer,
+            default_queue_name=default_queue_name,
+        )
 
     except (ConnectionError, OSError, aioredis.RedisError, asyncio.TimeoutError) as e:
         if retry < settings.conn_retries:
@@ -220,7 +231,11 @@ async def create_pool(
     # recursively attempt to create the pool outside the except block to avoid
     # "During handling of the above exception..." madness
     return await create_pool(
-        settings, retry=retry + 1, job_serializer=job_serializer, job_deserializer=job_deserializer
+        settings,
+        retry=retry + 1,
+        job_serializer=job_serializer,
+        job_deserializer=job_deserializer,
+        default_queue_name=default_queue_name,
     )
 
 
