@@ -178,7 +178,7 @@ class Worker:
             if redis_pool is not None:
                 queue_name = redis_pool.default_queue_name
             else:
-                raise Exception('If queue_name is absent, redis_pool must be present.')
+                raise ValueError('If queue_name is absent, redis_pool must be present.')
         self.queue_name = queue_name
         self.cron_jobs: List[CronJob] = []
         if cron_jobs is not None:
