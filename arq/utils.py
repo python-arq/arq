@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from time import time
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Optional, Sequence, overload
 
@@ -26,7 +26,7 @@ def to_unix_ms(dt: datetime) -> int:
 
 
 def ms_to_datetime(unix_ms: int) -> datetime:
-    return datetime.fromtimestamp(unix_ms / 1000)
+    return datetime.fromtimestamp(unix_ms / 1000, tz=timezone.utc)
 
 
 @overload
