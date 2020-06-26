@@ -160,7 +160,7 @@ class Worker:
         burst: bool = False,
         on_startup: Optional['StartupShutdown'] = None,
         on_shutdown: Optional['StartupShutdown'] = None,
-        sigs: bool = True,
+        handle_signals: bool = True,
         max_jobs: int = 10,
         job_timeout: 'SecondsTimedelta' = 300,
         keep_result: 'SecondsTimedelta' = 3600,
@@ -214,8 +214,8 @@ class Worker:
         self.jobs_failed = 0
         self._last_health_check: float = 0
         self._last_health_check_log: Optional[str] = None
-        self._sigs = sigs
-        if self._sigs:
+        self._handle_signals = handle_signals
+        if self._handle_signals:
             self._add_signal_handler(signal.SIGINT, self.handle_sig)
             self._add_signal_handler(signal.SIGTERM, self.handle_sig)
         self.on_stop: Optional[Callable[[Signals], None]] = None
@@ -602,7 +602,7 @@ class Worker:
         self.on_stop and self.on_stop(sig)
 
     async def close(self) -> None:
-        if not self._sigs:
+        if not self._handle_signals:
             self.handle_sig(signal.SIGUSR1)
         if not self._pool:
             return
