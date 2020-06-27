@@ -578,7 +578,7 @@ class Worker:
     def _add_signal_handler(self, signum: Signals, handler: Callable[[Signals], None]) -> None:
         try:
             self.loop.add_signal_handler(signum, partial(handler, signum))
-        except NotImplementedError:
+        except NotImplementedError:  # pragma: no cover
             logger.debug('Windows does not support adding a signal handler to an eventloop')
 
     def _jobs_started(self) -> int:
