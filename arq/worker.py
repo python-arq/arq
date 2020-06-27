@@ -327,12 +327,10 @@ class Worker:
             await self.sem.acquire()
             in_progress_key = in_progress_key_prefix + job_id
             with await self.pool as conn:
-                _, _, ongoing_exists, score = await asyncio.gather(
-                    conn.unwatch(),
-                    conn.watch(in_progress_key),
-                    conn.exists(in_progress_key),
-                    conn.zscore(self.queue_name, job_id),
-                )
+                await conn.unwatch()
+                await conn.watch(in_progress_key)
+                ongoing_exists = await conn.exists(in_progress_key)
+                score = await conn.zscore(self.queue_name, job_id)
                 if ongoing_exists or not score:
                     # job already started elsewhere, or already finished and removed from queue
                     self.sem.release()
