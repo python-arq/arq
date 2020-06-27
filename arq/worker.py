@@ -133,7 +133,7 @@ class Worker:
     :param burst: whether to stop the worker once all jobs have been run
     :param on_startup: coroutine function to run at startup
     :param on_shutdown: coroutine function to run at shutdown
-    :param sigs: default true, register signal handlers, set to false when running inside other async framework
+    :param handle_signals: default true, register signal handlers, set to false when running inside other async framework
     :param max_jobs: maximum number of jobs to run at a time
     :param job_timeout: default job timeout (max run time)
     :param keep_result: default duration to keep job results for
