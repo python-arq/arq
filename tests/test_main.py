@@ -2,7 +2,7 @@ import asyncio
 import dataclasses
 import logging
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone
 from random import shuffle
 from time import time
 
@@ -76,7 +76,7 @@ async def test_repeat_job(arq_redis: ArqRedis):
 
 
 async def test_defer_until(arq_redis: ArqRedis):
-    j1 = await arq_redis.enqueue_job('foobar', _job_id='job_id', _defer_until=datetime(2032, 1, 1))
+    j1 = await arq_redis.enqueue_job('foobar', _job_id='job_id', _defer_until=datetime(2032, 1, 1, tzinfo=timezone.utc))
     assert isinstance(j1, Job)
     score = await arq_redis.zscore(default_queue_name, 'job_id')
     assert score == 1_956_528_000_000

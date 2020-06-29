@@ -143,6 +143,7 @@ class Worker:
     :param max_tries: default maximum number of times to retry a job
     :param health_check_interval: how often to set the health check key
     :param health_check_key: redis key under which health check is set
+    :param ctx: dictionary to hold extra user defined state
     :param retry_jobs: whether to retry jobs on Retry or CancelledError or not
     :param max_burst_jobs: the maximum number of jobs to process in burst mode (disabled with negative values)
     :param job_serializer: a function that serializes Python objects to bytes, defaults to pickle.dumps
@@ -153,7 +154,7 @@ class Worker:
         self,
         functions: Sequence[Union[Function, 'WorkerCoroutine']] = (),
         *,
-        queue_name: str = default_queue_name,
+        queue_name: Optional[str] = default_queue_name,
         cron_jobs: Optional[Sequence[CronJob]] = None,
         redis_settings: RedisSettings = None,
         redis_pool: ArqRedis = None,
@@ -176,6 +177,11 @@ class Worker:
         job_deserializer: Optional[Deserializer] = None,
     ):
         self.functions: Dict[str, Union[Function, CronJob]] = {f.name: f for f in map(func, functions)}
+        if queue_name is None:
+            if redis_pool is not None:
+                queue_name = redis_pool.default_queue_name
+            else:
+                raise ValueError('If queue_name is absent, redis_pool must be present.')
         self.queue_name = queue_name
         self.cron_jobs: List[CronJob] = []
         if cron_jobs is not None:
