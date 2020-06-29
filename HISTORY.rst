@@ -6,6 +6,7 @@ History
 v0.19.1 (unreleased)
 ....................
 * fix timestamp issue in _defer_until without timezone offset, #182
+* add option to disable signal handler registration from running inside other frameworks, #183
 * Add ``default_queue_name`` to ``create_redis_pool`` and ``ArqRedis``, #191
 * ``Worker`` can retrieve the ``queue_name`` from the connection pool, if present
 

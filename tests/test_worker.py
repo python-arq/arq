@@ -91,6 +91,25 @@ async def test_handle_sig(caplog):
     assert worker.tasks[1].cancel.call_count == 1
 
 
+async def test_handle_no_sig(caplog):
+    caplog.set_level(logging.INFO)
+    worker = Worker([foobar], handle_signals=False)
+    worker.main_task = MagicMock()
+    worker.tasks = [MagicMock(done=MagicMock(return_value=True)), MagicMock(done=MagicMock(return_value=False))]
+
+    assert len(caplog.records) == 0
+    await worker.close()
+    assert len(caplog.records) == 1
+    assert caplog.records[0].message == (
+        'shutdown on SIGUSR1 ◆ 0 jobs complete ◆ 0 failed ◆ 0 retries ◆ 2 ongoing to cancel'
+    )
+    assert worker.main_task.cancel.call_count == 1
+    assert worker.tasks[0].done.call_count == 1
+    assert worker.tasks[0].cancel.call_count == 0
+    assert worker.tasks[1].done.call_count == 1
+    assert worker.tasks[1].cancel.call_count == 1
+
+
 async def test_job_successful(arq_redis: ArqRedis, worker, caplog):
     caplog.set_level(logging.INFO)
     await arq_redis.enqueue_job('foobar', _job_id='testing')
