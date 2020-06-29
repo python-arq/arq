@@ -93,7 +93,7 @@ async def test_handle_sig(caplog):
 
 async def test_handle_no_sig(caplog):
     caplog.set_level(logging.INFO)
-    worker = Worker([foobar], sigs=False)
+    worker = Worker([foobar], handle_signals=False)
     worker.main_task = MagicMock()
     worker.tasks = [MagicMock(done=MagicMock(return_value=True)), MagicMock(done=MagicMock(return_value=False))]
 
