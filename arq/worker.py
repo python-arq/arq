@@ -133,6 +133,8 @@ class Worker:
     :param burst: whether to stop the worker once all jobs have been run
     :param on_startup: coroutine function to run at startup
     :param on_shutdown: coroutine function to run at shutdown
+    :param handle_signals: default true, register signal handlers,
+      set to false when running inside other async framework
     :param max_jobs: maximum number of jobs to run at a time
     :param job_timeout: default job timeout (max run time)
     :param keep_result: default duration to keep job results for
@@ -160,6 +162,7 @@ class Worker:
         burst: bool = False,
         on_startup: Optional['StartupShutdown'] = None,
         on_shutdown: Optional['StartupShutdown'] = None,
+        handle_signals: bool = True,
         max_jobs: int = 10,
         job_timeout: 'SecondsTimedelta' = 300,
         keep_result: 'SecondsTimedelta' = 3600,
@@ -218,8 +221,10 @@ class Worker:
         self.jobs_failed = 0
         self._last_health_check: float = 0
         self._last_health_check_log: Optional[str] = None
-        self._add_signal_handler(signal.SIGINT, self.handle_sig)
-        self._add_signal_handler(signal.SIGTERM, self.handle_sig)
+        self._handle_signals = handle_signals
+        if self._handle_signals:
+            self._add_signal_handler(signal.SIGINT, self.handle_sig)
+            self._add_signal_handler(signal.SIGTERM, self.handle_sig)
         self.on_stop: Optional[Callable[[Signals], None]] = None
         # whether or not to retry jobs on Retry and CancelledError
         self.retry_jobs = retry_jobs
@@ -582,7 +587,10 @@ class Worker:
             self._last_health_check_log = log_suffix
 
     def _add_signal_handler(self, signum: Signals, handler: Callable[[Signals], None]) -> None:
-        self.loop.add_signal_handler(signum, partial(handler, signum))
+        try:
+            self.loop.add_signal_handler(signum, partial(handler, signum))
+        except NotImplementedError:  # pragma: no cover
+            logger.debug('Windows does not support adding a signal handler to an eventloop')
 
     def _jobs_started(self) -> int:
         return self.jobs_complete + self.jobs_retried + self.jobs_failed + len(self.tasks)
@@ -604,6 +612,8 @@ class Worker:
         self.on_stop and self.on_stop(sig)
 
     async def close(self) -> None:
+        if not self._handle_signals:
+            self.handle_sig(signal.SIGUSR1)
         if not self._pool:
             return
         await asyncio.gather(*self.tasks)
