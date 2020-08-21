@@ -91,7 +91,7 @@ async def foobar(ctx):
 
 async def test_job_successful(worker, caplog):
     caplog.set_level(logging.INFO)
-    worker: Worker = worker(cron_jobs=[cron(foobar, hour=1, run_at_startup=True)])
+    worker: Worker = worker(cron_jobs=[cron(foobar, hour=1, run_at_startup=True)], poll_delay=0.5)
     await worker.main()
     assert worker.jobs_complete == 1
     assert worker.jobs_failed == 0
@@ -103,7 +103,9 @@ async def test_job_successful(worker, caplog):
 
 async def test_job_successful_on_specific_queue(worker, caplog):
     caplog.set_level(logging.INFO)
-    worker: Worker = worker(queue_name='arq:test-cron-queue', cron_jobs=[cron(foobar, hour=1, run_at_startup=True)])
+    worker: Worker = worker(
+        queue_name='arq:test-cron-queue', cron_jobs=[cron(foobar, hour=1, run_at_startup=True)], poll_delay=0.5
+    )
     await worker.main()
     assert worker.jobs_complete == 1
     assert worker.jobs_failed == 0

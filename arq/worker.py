@@ -3,7 +3,7 @@ import inspect
 import logging
 import signal
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import partial
 from signal import Signals
 from time import time
@@ -237,6 +237,7 @@ class Worker:
         self.max_burst_jobs = max_burst_jobs
         self.job_serializer = job_serializer
         self.job_deserializer = job_deserializer
+        self._last_heartbeat: Optional[datetime] = None
 
     def run(self) -> None:
         """
@@ -565,25 +566,37 @@ class Worker:
             await tr.execute()
 
     async def heart_beat(self) -> None:
+        now = datetime.now()
         await self.record_health()
-        await self.run_cron()
+        await self.run_cron(now, self._last_heartbeat)
+        self._last_heartbeat = now
 
-    async def run_cron(self) -> None:
-        n = datetime.now()
+    async def run_cron(self, n: datetime, last_heartbeat: Optional[datetime]) -> None:
         job_futures = set()
+
+        last_hb_cutoff = last_heartbeat + timedelta(seconds=self.poll_delay_s) if last_heartbeat is not None else n
+        this_hb_cutoff = n + timedelta(seconds=self.poll_delay_s)
 
         for cron_job in self.cron_jobs:
             if cron_job.next_run is None:
                 if cron_job.run_at_startup:
                     cron_job.next_run = n
                 else:
-                    cron_job.set_next(n)
+                    cron_job.calculate_next(n)
+                    # This isn't getting run this iteration in any case.
+                    continue
 
-            next_run = cast(datetime, cron_job.next_run)
-            if n >= next_run:
-                job_id = f'{cron_job.name}:{to_unix_ms(next_run)}' if cron_job.unique else None
-                job_futures.add(self.pool.enqueue_job(cron_job.name, _job_id=job_id, _queue_name=self.queue_name))
-                cron_job.set_next(n)
+            # We queue up the cron if the next execution time falls between
+            # the last heart beat + poll_delay_s and this heartbeat + poll_delay_s
+            # (because two iterations of `heart_beat` may be more than `poll_delay_s` apart)
+            if last_hb_cutoff <= cron_job.next_run < this_hb_cutoff:
+                job_id = f'{cron_job.name}:{to_unix_ms(cron_job.next_run)}' if cron_job.unique else None
+                job_futures.add(
+                    self.pool.enqueue_job(
+                        cron_job.name, _job_id=job_id, _queue_name=self.queue_name, _defer_until=cron_job.next_run
+                    )
+                )
+                cron_job.calculate_next(cron_job.next_run)
 
         job_futures and await asyncio.gather(*job_futures)
 
