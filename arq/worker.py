@@ -22,13 +22,14 @@ from .constants import (
     health_check_key_suffix,
     in_progress_key_prefix,
     job_key_prefix,
+    keep_cronjob_progress,
     result_key_prefix,
     retry_key_prefix,
 )
 from .utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate
 
 if TYPE_CHECKING:
-    from .typing import WorkerCoroutine, StartupShutdown, SecondsTimedelta, WorkerSettingsType  # noqa F401
+    from .typing import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType  # noqa F401
 
 logger = logging.getLogger('arq.worker')
 no_result = object()
@@ -415,9 +416,11 @@ class Worker:
             logger.warning('job %s, function %r not found', job_id, function_name)
             return await job_failed(JobExecutionFailed(f'function {function_name!r} not found'))
 
+        keep_inprogress = None
         if hasattr(function, 'next_run'):
             # cron_job
             ref = function_name
+            keep_inprogress = keep_cronjob_progress
         else:
             ref = f'{job_id}:{function_name}'
 
@@ -525,7 +528,15 @@ class Worker:
             )
 
         await asyncio.shield(
-            self.finish_job(job_id, finish, result_data, result_timeout_s, keep_result_forever, incr_score)
+            self.finish_job(
+                job_id,
+                finish,
+                result_data,
+                result_timeout_s,
+                keep_result_forever,
+                incr_score,
+                keep_inprogress=keep_inprogress,
+            )
         )
 
     async def finish_job(
@@ -536,11 +547,17 @@ class Worker:
         result_timeout_s: Optional[float],
         keep_result_forever: bool,
         incr_score: Optional[int],
+        keep_inprogress: Optional[float] = None,
     ) -> None:
         with await self.pool as conn:
             await conn.unwatch()
             tr = conn.multi_exec()
-            delete_keys = [in_progress_key_prefix + job_id]
+            delete_keys = []
+            in_progress_key = in_progress_key_prefix + job_id
+            if keep_inprogress is None:
+                delete_keys += [in_progress_key]
+            else:
+                tr.expire(in_progress_key, keep_inprogress)
             if finish:
                 if result_data:
                     expire = 0 if keep_result_forever else result_timeout_s

@@ -6,6 +6,7 @@ from random import random
 import pytest
 
 from arq import Worker
+from arq.constants import in_progress_key_prefix
 from arq.cron import cron, next_cron
 
 
@@ -90,7 +91,7 @@ async def foobar(ctx):
 
 
 @pytest.mark.parametrize('poll_delay', [0.0, 0.5, 0.9])
-async def test_job_successful(worker, caplog, poll_delay):
+async def test_job_successful(worker, caplog, arq_redis, poll_delay):
     caplog.set_level(logging.INFO)
     worker: Worker = worker(cron_jobs=[cron(foobar, hour=1, run_at_startup=True)], poll_delay=poll_delay)
     await worker.main()
@@ -100,6 +101,11 @@ async def test_job_successful(worker, caplog, poll_delay):
 
     log = re.sub(r'(\d+).\d\ds', r'\1.XXs', '\n'.join(r.message for r in caplog.records))
     assert '  0.XXs → cron:foobar()\n  0.XXs ← cron:foobar ● 42' in log
+
+    # Assert the in-progress key still exists.
+    keys = await arq_redis.keys(in_progress_key_prefix + '*')
+    assert len(keys) == 1
+    assert await arq_redis.pttl(keys[0]) > 0.0
 
 
 async def test_job_successful_on_specific_queue(worker, caplog):
