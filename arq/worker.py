@@ -568,14 +568,22 @@ class Worker:
     async def heart_beat(self) -> None:
         now = datetime.now()
         await self.record_health()
-        await self.run_cron(now, self._last_heartbeat)
+
+        cron_window_size = max(self.poll_delay_s, 0.5)  # Clamp the cron delay to 0.5
+        await self.run_cron(
+            now,
+            self._last_heartbeat if self._last_heartbeat is not None else now - timedelta(seconds=cron_window_size),
+            cron_window_size,
+        )
         self._last_heartbeat = now
 
-    async def run_cron(self, n: datetime, last_heartbeat: Optional[datetime]) -> None:
+    async def run_cron(self, n: datetime, last_heartbeat: datetime, delay: float) -> None:
         job_futures = set()
 
-        last_hb_cutoff = last_heartbeat + timedelta(seconds=self.poll_delay_s) if last_heartbeat is not None else n
-        this_hb_cutoff = n + timedelta(seconds=self.poll_delay_s)
+        cron_delay = timedelta(seconds=delay)
+
+        last_hb_cutoff = last_heartbeat + cron_delay
+        this_hb_cutoff = n + cron_delay
 
         for cron_job in self.cron_jobs:
             if cron_job.next_run is None:
@@ -587,8 +595,8 @@ class Worker:
                     continue
 
             # We queue up the cron if the next execution time falls between
-            # the last heart beat + poll_delay_s and this heartbeat + poll_delay_s
-            # (because two iterations of `heart_beat` may be more than `poll_delay_s` apart)
+            # the last heart beat + delay and this heartbeat + delay
+            # (because two iterations of `heart_beat` may be more than `delay` apart)
             if last_hb_cutoff <= cron_job.next_run < this_hb_cutoff:
                 job_id = f'{cron_job.name}:{to_unix_ms(cron_job.next_run)}' if cron_job.unique else None
                 job_futures.add(

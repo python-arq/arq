@@ -89,9 +89,10 @@ async def foobar(ctx):
     return 42
 
 
-async def test_job_successful(worker, caplog):
+@pytest.mark.parametrize('poll_delay', [0.0, 0.5, 0.9])
+async def test_job_successful(worker, caplog, poll_delay):
     caplog.set_level(logging.INFO)
-    worker: Worker = worker(cron_jobs=[cron(foobar, hour=1, run_at_startup=True)], poll_delay=0.5)
+    worker: Worker = worker(cron_jobs=[cron(foobar, hour=1, run_at_startup=True)], poll_delay=poll_delay)
     await worker.main()
     assert worker.jobs_complete == 1
     assert worker.jobs_failed == 0
