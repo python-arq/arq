@@ -46,6 +46,10 @@ class RedisSettings:
 
         :param url: The redis: url to parse
         :return: :class:`arq.connections.RedisSettings` instance
+        :raises: AssertionError: if url is malformed
+            NOTE: Validation performed by `aioredis.util.parse_url` via
+            `assert` statements, and thus no validation takes place if various
+            Python interpreter optimizations are enabled at runtime.
         """
         address, options = parse_url(url)
         return cls(
