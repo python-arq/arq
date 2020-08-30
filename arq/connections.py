@@ -52,7 +52,7 @@ class RedisSettings:
             Python interpreter optimizations are enabled at runtime.
         """
         address, options = parse_url(url)
-        return cls(host=address[0], port=address[1], password=options.get("password"))
+        return cls(host=address[0], port=address[1], password=options.get('password'))
 
     def __repr__(self) -> str:
         return '<RedisSettings {}>'.format(' '.join(f'{k}={v}' for k, v in self.__dict__.items()))
