@@ -97,23 +97,21 @@ def test_typing():
 
 
 @pytest.mark.parametrize(
-    "uri,expected",
+    'uri,expected',
     [
-        ("redis://localhost:6379", dict(host="localhost", port=6379, password=None)),
-        (
-            "redis://user:password@host:1234",
-            dict(host="host", port=1234, password="password"),
-        ),
+        ('redis://localhost:6379', dict(host='localhost', port=6379, password=None)),
+        ('redis://user:password@host:1234', dict(host='host', port=1234, password='password'),),
     ],
 )
 def test_redis_settings_from_uri(uri, expected):
 
     rs: RedisSettings = RedisSettings.from_redis_url(uri)
-    assert rs.host == expected["host"]
-    assert rs.port == expected["port"]
-    assert rs.password == expected["password"]
+    assert rs.host == expected['host']
+    assert rs.port == expected['port']
+    assert rs.password == expected['password']
 
-@pytest.mark.parametrize('uri', [("bogus://user:password@host:1234"), ])
+
+@pytest.mark.parametrize('uri', [('bogus://user:password@host:1234'),])
 def test_redis_settings_from_uri_validation(uri):
-    with pytest.raises(AssertionError) :
+    with pytest.raises(AssertionError):
         RedisSettings.from_redis_url(uri)
