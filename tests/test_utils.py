@@ -111,7 +111,7 @@ def test_redis_settings_from_uri(uri, expected):
     assert rs.password == expected['password']
 
 
-@pytest.mark.parametrize('uri', [('bogus://user:password@host:1234'),])
+@pytest.mark.parametrize('uri', [('bogus://user:password@host:1234')])
 def test_redis_settings_from_uri_validation(uri):
     with pytest.raises(AssertionError):
         RedisSettings.from_redis_url(uri)
