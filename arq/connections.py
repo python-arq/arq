@@ -40,7 +40,7 @@ class RedisSettings:
     sentinel_master: str = 'mymaster'
 
     @classmethod
-    def from_redis_url(cls, url: str):
+    def from_redis_url(cls, url: str) -> 'RedisSettings':
         """Parse a redis: connection URI, return a new
         arq.connections.RedisSettings instance
 
