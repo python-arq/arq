@@ -94,3 +94,21 @@ def test_to_seconds(input, output):
 
 def test_typing():
     assert 'OptionType' in arq.typing.__all__
+
+
+@pytest.mark.parametrize(
+    "uri,expected",
+    [
+        ("redis://localhost:6379", dict(host="localhost", port=6379, password=None)),
+        (
+            "redis://user:password@host:1234",
+            dict(host="host", port=1234, password="password"),
+        ),
+    ],
+)
+def test_redis_settings_from_uri(uri, expected):
+
+    rs: RedisSettings = RedisSettings.from_redis_url(uri)
+    assert rs.host == expected["host"]
+    assert rs.port == expected["port"]
+    assert rs.password == expected["password"]

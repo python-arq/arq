@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import aioredis
 from aioredis import MultiExecError, Redis
+from aioredis.util import parse_url
 
 from .constants import default_queue_name, job_key_prefix, result_key_prefix
 from .jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
@@ -37,6 +38,15 @@ class RedisSettings:
 
     sentinel: bool = False
     sentinel_master: str = 'mymaster'
+
+    @classmethod
+    def from_redis_url(cls, url:str):
+        """Parse a redis: connection URI, return a new arq.connections.RedisSettings instance
+        """
+        address, options = parse_url(url)
+        return cls(
+            host=address[0], port=address[1], password=options.get("password")
+        )
 
     def __repr__(self) -> str:
         return '<RedisSettings {}>'.format(' '.join(f'{k}={v}' for k, v in self.__dict__.items()))
