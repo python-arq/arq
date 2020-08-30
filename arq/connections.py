@@ -40,8 +40,12 @@ class RedisSettings:
     sentinel_master: str = 'mymaster'
 
     @classmethod
-    def from_redis_url(cls, url:str):
-        """Parse a redis: connection URI, return a new arq.connections.RedisSettings instance
+    def from_redis_url(cls, url: str):
+        """Parse a redis: connection URI, return a new
+        arq.connections.RedisSettings instance
+
+        :param url: The redis: url to parse
+        :return: :class:`arq.connections.RedisSettings` instance
         """
         address, options = parse_url(url)
         return cls(
