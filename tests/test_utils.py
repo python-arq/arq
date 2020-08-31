@@ -105,7 +105,7 @@ def test_typing():
 )
 def test_redis_settings_from_uri(uri, expected):
 
-    rs: RedisSettings = RedisSettings.from_redis_url(uri)
+    rs = RedisSettings.from_redis_url(uri)
     assert rs.host == expected['host']
     assert rs.port == expected['port']
     assert rs.password == expected['password']
@@ -115,3 +115,24 @@ def test_redis_settings_from_uri(uri, expected):
 def test_redis_settings_from_uri_validation(uri):
     with pytest.raises(AssertionError):
         RedisSettings.from_redis_url(uri)
+
+
+def test_redis_settings_from_url_extra_kwargs():
+    uri = 'redis://localhost:6379'
+    rs = RedisSettings.from_redis_url(
+        uri,
+        database=2,
+        ssl=False,
+        conn_timeout=10,
+        conn_retries=11,
+        conn_retry_delay=33,
+        sentinel=True,
+        sentinel_master='foo',
+    )
+
+    assert rs.ssl is False
+    assert rs.conn_timeout == 10
+    assert rs.conn_retries == 11
+    assert rs.conn_retry_delay == 33
+    assert rs.sentinel is True
+    assert rs.sentinel_master == 'foo'

@@ -40,7 +40,7 @@ class RedisSettings:
     sentinel_master: str = 'mymaster'
 
     @classmethod
-    def from_redis_url(cls, url: str) -> 'RedisSettings':
+    def from_redis_url(cls, url: str, **kwargs) -> 'RedisSettings':
         """Parse a redis: connection URI, return a new
         arq.connections.RedisSettings instance
 
@@ -50,9 +50,13 @@ class RedisSettings:
             NOTE: Validation performed by `aioredis.util.parse_url` via
             `assert` statements, and thus no validation takes place if various
             Python interpreter optimizations are enabled at runtime.
+
+        Additional keyword parameters are passed through to
+        :class:`arq.connections.RedisSettings` constructor.
         """
+
         address, options = parse_url(url)
-        return cls(host=address[0], port=address[1], password=options.get('password'))
+        return cls(host=address[0], port=address[1], password=options.get('password'), **kwargs)
 
     def __repr__(self) -> str:
         return '<RedisSettings {}>'.format(' '.join(f'{k}={v}' for k, v in self.__dict__.items()))
