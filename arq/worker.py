@@ -276,7 +276,9 @@ class Worker:
 
     async def main(self) -> None:
         if self._pool is None:
-            self._pool = await create_pool(self.redis_settings)
+            self._pool = await create_pool(
+                self.redis_settings, job_deserializer=self.job_deserializer, job_serializer=self.job_serializer
+            )
 
         logger.info('Starting worker for %d functions: %s', len(self.functions), ', '.join(self.functions))
         await log_redis_info(self.pool, logger.info)
