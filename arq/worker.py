@@ -588,7 +588,7 @@ class Worker:
         cron_window_size = max(self.poll_delay_s, 0.5)  # Clamp the cron delay to 0.5
         await self.run_cron(now, cron_window_size)
 
-    async def run_cron(self, n: datetime, delay: float, num_windows=2) -> None:
+    async def run_cron(self, n: datetime, delay: float, num_windows: int = 2) -> None:
         job_futures = set()
 
         cron_delay = timedelta(seconds=delay * num_windows)
