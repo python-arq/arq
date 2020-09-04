@@ -238,7 +238,6 @@ class Worker:
         self.max_burst_jobs = max_burst_jobs
         self.job_serializer = job_serializer
         self.job_deserializer = job_deserializer
-        self._last_heartbeat: Optional[datetime] = None
 
     def run(self) -> None:
         """
@@ -587,19 +586,13 @@ class Worker:
         await self.record_health()
 
         cron_window_size = max(self.poll_delay_s, 0.5)  # Clamp the cron delay to 0.5
-        await self.run_cron(
-            now,
-            self._last_heartbeat if self._last_heartbeat is not None else now - timedelta(seconds=cron_window_size),
-            cron_window_size,
-        )
-        self._last_heartbeat = now
+        await self.run_cron(now, cron_window_size)
 
-    async def run_cron(self, n: datetime, last_heartbeat: datetime, delay: float) -> None:
+    async def run_cron(self, n: datetime, delay: float, num_windows=2) -> None:
         job_futures = set()
 
-        cron_delay = timedelta(seconds=delay)
+        cron_delay = timedelta(seconds=delay * num_windows)
 
-        last_hb_cutoff = last_heartbeat + cron_delay
         this_hb_cutoff = n + cron_delay
 
         for cron_job in self.cron_jobs:
@@ -611,10 +604,9 @@ class Worker:
                     # This isn't getting run this iteration in any case.
                     continue
 
-            # We queue up the cron if the next execution time falls between
-            # the last heart beat + delay and this heartbeat + delay
-            # (because two iterations of `heart_beat` may be more than `delay` apart)
-            if last_hb_cutoff <= cron_job.next_run < this_hb_cutoff:
+            # We queue up the cron if the next execution time is in the next
+            # delay * num_windows (by default 0.5 * 2 = 1 second).
+            if cron_job.next_run < this_hb_cutoff:
                 job_id = f'{cron_job.name}:{to_unix_ms(cron_job.next_run)}' if cron_job.unique else None
                 job_futures.add(
                     self.pool.enqueue_job(
