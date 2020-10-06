@@ -30,7 +30,7 @@ async def test_redis_sentinel_failure(create_pool):
     FIXME: this is currently causing 3 "Task was destroyed but it is pending!" warnings
     """
     settings = RedisSettings()
-    settings.host = [('localhost', 6379), ('localhost', 6379)]
+    settings.address = [('localhost', 6379), ('localhost', 6379)]
     settings.sentinel = True
     try:
         pool = await create_pool(settings)
