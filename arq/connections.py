@@ -185,7 +185,7 @@ async def create_pool(
     settings: RedisSettings = RedisSettings() if settings_ is None else settings_
 
     assert not (
-        type(settings.host) is not list and settings.sentinel
+        type(settings.address) is not list and settings.sentinel
     ), "str provided for 'host' but 'sentinel' is true; list of sentinels expected"
 
     if settings.sentinel:
