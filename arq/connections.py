@@ -26,7 +26,7 @@ class RedisSettings:
     Used by :func:`arq.connections.create_pool` and :class:`arq.worker.Worker`.
     """
 
-    host: Union[str, List[Tuple[str, int]]] = 'localhost',6379
+    host: Union[str, List[Tuple[str, int]]] = ('localhost', 6379)
     port: int = 6379
     database: int = 0
     password: Optional[str] = None
@@ -194,7 +194,6 @@ async def create_pool(
         pool_factory = functools.partial(
             aioredis.create_pool, create_connection_timeout=settings.conn_timeout, ssl=settings.ssl
         )
-
 
     try:
         pool = await pool_factory(settings.address, db=settings.database, password=settings.password, encoding='utf8')
