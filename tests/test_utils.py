@@ -14,7 +14,7 @@ def test_settings_changed():
     assert settings.password == '123'
     assert (
         "<RedisSettings address=('localhost', 6379) database=0 password=123 ssl=None conn_timeout=1 conn_retries=5 "
-        "conn_retry_delay=1 sentinel=False sentinel_master=mymaster>"
+        'conn_retry_delay=1 sentinel=False sentinel_master=mymaster>'
     ) == str(settings)
 
 
