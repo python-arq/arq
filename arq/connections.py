@@ -26,8 +26,7 @@ class RedisSettings:
     Used by :func:`arq.connections.create_pool` and :class:`arq.worker.Worker`.
     """
 
-    host: Union[str, List[Tuple[str, int]]] = ('localhost', 6379)
-    port: int = 6379
+    address: Union[str, List[Tuple[str, int]]] = ('localhost', 6379)
     database: int = 0
     password: Optional[str] = None
     ssl: Union[bool, None, SSLContext] = None
