@@ -208,7 +208,7 @@ async def create_pool(
         if retry < settings.conn_retries:
             logger.warning(
                 'redis connection error %s %s %s, %d retries remaining...',
-                addr,
+                settings.address,
                 e.__class__.__name__,
                 e,
                 settings.conn_retries - retry,
