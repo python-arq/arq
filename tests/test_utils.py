@@ -10,18 +10,18 @@ from arq.connections import RedisSettings, log_redis_info
 
 
 def test_settings_changed():
-    settings = RedisSettings(port=123)
-    assert settings.port == 123
+    settings = RedisSettings(password='123')
+    assert settings.password == '123'
     assert (
-        '<RedisSettings host=localhost port=123 database=0 password=None ssl=None conn_timeout=1 conn_retries=5 '
-        'conn_retry_delay=1 sentinel=False sentinel_master=mymaster>'
+        "<RedisSettings address=('localhost', 6379) database=0 password=123 ssl=None conn_timeout=1 conn_retries=5 "
+        "conn_retry_delay=1 sentinel=False sentinel_master=mymaster>"
     ) == str(settings)
 
 
 async def test_redis_timeout(mocker, create_pool):
     mocker.spy(arq.utils.asyncio, 'sleep')
     with pytest.raises(OSError):
-        await create_pool(RedisSettings(port=0, conn_retry_delay=0))
+        await create_pool(RedisSettings(address=('localhost', 0), conn_retry_delay=0))
     assert arq.utils.asyncio.sleep.call_count == 5
 
 

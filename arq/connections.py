@@ -26,7 +26,7 @@ class RedisSettings:
     Used by :func:`arq.connections.create_pool` and :class:`arq.worker.Worker`.
     """
 
-    host: Union[str, List[Tuple[str, int]]] = 'localhost'
+    host: Union[str, List[Tuple[str, int]]] = 'localhost',6379
     port: int = 6379
     database: int = 0
     password: Optional[str] = None
@@ -185,13 +185,7 @@ async def create_pool(
     """
     settings: RedisSettings = RedisSettings() if settings_ is None else settings_
 
-    assert not (
-        type(settings.host) is str and settings.sentinel
-    ), "str provided for 'host' but 'sentinel' is true; list of sentinels expected"
-
     if settings.sentinel:
-        addr: Any = settings.host
-
         async def pool_factory(*args: Any, **kwargs: Any) -> Redis:
             client = await aioredis.sentinel.create_sentinel_pool(*args, ssl=settings.ssl, **kwargs)
             return client.master_for(settings.sentinel_master)
@@ -200,10 +194,10 @@ async def create_pool(
         pool_factory = functools.partial(
             aioredis.create_pool, create_connection_timeout=settings.conn_timeout, ssl=settings.ssl
         )
-        addr = settings.host, settings.port
+
 
     try:
-        pool = await pool_factory(addr, db=settings.database, password=settings.password, encoding='utf8')
+        pool = await pool_factory(settings.address, db=settings.database, password=settings.password, encoding='utf8')
         pool = ArqRedis(
             pool,
             job_serializer=job_serializer,
