@@ -186,6 +186,7 @@ async def create_pool(
     settings: RedisSettings = RedisSettings() if settings_ is None else settings_
 
     if settings.sentinel:
+
         async def pool_factory(*args: Any, **kwargs: Any) -> Redis:
             client = await aioredis.sentinel.create_sentinel_pool(*args, ssl=settings.ssl, **kwargs)
             return client.master_for(settings.sentinel_master)
