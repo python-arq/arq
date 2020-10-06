@@ -26,7 +26,7 @@ class RedisSettings:
     Used by :func:`arq.connections.create_pool` and :class:`arq.worker.Worker`.
     """
 
-    address: Union[str, List[Tuple[str, int]]] = ('localhost', 6379)
+    address: Union[str, Tuple[str, int], List[Tuple[str, int]]] = ('localhost', 6379)
     database: int = 0
     password: Optional[str] = None
     ssl: Union[bool, None, SSLContext] = None
@@ -183,6 +183,10 @@ async def create_pool(
     thus allowing job enqueuing.
     """
     settings: RedisSettings = RedisSettings() if settings_ is None else settings_
+
+    assert not (
+        type(settings.host) is not list and settings.sentinel
+    ), "str provided for 'host' but 'sentinel' is true; list of sentinels expected"
 
     if settings.sentinel:
 
