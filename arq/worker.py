@@ -147,6 +147,7 @@ class Worker:
     :param health_check_key: redis key under which health check is set
     :param ctx: dictionary to hold extra user defined state
     :param retry_jobs: whether to retry jobs on Retry or CancelledError or not
+    :param abort_jobs: whether to cancel jobs on a call to :func:`arq.jobs.Job.abort`
     :param max_burst_jobs: the maximum number of jobs to process in burst mode (disabled with negative values)
     :param job_serializer: a function that serializes Python objects to bytes, defaults to pickle.dumps
     :param job_deserializer: a function that deserializes bytes into Python objects, defaults to pickle.loads

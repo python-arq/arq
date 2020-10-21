@@ -144,7 +144,7 @@ class Job:
         :param timeout: maximum time to wait for the job result before raising ``TimeoutError``, will wait forever on None
         :param pole_delay: how often to poll redis for the job result
         :param key_expire: how long until the abort key expires
-        :return: True if the job cancelled properly, false otherwise.
+        :return: True if the job aborted properly, False otherwise
         """
         await self._redis.set(
             f'{abort_key_prefix}{self.job_id}', b'1', expire=key_expire
