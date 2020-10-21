@@ -175,7 +175,7 @@ class Worker:
         health_check_key: Optional[str] = None,
         ctx: Optional[Dict[Any, Any]] = None,
         retry_jobs: bool = True,
-        abort_jobs: bool = False,
+        abort_jobs: bool = True,
         max_burst_jobs: int = -1,
         job_serializer: Optional[Serializer] = None,
         job_deserializer: Optional[Deserializer] = None,

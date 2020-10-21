@@ -31,8 +31,11 @@ async def main():
     )
     await asyncio.sleep(30)
     # stop the crontab task scheduler
-    print('crontab cancelled')
-    await job.abort()
+    success = await job.abort()
+    if success:
+        print('crontab cancelled successfully')
+    else:
+        print('crontab not cancelled successfully')
     """
     >  19:22:43: Starting worker for 2 functions: cron_a_task, the_task
     >  19:22:43: redis_version=5.0.5 mem_usage=1.16M clients_connected=18 db_keys=0
@@ -51,7 +54,6 @@ class WorkerSettings:
         func(cron_the_task, name='cron_a_task', timeout=0), 
         the_task
     ]
-    abort_jobs = True
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
