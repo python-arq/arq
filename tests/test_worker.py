@@ -11,7 +11,7 @@ import pytest
 from aioredis import create_redis_pool
 
 from arq.connections import ArqRedis
-from arq.constants import default_queue_name, health_check_key_suffix, job_key_prefix, abort_key_prefix
+from arq.constants import abort_key_prefix, default_queue_name, health_check_key_suffix, job_key_prefix
 from arq.jobs import Job, JobStatus
 from arq.worker import (
     FailedJobs,

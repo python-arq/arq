@@ -18,13 +18,13 @@ from arq.jobs import Deserializer, JobResult, SerializationError, Serializer, de
 
 from .connections import ArqRedis, RedisSettings, create_pool, log_redis_info
 from .constants import (
+    abort_key_prefix,
     default_queue_name,
     health_check_key_suffix,
     in_progress_key_prefix,
     job_key_prefix,
     result_key_prefix,
     retry_key_prefix,
-    abort_key_prefix,
 )
 from .utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate
 
@@ -213,7 +213,7 @@ class Worker:
             self.redis_settings: Optional[RedisSettings] = redis_settings or RedisSettings()
         else:
             self.redis_settings = None
-        self.tasks: Dict[asyncio.Task[Any]] = {}
+        self.tasks: Dict[str, asyncio.Task[Any]] = {}
         self.main_task: Optional[asyncio.Task[None]] = None
         self.loop = asyncio.get_event_loop()
         self.ctx = ctx or {}
@@ -232,7 +232,7 @@ class Worker:
         # whether or not to retry jobs on Retry and CancelledError
         self.retry_jobs = retry_jobs
         self.abort_jobs = abort_jobs
-        self._aborting_tasks = set()
+        self._aborting_tasks: Set[str] = set()
         self.max_burst_jobs = max_burst_jobs
         self.job_serializer = job_serializer
         self.job_deserializer = job_deserializer
@@ -334,10 +334,10 @@ class Worker:
 
         await self.heart_beat()
 
-    async def _scan_abort_jobs(self):
+    async def _scan_abort_jobs(self) -> None:
         orphaned_job_keys = []
         cursor = b'0'
-        abort_key_len = len(abort_key_prefix), 
+        abort_key_len = len(abort_key_prefix)
         abort_key_match = f'{abort_key_prefix}*'
         while cursor:
             cursor, keys = await self.pool.scan(cursor, match=abort_key_match)
@@ -570,7 +570,12 @@ class Worker:
         with await self.pool as conn:
             await conn.unwatch()
             tr = conn.multi_exec()
-            tr.delete(retry_key_prefix + job_id, in_progress_key_prefix + job_id, job_key_prefix + job_id, abort_key_prefix + job_id)
+            tr.delete(
+                retry_key_prefix + job_id,
+                in_progress_key_prefix + job_id,
+                job_key_prefix + job_id,
+                abort_key_prefix + job_id,
+            )
             tr.zrem(self.queue_name, job_id)
             # result_data would only be None if serializing the result fails
             if result_data is not None and self.keep_result_s > 0:  # pragma: no branch
