@@ -7,7 +7,7 @@ from datetime import datetime
 from functools import partial
 from signal import Signals
 from time import time
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union, cast
 
 import async_timeout
 from aioredis import MultiExecError
@@ -495,20 +495,19 @@ class Worker:
         except Exception as e:
             finished_ms = timestamp_ms()
             t = (finished_ms - start_ms) / 1000
-            was_cancelled = isinstance(e, asyncio.CancelledError)
             if self.retry_jobs and isinstance(e, Retry):
                 incr_score = e.defer_score
                 logger.info('%6.2fs ↻ %s retrying job in %0.2fs', t, ref, (e.defer_score or 0) / 1000)
                 if e.defer_score:
                     incr_score = e.defer_score + (timestamp_ms() - score)
                 self.jobs_retried += 1
-            elif job_id in self._aborting_tasks and was_cancelled:
+            elif job_id in self._aborting_tasks and isinstance(e, asyncio.CancelledError):
                 logger.info('%6.2fs 🛇  %s aborted', t, ref)
                 result = e
                 finish = True
                 self._aborting_tasks.remove(job_id)
                 self.jobs_failed += 1
-            elif self.retry_jobs and was_cancelled:
+            elif self.retry_jobs and isinstance(e, (asyncio.CancelledError, RetryJob)):
                 logger.info('%6.2fs ↻ %s cancelled, will be run again', t, ref)
                 self.jobs_retried += 1
             else:
