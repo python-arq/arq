@@ -559,7 +559,7 @@ class Worker:
             if finish:
                 if result_data:
                     tr.setex(result_key_prefix + job_id, result_timeout_s, result_data)
-                delete_keys += [retry_key_prefix + job_id, job_key_prefix + job_id]
+                delete_keys += [retry_key_prefix + job_id, job_key_prefix + job_id, abort_key_prefix + job_id]
                 tr.zrem(self.queue_name, job_id)
             elif incr_score:
                 tr.zincrby(self.queue_name, incr_score, job_id)
@@ -570,7 +570,7 @@ class Worker:
         with await self.pool as conn:
             await conn.unwatch()
             tr = conn.multi_exec()
-            tr.delete(retry_key_prefix + job_id, in_progress_key_prefix + job_id, job_key_prefix + job_id)
+            tr.delete(retry_key_prefix + job_id, in_progress_key_prefix + job_id, job_key_prefix + job_id, abort_key_prefix + job_id)
             tr.zrem(self.queue_name, job_id)
             # result_data would only be None if serializing the result fails
             if result_data is not None and self.keep_result_s > 0:  # pragma: no branch
