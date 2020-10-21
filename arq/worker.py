@@ -24,6 +24,7 @@ from .constants import (
     job_key_prefix,
     result_key_prefix,
     retry_key_prefix,
+    abort_key_prefix,
 )
 from .utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate
 
@@ -173,6 +174,7 @@ class Worker:
         health_check_key: Optional[str] = None,
         ctx: Optional[Dict[Any, Any]] = None,
         retry_jobs: bool = True,
+        abort_jobs: bool = False,
         max_burst_jobs: int = -1,
         job_serializer: Optional[Serializer] = None,
         job_deserializer: Optional[Deserializer] = None,
@@ -210,7 +212,7 @@ class Worker:
             self.redis_settings: Optional[RedisSettings] = redis_settings or RedisSettings()
         else:
             self.redis_settings = None
-        self.tasks: List[asyncio.Task[Any]] = []
+        self.tasks: Dict[asyncio.Task[Any]] = {}
         self.main_task: Optional[asyncio.Task[None]] = None
         self.loop = asyncio.get_event_loop()
         self.ctx = ctx or {}
@@ -228,6 +230,8 @@ class Worker:
         self.on_stop: Optional[Callable[[Signals], None]] = None
         # whether or not to retry jobs on Retry and CancelledError
         self.retry_jobs = retry_jobs
+        self.abort_jobs = abort_jobs
+        self._aborting_tasks = set()
         self.max_burst_jobs = max_burst_jobs
         self.job_serializer = job_serializer
         self.job_deserializer = job_deserializer
@@ -289,11 +293,11 @@ class Worker:
 
             if self.burst:
                 if 0 <= self.max_burst_jobs <= self._jobs_started():
-                    await asyncio.gather(*self.tasks)
+                    await asyncio.gather(*self.tasks.values())
                     return None
                 queued_jobs = await self.pool.zcard(self.queue_name)
                 if queued_jobs == 0:
-                    await asyncio.gather(*self.tasks)
+                    await asyncio.gather(*self.tasks.values())
                     return None
 
     async def _poll_iteration(self) -> None:
@@ -316,13 +320,34 @@ class Worker:
 
         await self.start_jobs(job_ids)
 
-        for t in self.tasks:
+        if self.abort_jobs:
+            await self._scan_abort_jobs()
+
+        for job_id, t in list(self.tasks.items()):
             if t.done():
-                self.tasks.remove(t)
+                del self.tasks[job_id]
                 # required to make sure errors in run_job get propagated
                 t.result()
+            elif job_id in self._aborting_tasks:
+                t.cancel()
 
         await self.heart_beat()
+
+    async def _scan_abort_jobs(self):
+        orphaned_job_keys = []
+        cursor = b'0'
+        abort_key_len = len(abort_key_prefix), 
+        abort_key_match = f'{abort_key_prefix}*'
+        while cursor:
+            cursor, keys = await self.pool.scan(cursor, match=abort_key_match)
+            for job_key in keys:
+                job_id = job_key[abort_key_len:]
+                if job_id in self.tasks:
+                    self._aborting_tasks.add(job_id)
+                else:
+                    orphaned_job_keys.append(job_key)
+        if orphaned_job_keys:
+            await self.pool.delete(*orphaned_job_keys)
 
     async def start_jobs(self, job_ids: List[str]) -> None:
         """
@@ -357,7 +382,7 @@ class Worker:
                 else:
                     t = self.loop.create_task(self.run_job(job_id, score))
                     t.add_done_callback(lambda _: self.sem.release())
-                    self.tasks.append(t)
+                    self.tasks[job_id] = t
 
     async def run_job(self, job_id: str, score: int) -> None:  # noqa: C901
         start_ms = timestamp_ms()
@@ -469,13 +494,20 @@ class Worker:
         except Exception as e:
             finished_ms = timestamp_ms()
             t = (finished_ms - start_ms) / 1000
+            was_cancelled = isinstance(e, asyncio.CancelledError)
             if self.retry_jobs and isinstance(e, Retry):
                 incr_score = e.defer_score
                 logger.info('%6.2fs ↻ %s retrying job in %0.2fs', t, ref, (e.defer_score or 0) / 1000)
                 if e.defer_score:
                     incr_score = e.defer_score + (timestamp_ms() - score)
                 self.jobs_retried += 1
-            elif self.retry_jobs and isinstance(e, (asyncio.CancelledError, RetryJob)):
+            elif job_id in self._aborting_tasks and was_cancelled:
+                logger.info('%6.2fs 🛇  %s aborted', t, ref)
+                result = e
+                finish = True
+                self._aborting_tasks.remove(job_id)
+                self.jobs_failed += 1
+            elif self.retry_jobs and was_cancelled:
                 logger.info('%6.2fs ↻ %s cancelled, will be run again', t, ref)
                 self.jobs_retried += 1
             else:
@@ -572,7 +604,7 @@ class Worker:
         if (now_ts - self._last_health_check) < self.health_check_interval:
             return
         self._last_health_check = now_ts
-        pending_tasks = sum(not t.done() for t in self.tasks)
+        pending_tasks = sum(not t.done() for t in self.tasks.values())
         queued = await self.pool.zcard(self.queue_name)
         info = (
             f'{datetime.now():%b-%d %H:%M:%S} j_complete={self.jobs_complete} j_failed={self.jobs_failed} '
@@ -605,7 +637,7 @@ class Worker:
             self.jobs_retried,
             len(self.tasks),
         )
-        for t in self.tasks:
+        for t in self.tasks.values():
             if not t.done():
                 t.cancel()
         self.main_task and self.main_task.cancel()
@@ -616,7 +648,7 @@ class Worker:
             self.handle_sig(signal.SIGUSR1)
         if not self._pool:
             return
-        await asyncio.gather(*self.tasks)
+        await asyncio.gather(*self.tasks.values())
         await self.pool.delete(self.health_check_key)
         if self.on_shutdown:
             await self.on_shutdown(self.ctx)
@@ -627,7 +659,7 @@ class Worker:
     def __repr__(self) -> str:
         return (
             f'<Worker j_complete={self.jobs_complete} j_failed={self.jobs_failed} j_retried={self.jobs_retried} '
-            f'j_ongoing={sum(not t.done() for t in self.tasks)}>'
+            f'j_ongoing={sum(not t.done() for t in self.tasks.values())}>'
         )
 
 
