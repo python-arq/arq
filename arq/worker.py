@@ -485,14 +485,14 @@ class Worker:
             try:
                 async with async_timeout.timeout(timeout_s):
                     result = await function.coroutine(ctx, *args, **kwargs)
-            except Exception as e:
+            except (Exception, asyncio.CancelledError) as e:
                 exc_extra = getattr(e, 'extra', None)
                 if callable(exc_extra):
                     exc_extra = exc_extra()
                 raise
             else:
                 result_str = '' if result is None else truncate(repr(result))
-        except Exception as e:
+        except (Exception, asyncio.CancelledError) as e:
             finished_ms = timestamp_ms()
             t = (finished_ms - start_ms) / 1000
             if self.retry_jobs and isinstance(e, Retry):
