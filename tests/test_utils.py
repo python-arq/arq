@@ -3,11 +3,11 @@ import re
 from datetime import timedelta
 
 import pytest
+from pydantic import BaseModel, validator
 
 import arq.typing
 import arq.utils
 from arq.connections import RedisSettings, log_redis_info
-from pydantic import BaseModel, validator
 
 
 def test_settings_changed():

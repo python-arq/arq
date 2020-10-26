@@ -2,13 +2,12 @@ import asyncio
 import functools
 import logging
 import ssl
-import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
-from typing import Any, Callable, List, Optional, Tuple, Union
-from uuid import uuid4
+from typing import Any, Callable, Generator, List, Optional, Tuple, Union
 from urllib.parse import urlparse
+from uuid import uuid4
 
 import aioredis
 from aioredis import MultiExecError, Redis
@@ -25,8 +24,9 @@ class SSLContext(ssl.SSLContext):
     """
     Required to avoid problems with
     """
+
     @classmethod
-    def __get_validators__(cls):
+    def __get_validators__(cls) -> Generator[Callable[..., Any], None, None]:
         yield make_arbitrary_type_validator(ssl.SSLContext)
 
 
@@ -55,8 +55,8 @@ class RedisSettings:
         conf = urlparse(dsn)
         assert conf.scheme in {'redis', 'rediss'}, 'invalid DSN scheme'
         return RedisSettings(
-            host=conf.hostname,
-            port=conf.port,
+            host=conf.hostname or 'localhost',
+            port=conf.port or 6379,
             ssl=conf.scheme == 'rediss',
             password=conf.password,
             database=int((conf.path or '0').strip('/')),
