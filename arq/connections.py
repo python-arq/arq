@@ -1,21 +1,33 @@
 import asyncio
 import functools
 import logging
+import ssl
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
-from ssl import SSLContext
-from typing import Any, Callable, List, Optional, Tuple, Union
+from typing import Any, Callable, Generator, List, Optional, Tuple, Union
+from urllib.parse import urlparse
 from uuid import uuid4
 
 import aioredis
 from aioredis import MultiExecError, Redis
+from pydantic.validators import make_arbitrary_type_validator
 
 from .constants import default_queue_name, job_key_prefix, result_key_prefix
 from .jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('arq.connections')
+
+
+class SSLContext(ssl.SSLContext):
+    """
+    Required to avoid problems with
+    """
+
+    @classmethod
+    def __get_validators__(cls) -> Generator[Callable[..., Any], None, None]:
+        yield make_arbitrary_type_validator(ssl.SSLContext)
 
 
 @dataclass
@@ -38,8 +50,20 @@ class RedisSettings:
     sentinel: bool = False
     sentinel_master: str = 'mymaster'
 
+    @classmethod
+    def from_dsn(cls, dsn: str) -> 'RedisSettings':
+        conf = urlparse(dsn)
+        assert conf.scheme in {'redis', 'rediss'}, 'invalid DSN scheme'
+        return RedisSettings(
+            host=conf.hostname or 'localhost',
+            port=conf.port or 6379,
+            ssl=conf.scheme == 'rediss',
+            password=conf.password,
+            database=int((conf.path or '0').strip('/')),
+        )
+
     def __repr__(self) -> str:
-        return '<RedisSettings {}>'.format(' '.join(f'{k}={v}' for k, v in self.__dict__.items()))
+        return 'RedisSettings({})'.format(', '.join(f'{k}={v!r}' for k, v in self.__dict__.items()))
 
 
 # extra time after the job is expected to start when the job key should expire, 1 day in ms
