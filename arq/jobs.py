@@ -229,6 +229,7 @@ def deserialize_job(r: bytes, *, deserializer: Optional[Deserializer] = None) ->
     if deserializer is None:
         deserializer = pickle.loads
     try:
+        restricted_loads(r)
         d = deserializer(r)
         return JobDef(
             function=d['f'],
@@ -248,6 +249,7 @@ def deserialize_job_raw(
     if deserializer is None:
         deserializer = pickle.loads
     try:
+        restricted_loads(r)
         d = deserializer(r)
         return d['f'], d['a'], d['k'], d['t'], d['et']
     except Exception as e:
