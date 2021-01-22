@@ -5,11 +5,34 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Dict, Optional, Tuple
-
+import io
+import builtins
 from aioredis import Redis
 
 from .constants import default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
 from .utils import ms_to_datetime, poll, timestamp_ms
+
+safe_builtins = {
+    'range',
+    'complex',
+    'set',
+    'frozenset',
+
+    'slice',
+}
+class RestrictedUnpickler(pickle.Unpickler):
+
+    def find_class(self, module, name):
+        """Only allow safe classes from builtins"""
+        if module == "builtins" and name in safe_builtins:
+            return getattr(builtins, name)
+        """Forbid everything else"""
+        raise pickle.UnpicklingError("global '%s.%s' is forbidden" %
+                                     (module, name))
+
+def restricted_loads(s):
+    """Helper function analogous to pickle.loads()"""
+    return RestrictedUnpickler(io.BytesIO(s)).load()
 
 logger = logging.getLogger('arq.jobs')
 
@@ -206,6 +229,7 @@ def deserialize_job(r: bytes, *, deserializer: Optional[Deserializer] = None) ->
     if deserializer is None:
         deserializer = pickle.loads
     try:
+        restricted_loads(r)
         d = deserializer(r)
         return JobDef(
             function=d['f'],
@@ -225,6 +249,7 @@ def deserialize_job_raw(
     if deserializer is None:
         deserializer = pickle.loads
     try:
+        restricted_loads(r)
         d = deserializer(r)
         return d['f'], d['a'], d['k'], d['t'], d['et']
     except Exception as e:
@@ -235,6 +260,7 @@ def deserialize_result(r: bytes, *, deserializer: Optional[Deserializer] = None)
     if deserializer is None:
         deserializer = pickle.loads
     try:
+        restricted_loads(r)
         d = deserializer(r)
         return JobResult(
             job_try=d['t'],
