@@ -418,7 +418,7 @@ class Worker:
         if hasattr(function, 'next_run'):
             # cron_job
             ref = function_name
-            keep_in_progress = keep_cronjob_progress
+            keep_in_progress: Optional[float] = keep_cronjob_progress
         else:
             ref = f'{job_id}:{function_name}'
             keep_in_progress = None
