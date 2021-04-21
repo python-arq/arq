@@ -56,11 +56,11 @@ def func(
     """
     Wrapper for a job function which lets you configure more settings.
 
-    :param name: name for function, if None, ``coroutine.__qualname__`` is used
     :param coroutine: coroutine function to call, can be a string to import
-    :param timeout: maximum time the job should take
+    :param name: name for function, if None, ``coroutine.__qualname__`` is used
     :param keep_result: duration to keep the result for, if 0 the result is not kept
-    :param keep_result_forever: whether to keep results forever, if None use Worker default
+    :param keep_result_forever: whether to keep results forever, if None use Worker default, wins over ``keep_result``
+    :param timeout: maximum time the job should take
     :param max_tries: maximum number of tries allowed for the function, use 1 to prevent retrying
     """
     if isinstance(coroutine, Function):
