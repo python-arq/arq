@@ -206,6 +206,15 @@ Note that ``second`` defaults to ``0`` so you don't in inadvertently run jobs ev
 defaults to ``123456`` so you don't inadvertently run jobs every microsecond and so *arq* avoids enqueuing jobs
 at the top of a second when the world is generally slightly busier.
 
+Synchronous Jobs
+................
+
+Functions that can block the loop for extended periods should be run in an executor like
+``concurrent.futures.ThreadPoolExecutor`` or ``concurrent.futures.ProcessPoolExecutor`` using
+``loop.run_in_executor`` as shown below.
+
+.. literalinclude:: examples/sync_job.py
+
 Custom job serializers
 ......................
 
