@@ -250,7 +250,7 @@ def deserialize_result(r: bytes, *, deserializer: Optional[Deserializer] = None)
             result=d['r'],
             start_time=ms_to_datetime(d['st']),
             finish_time=ms_to_datetime(d['ft']),
-            queue_name=d['q'],
+            queue_name=d.get('q', '<unknown>'),
         )
     except Exception as e:
         raise DeserializationError('unable to deserialize job result') from e
