@@ -1,11 +1,13 @@
 import asyncio
 import dataclasses
+import functools
 import logging
 from collections import Counter
 from datetime import datetime, timezone
 from random import shuffle
 from time import time
 
+import msgpack
 import pytest
 from pytest_toolbox.comparison import AnyInt, CloseToNow
 
@@ -42,6 +44,50 @@ async def test_enqueue_job_different_queues(arq_redis: ArqRedis, worker):
     r2 = await j2.result(pole_delay=0)
     assert r1 == 42  # 1
     assert r2 == 42  # 2
+
+
+async def test_enqueue_job_nested(arq_redis: ArqRedis, worker):
+    async def foobar(ctx):
+        return 42
+
+    async def parent_job(ctx):
+        inner_job = await ctx['redis'].enqueue_job('foobar')
+        return inner_job.job_id
+
+    job = await arq_redis.enqueue_job('parent_job')
+    worker: Worker = worker(functions=[func(parent_job, name='parent_job'), func(foobar, name='foobar')])
+
+    await worker.main()
+    result = await job.result(pole_delay=0)
+    assert result is not None
+    inner_job = Job(result, arq_redis)
+    inner_result = await inner_job.result(pole_delay=0)
+    assert inner_result == 42
+
+
+async def test_enqueue_job_nested_custom_serializer(arq_redis_msgpack: ArqRedis, worker):
+    async def foobar(ctx):
+        return 42
+
+    async def parent_job(ctx):
+        inner_job = await ctx['redis'].enqueue_job('foobar')
+        return inner_job.job_id
+
+    job = await arq_redis_msgpack.enqueue_job('parent_job')
+
+    worker: Worker = worker(
+        functions=[func(parent_job, name='parent_job'), func(foobar, name='foobar')],
+        arq_redis=None,
+        job_serializer=msgpack.packb,
+        job_deserializer=functools.partial(msgpack.unpackb, raw=False),
+    )
+
+    await worker.main()
+    result = await job.result(pole_delay=0)
+    assert result is not None
+    inner_job = Job(result, arq_redis_msgpack, _deserializer=functools.partial(msgpack.unpackb, raw=False))
+    inner_result = await inner_job.result(pole_delay=0)
+    assert inner_result == 42
 
 
 async def test_job_error(arq_redis: ArqRedis, worker):
