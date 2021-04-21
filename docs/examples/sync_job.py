@@ -1,3 +1,8 @@
+import time
+import functools
+import asyncio
+import futures
+
 def sync_task(t):
     return time.sleep(t)
 
