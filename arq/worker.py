@@ -40,6 +40,7 @@ class Function:
     coroutine: 'WorkerCoroutine'
     timeout_s: Optional[float]
     keep_result_s: Optional[float]
+    keep_result_forever: Optional[bool]
     max_tries: Optional[int]
 
 
@@ -49,6 +50,7 @@ def func(
     name: Optional[str] = None,
     keep_result: Optional['SecondsTimedelta'] = None,
     timeout: Optional['SecondsTimedelta'] = None,
+    keep_result_forever: Optional[bool] = None,
     max_tries: Optional[int] = None,
 ) -> Function:
     """
@@ -57,6 +59,7 @@ def func(
     :param coroutine: coroutine function to call, can be a string to import
     :param name: name for function, if None, ``coroutine.__qualname__`` is used
     :param keep_result: duration to keep the result for, if 0 the result is not kept
+    :param keep_result_forever: whether to keep results forever, if None use Worker default, wins over ``keep_result``
     :param timeout: maximum time the job should take
     :param max_tries: maximum number of tries allowed for the function, use 1 to prevent retrying
     """
@@ -73,7 +76,7 @@ def func(
     timeout = to_seconds(timeout)
     keep_result = to_seconds(keep_result)
 
-    return Function(name or coroutine_.__qualname__, coroutine_, timeout, keep_result, max_tries)
+    return Function(name or coroutine_.__qualname__, coroutine_, timeout, keep_result, keep_result_forever, max_tries)
 
 
 class Retry(RuntimeError):
@@ -138,6 +141,7 @@ class Worker:
     :param max_jobs: maximum number of jobs to run at a time
     :param job_timeout: default job timeout (max run time)
     :param keep_result: default duration to keep job results for
+    :param keep_result_forever: whether to keep results forever
     :param poll_delay: duration between polling the queue for new jobs
     :param queue_read_limit: the maximum number of jobs to pull from the queue each time it's polled; by default it
                              equals ``max_jobs``
@@ -166,6 +170,7 @@ class Worker:
         max_jobs: int = 10,
         job_timeout: 'SecondsTimedelta' = 300,
         keep_result: 'SecondsTimedelta' = 3600,
+        keep_result_forever: bool = False,
         poll_delay: 'SecondsTimedelta' = 0.5,
         queue_read_limit: Optional[int] = None,
         max_tries: int = 5,
@@ -196,6 +201,7 @@ class Worker:
         self.sem = asyncio.BoundedSemaphore(max_jobs)
         self.job_timeout_s = to_seconds(job_timeout)
         self.keep_result_s = to_seconds(keep_result)
+        self.keep_result_forever = keep_result_forever
         self.poll_delay_s = to_seconds(poll_delay)
         self.queue_read_limit = queue_read_limit or max(max_jobs * 5, 100)
         self._queue_read_offset = 0
@@ -496,9 +502,12 @@ class Worker:
             finish = True
             self.jobs_complete += 1
 
+        keep_result_forever = (
+            self.keep_result_forever if function.keep_result_forever is None else function.keep_result_forever
+        )
         result_timeout_s = self.keep_result_s if function.keep_result_s is None else function.keep_result_s
         result_data = None
-        if result is not no_result and result_timeout_s > 0:
+        if result is not no_result and (keep_result_forever or result_timeout_s > 0):
             result_data = serialize_result(
                 function_name,
                 args,
@@ -514,7 +523,9 @@ class Worker:
                 serializer=self.job_serializer,
             )
 
-        await asyncio.shield(self.finish_job(job_id, finish, result_data, result_timeout_s, incr_score))
+        await asyncio.shield(
+            self.finish_job(job_id, finish, result_data, result_timeout_s, keep_result_forever, incr_score)
+        )
 
     async def finish_job(
         self,
@@ -522,6 +533,7 @@ class Worker:
         finish: bool,
         result_data: Optional[bytes],
         result_timeout_s: Optional[float],
+        keep_result_forever: bool,
         incr_score: Optional[int],
     ) -> None:
         with await self.pool as conn:
@@ -530,7 +542,8 @@ class Worker:
             delete_keys = [in_progress_key_prefix + job_id]
             if finish:
                 if result_data:
-                    tr.setex(result_key_prefix + job_id, result_timeout_s, result_data)
+                    expire = 0 if keep_result_forever else result_timeout_s
+                    tr.set(result_key_prefix + job_id, result_data, expire=expire)
                 delete_keys += [retry_key_prefix + job_id, job_key_prefix + job_id]
                 tr.zrem(self.queue_name, job_id)
             elif incr_score:
@@ -545,8 +558,10 @@ class Worker:
             tr.delete(retry_key_prefix + job_id, in_progress_key_prefix + job_id, job_key_prefix + job_id)
             tr.zrem(self.queue_name, job_id)
             # result_data would only be None if serializing the result fails
-            if result_data is not None and self.keep_result_s > 0:  # pragma: no branch
-                tr.setex(result_key_prefix + job_id, self.keep_result_s, result_data)
+            keep_result = self.keep_result_forever or self.keep_result_s > 0
+            if result_data is not None and keep_result:  # pragma: no branch
+                expire = 0 if self.keep_result_forever else self.keep_result_s
+                tr.set(result_key_prefix + job_id, result_data, expire=expire)
             await tr.execute()
 
     async def heart_beat(self) -> None:
