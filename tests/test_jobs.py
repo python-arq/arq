@@ -43,6 +43,7 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker, queue_name=default_queue
     assert r == 42
     assert JobStatus.complete == await j.status()
     info = await j.info()
+    expected_queue_name = queue_name or arq_redis.default_queue_name
     assert info == JobResult(
         job_try=1,
         function='foobar',
@@ -54,6 +55,7 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker, queue_name=default_queue
         start_time=CloseToNow(),
         finish_time=CloseToNow(),
         score=None,
+        queue_name=expected_queue_name,
     )
     results = await arq_redis.all_job_results()
     assert results == [
@@ -68,6 +70,7 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker, queue_name=default_queue
             start_time=CloseToNow(),
             finish_time=CloseToNow(),
             score=None,
+            queue_name=expected_queue_name,
             job_id=j.job_id,
         )
     ]
@@ -92,9 +95,9 @@ async def test_cant_unpickle_at_all():
         def __getstate__(self):
             raise TypeError("this doesn't pickle")
 
-    r1 = serialize_result('foobar', (1,), {}, 1, 123, True, Foobar(), 123, 123, 'testing')
+    r1 = serialize_result('foobar', (1,), {}, 1, 123, True, Foobar(), 123, 123, 'testing', 'test-queue')
     assert isinstance(r1, bytes)
-    r2 = serialize_result('foobar', (Foobar(),), {}, 1, 123, True, Foobar(), 123, 123, 'testing')
+    r2 = serialize_result('foobar', (Foobar(),), {}, 1, 123, True, Foobar(), 123, 123, 'testing', 'test-queue')
     assert r2 is None
 
 
@@ -106,10 +109,23 @@ async def test_custom_serializer():
     def custom_serializer(x):
         return b'0123456789'
 
-    r1 = serialize_result('foobar', (1,), {}, 1, 123, True, Foobar(), 123, 123, 'testing', serializer=custom_serializer)
+    r1 = serialize_result(
+        'foobar', (1,), {}, 1, 123, True, Foobar(), 123, 123, 'testing', 'test-queue', serializer=custom_serializer
+    )
     assert r1 == b'0123456789'
     r2 = serialize_result(
-        'foobar', (Foobar(),), {}, 1, 123, True, Foobar(), 123, 123, 'testing', serializer=custom_serializer
+        'foobar',
+        (Foobar(),),
+        {},
+        1,
+        123,
+        True,
+        Foobar(),
+        123,
+        123,
+        'testing',
+        'test-queue',
+        serializer=custom_serializer,
     )
     assert r2 == b'0123456789'
 

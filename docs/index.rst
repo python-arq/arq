@@ -114,7 +114,7 @@ For details on the *arq* CLI::
 Startup & Shutdown coroutines
 .............................
 
-The ``on_startup`` and ``on_startup`` coroutines are provided as a convenient way to run logic as the worker
+The ``on_startup`` and ``on_shutdown`` coroutines are provided as a convenient way to run logic as the worker
 starts and finishes, see :class:`arq.worker.Worker`.
 
 For example, in the above example ``session`` is created once when the work starts up and is then used in subsequent

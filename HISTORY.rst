@@ -3,7 +3,7 @@
 History
 -------
 
-v0.19.1 (unreleased)
+v0.19.1 (2020-10-26)
 ....................
 
 * fix timestamp issue in _defer_until without timezone offset, #182
@@ -11,6 +11,7 @@ v0.19.1 (unreleased)
 * add ``default_queue_name`` to ``create_redis_pool`` and ``ArqRedis``, #191
 * ``Worker`` can retrieve the ``queue_name`` from the connection pool, if present
 * fix potential race condition when starting jobs, #194
+* support python 3.9 and pydantic 1.7, #214
 
 v0.19.0 (2020-04-24)
 ....................

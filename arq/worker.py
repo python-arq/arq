@@ -277,7 +277,7 @@ class Worker:
     async def main(self) -> None:
         if self._pool is None:
             self._pool = await create_pool(
-                self.redis_settings, job_serializer=self.job_serializer, job_deserializer=self.job_deserializer
+                self.redis_settings, job_deserializer=self.job_deserializer, job_serializer=self.job_serializer
             )
 
         logger.info('Starting worker for %d functions: %s', len(self.functions), ', '.join(self.functions))
@@ -386,6 +386,7 @@ class Worker:
                 finished_ms=timestamp_ms(),
                 ref=f'{job_id}:{function_name}',
                 serializer=self.job_serializer,
+                queue_name=self.queue_name,
             )
             await asyncio.shield(self.abort_job(job_id, result_data_))
 
@@ -433,6 +434,7 @@ class Worker:
                 start_ms,
                 timestamp_ms(),
                 ref,
+                self.queue_name,
                 serializer=self.job_serializer,
             )
             return await asyncio.shield(self.abort_job(job_id, result_data))
@@ -508,6 +510,7 @@ class Worker:
                 start_ms,
                 finished_ms,
                 ref,
+                self.queue_name,
                 serializer=self.job_serializer,
             )
 

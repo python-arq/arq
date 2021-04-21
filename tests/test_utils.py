@@ -3,6 +3,7 @@ import re
 from datetime import timedelta
 
 import pytest
+from pydantic import BaseModel, validator
 
 import arq.typing
 import arq.utils
@@ -13,8 +14,8 @@ def test_settings_changed():
     settings = RedisSettings(port=123)
     assert settings.port == 123
     assert (
-        '<RedisSettings host=localhost port=123 database=0 password=None ssl=None conn_timeout=1 conn_retries=5 '
-        'conn_retry_delay=1 sentinel=False sentinel_master=mymaster>'
+        "RedisSettings(host='localhost', port=123, database=0, password=None, ssl=None, conn_timeout=1, "
+        "conn_retries=5, conn_retry_delay=1, sentinel=False, sentinel_master='mymaster')"
     ) == str(settings)
 
 
@@ -94,3 +95,33 @@ def test_to_seconds(input, output):
 
 def test_typing():
     assert 'OptionType' in arq.typing.__all__
+
+
+def test_redis_settings_validation():
+    class Settings(BaseModel):
+        redis_settings: RedisSettings
+
+        @validator('redis_settings', always=True, pre=True)
+        def parse_redis_settings(cls, v):
+            if isinstance(v, str):
+                return RedisSettings.from_dsn(v)
+            else:
+                return v
+
+    s1 = Settings(redis_settings='redis://foobar:123/4')
+    assert s1.redis_settings.host == 'foobar'
+    assert s1.redis_settings.host == 'foobar'
+    assert s1.redis_settings.port == 123
+    assert s1.redis_settings.database == 4
+    assert s1.redis_settings.ssl is False
+
+    s2 = Settings(redis_settings={'host': 'testing.com'})
+    assert s2.redis_settings.host == 'testing.com'
+    assert s2.redis_settings.port == 6379
+
+    with pytest.raises(ValueError, match='instance of SSLContext expected'):
+        Settings(redis_settings={'ssl': 123})
+
+    s3 = Settings(redis_settings={'ssl': True})
+    assert s3.redis_settings.host == 'localhost'
+    assert s3.redis_settings.ssl is True

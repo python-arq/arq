@@ -4,7 +4,7 @@ flake8==3.7.9
 flake8-quotes==3
 isort==4.3.21
 msgpack==0.6.1
-mypy==0.770
+mypy==0.790
 pycodestyle==2.5.0
 pyflakes==2.1.1
 pytest==5.3.5
