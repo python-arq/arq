@@ -147,7 +147,7 @@ class Worker:
     :param health_check_key: redis key under which health check is set
     :param ctx: dictionary to hold extra user defined state
     :param retry_jobs: whether to retry jobs on Retry or CancelledError or not
-    :param abort_jobs: whether to cancel jobs on a call to :func:`arq.jobs.Job.abort`
+    :param abort_jobs: whether to abort jobs on a call to :func:`arq.jobs.Job.abort`
     :param max_burst_jobs: the maximum number of jobs to process in burst mode (disabled with negative values)
     :param job_serializer: a function that serializes Python objects to bytes, defaults to pickle.dumps
     :param job_deserializer: a function that deserializes bytes into Python objects, defaults to pickle.loads
@@ -175,7 +175,7 @@ class Worker:
         health_check_key: Optional[str] = None,
         ctx: Optional[Dict[Any, Any]] = None,
         retry_jobs: bool = True,
-        abort_jobs: bool = True,
+        abort_jobs: bool = False,
         max_burst_jobs: int = -1,
         job_serializer: Optional[Serializer] = None,
         job_deserializer: Optional[Deserializer] = None,
@@ -329,7 +329,7 @@ class Worker:
                 del self.tasks[job_id]
                 # required to make sure errors in run_job get propagated
                 t.result()
-            elif job_id in self._aborting_tasks:
+            elif self.abort_jobs and job_id in self._aborting_tasks:
                 t.cancel()
 
         await self.heart_beat()
@@ -502,7 +502,7 @@ class Worker:
                     incr_score = e.defer_score + (timestamp_ms() - score)
                 self.jobs_retried += 1
             elif job_id in self._aborting_tasks and isinstance(e, asyncio.CancelledError):
-                logger.info('%6.2fs 🛇  %s aborted', t, ref)
+                logger.info('%6.2fs ⊘ %s aborted', t, ref)
                 result = e
                 finish = True
                 self._aborting_tasks.remove(job_id)
