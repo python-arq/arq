@@ -3,7 +3,7 @@ import inspect
 import logging
 import signal
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import partial
 from signal import Signals
 from time import time
@@ -22,13 +22,14 @@ from .constants import (
     health_check_key_suffix,
     in_progress_key_prefix,
     job_key_prefix,
+    keep_cronjob_progress,
     result_key_prefix,
     retry_key_prefix,
 )
 from .utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate
 
 if TYPE_CHECKING:
-    from .typing import WorkerCoroutine, StartupShutdown, SecondsTimedelta, WorkerSettingsType  # noqa F401
+    from .typing import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType  # noqa F401
 
 logger = logging.getLogger('arq.worker')
 no_result = object()
@@ -417,8 +418,10 @@ class Worker:
         if hasattr(function, 'next_run'):
             # cron_job
             ref = function_name
+            keep_in_progress: Optional[float] = keep_cronjob_progress
         else:
             ref = f'{job_id}:{function_name}'
+            keep_in_progress = None
 
         if enqueue_job_try and enqueue_job_try > job_try:
             job_try = enqueue_job_try
@@ -524,7 +527,9 @@ class Worker:
             )
 
         await asyncio.shield(
-            self.finish_job(job_id, finish, result_data, result_timeout_s, keep_result_forever, incr_score)
+            self.finish_job(
+                job_id, finish, result_data, result_timeout_s, keep_result_forever, incr_score, keep_in_progress,
+            )
         )
 
     async def finish_job(
@@ -535,11 +540,18 @@ class Worker:
         result_timeout_s: Optional[float],
         keep_result_forever: bool,
         incr_score: Optional[int],
+        keep_in_progress: Optional[float],
     ) -> None:
         with await self.pool as conn:
             await conn.unwatch()
             tr = conn.multi_exec()
-            delete_keys = [in_progress_key_prefix + job_id]
+            delete_keys = []
+            in_progress_key = in_progress_key_prefix + job_id
+            if keep_in_progress is None:
+                delete_keys += [in_progress_key]
+            else:
+                tr.expire(in_progress_key, keep_in_progress)
+
             if finish:
                 if result_data:
                     expire = 0 if keep_result_forever else result_timeout_s
@@ -565,25 +577,38 @@ class Worker:
             await tr.execute()
 
     async def heart_beat(self) -> None:
+        now = datetime.now()
         await self.record_health()
-        await self.run_cron()
 
-    async def run_cron(self) -> None:
-        n = datetime.now()
+        cron_window_size = max(self.poll_delay_s, 0.5)  # Clamp the cron delay to 0.5
+        await self.run_cron(now, cron_window_size)
+
+    async def run_cron(self, n: datetime, delay: float, num_windows: int = 2) -> None:
         job_futures = set()
+
+        cron_delay = timedelta(seconds=delay * num_windows)
+
+        this_hb_cutoff = n + cron_delay
 
         for cron_job in self.cron_jobs:
             if cron_job.next_run is None:
                 if cron_job.run_at_startup:
                     cron_job.next_run = n
                 else:
-                    cron_job.set_next(n)
+                    cron_job.calculate_next(n)
+                    # This isn't getting run this iteration in any case.
+                    continue
 
-            next_run = cast(datetime, cron_job.next_run)
-            if n >= next_run:
-                job_id = f'{cron_job.name}:{to_unix_ms(next_run)}' if cron_job.unique else None
-                job_futures.add(self.pool.enqueue_job(cron_job.name, _job_id=job_id, _queue_name=self.queue_name))
-                cron_job.set_next(n)
+            # We queue up the cron if the next execution time is in the next
+            # delay * num_windows (by default 0.5 * 2 = 1 second).
+            if cron_job.next_run < this_hb_cutoff:
+                job_id = f'{cron_job.name}:{to_unix_ms(cron_job.next_run)}' if cron_job.unique else None
+                job_futures.add(
+                    self.pool.enqueue_job(
+                        cron_job.name, _job_id=job_id, _queue_name=self.queue_name, _defer_until=cron_job.next_run
+                    )
+                )
+                cron_job.calculate_next(cron_job.next_run)
 
         job_futures and await asyncio.gather(*job_futures)
 

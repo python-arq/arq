@@ -108,9 +108,9 @@ class CronJob:
     max_tries: Optional[int]
     next_run: Optional[datetime] = None
 
-    def set_next(self, dt: datetime) -> None:
+    def calculate_next(self, prev_run: datetime) -> None:
         self.next_run = next_cron(
-            dt,
+            prev_run,
             month=self.month,
             day=self.day,
             weekday=self.weekday,
