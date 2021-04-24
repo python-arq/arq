@@ -86,7 +86,7 @@ class Job:
                 result = info.result
                 if info.success:
                     return result
-                elif isinstance(result, Exception) or isinstance(result, asyncio.CancelledError):
+                elif isinstance(result, (Exception, asyncio.CancelledError)):
                     raise result
                 else:
                     raise SerializationError(result)
@@ -146,9 +146,10 @@ class Job:
         await self._redis.set(f'{abort_key_prefix}{self.job_id}', b'1', expire=key_expire)
         try:
             await self.result(timeout=timeout, pole_delay=pole_delay)
-            return False
         except asyncio.CancelledError:
             return True
+        else:
+            return False
 
     def __repr__(self) -> str:
         return f'<arq job {self.job_id}>'
