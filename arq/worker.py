@@ -175,7 +175,7 @@ class Worker:
         health_check_key: Optional[str] = None,
         ctx: Optional[Dict[Any, Any]] = None,
         retry_jobs: bool = True,
-        abort_jobs: bool = False,
+        allow_abort_jobs: bool = False,
         max_burst_jobs: int = -1,
         job_serializer: Optional[Serializer] = None,
         job_deserializer: Optional[Deserializer] = None,
@@ -231,7 +231,7 @@ class Worker:
         self.on_stop: Optional[Callable[[Signals], None]] = None
         # whether or not to retry jobs on Retry and CancelledError
         self.retry_jobs = retry_jobs
-        self.abort_jobs = abort_jobs
+        self.allow_abort_jobs = allow_abort_jobs
         self._aborting_tasks: Set[str] = set()
         self.max_burst_jobs = max_burst_jobs
         self.job_serializer = job_serializer
@@ -321,7 +321,7 @@ class Worker:
 
         await self.start_jobs(job_ids)
 
-        if self.abort_jobs:
+        if self.allow_abort_jobs:
             await self._scan_abort_jobs()
 
         for job_id, t in list(self.tasks.items()):
@@ -329,7 +329,7 @@ class Worker:
                 del self.tasks[job_id]
                 # required to make sure errors in run_job get propagated
                 t.result()
-            elif self.abort_jobs and job_id in self._aborting_tasks:
+            elif self.allow_abort_jobs and job_id in self._aborting_tasks:
                 t.cancel()
 
         await self.heart_beat()

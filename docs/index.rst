@@ -167,7 +167,9 @@ optionally with a duration to defer rerunning the jobs by:
 
 .. literalinclude:: examples/retry.py
 
-To cancel a job, call :func:`arq.job.Job.cancel`.
+To abort a job, call :func:`arq.job.Job.abort`. (Note for the :func:`arq.job.Job.abort` method to
+have any effect, you need to set ``allow_abort_jobs`` to ``True`` on the worker, this is for performance reason.
+``allow_abort_jobs=True`` may become the default in future)
 
 .. literalinclude:: examples/job_abort.py
 
