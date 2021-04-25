@@ -11,7 +11,7 @@ import pytest
 from aioredis import create_redis_pool
 
 from arq.connections import ArqRedis
-from arq.constants import default_queue_name, health_check_key_suffix, job_key_prefix
+from arq.constants import default_queue_name, health_check_key_suffix, job_key_prefix, abort_jobs_ss
 from arq.jobs import Job, JobStatus
 from arq.worker import (
     FailedJobs,
@@ -745,10 +745,10 @@ async def test_abort_job(arq_redis: ArqRedis, worker, caplog, loop):
 
     async def wait_and_abort(job, delay=0.1):
         await asyncio.sleep(delay)
-        await job.abort()
+        assert await job.abort() is True
 
     caplog.set_level(logging.INFO)
-
+    await arq_redis.zadd(abort_jobs_ss, int(1e9), b'foobar')
     job = await arq_redis.enqueue_job('longfunc', _job_id='testing')
 
     worker: Worker = worker(functions=[func(longfunc, name='longfunc')], allow_abort_jobs=True, poll_delay=0.1)
@@ -761,3 +761,59 @@ async def test_abort_job(arq_redis: ArqRedis, worker, caplog, loop):
     assert worker.jobs_retried == 0
     log = re.sub(r'\d+.\d\ds', 'X.XXs', '\n'.join(r.message for r in caplog.records))
     assert 'X.XXs → testing:longfunc()\n  X.XXs ⊘ testing:longfunc aborted' in log
+    assert worker.aborting_tasks == set()
+    assert worker.tasks == {}
+    assert worker.job_tasks == {}
+
+
+async def test_abort_job_before(arq_redis: ArqRedis, worker, caplog, loop):
+    async def longfunc(ctx):
+        await asyncio.sleep(3600)
+
+    caplog.set_level(logging.INFO)
+
+    job = await arq_redis.enqueue_job('longfunc', _job_id='testing')
+
+    worker: Worker = worker(functions=[func(longfunc, name='longfunc')], allow_abort_jobs=True, poll_delay=0.1)
+    assert worker.jobs_complete == 0
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+    with pytest.raises(asyncio.TimeoutError):
+        await job.abort(timeout=0)
+    await worker.main()
+    assert worker.jobs_complete == 0
+    assert worker.jobs_failed == 1
+    assert worker.jobs_retried == 0
+    log = re.sub(r'\d+.\d\ds', 'X.XXs', '\n'.join(r.message for r in caplog.records))
+    assert 'X.XXs ⊘ testing:longfunc aborted before start' in log
+    await worker.main()
+    assert worker.aborting_tasks == set()
+    assert worker.job_tasks == {}
+    assert worker.tasks == {}
+
+
+async def test_not_abort_job(arq_redis: ArqRedis, worker, caplog, loop):
+    async def shortfunc(ctx):
+        await asyncio.sleep(0.2)
+
+    async def wait_and_abort(job, delay=0.1):
+        await asyncio.sleep(delay)
+        assert await job.abort() is False
+
+    caplog.set_level(logging.INFO)
+    job = await arq_redis.enqueue_job('shortfunc', _job_id='testing')
+
+    worker: Worker = worker(functions=[func(shortfunc, name='shortfunc')], poll_delay=0.1)
+    assert worker.jobs_complete == 0
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+    await asyncio.gather(wait_and_abort(job), worker.main())
+    assert worker.jobs_complete == 1
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+    log = re.sub(r'\d+.\d\ds', 'X.XXs', '\n'.join(r.message for r in caplog.records))
+    assert 'X.XXs → testing:shortfunc()\n  X.XXs ← testing:shortfunc ●' in log
+    await worker.main()
+    assert worker.aborting_tasks == set()
+    assert worker.tasks == {}
+    assert worker.job_tasks == {}

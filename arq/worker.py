@@ -242,7 +242,7 @@ class Worker:
         # whether or not to retry jobs on Retry and CancelledError
         self.retry_jobs = retry_jobs
         self.allow_abort_jobs = allow_abort_jobs
-        self._aborting_tasks: Set[str] = set()
+        self.aborting_tasks: Set[str] = set()
         self.max_burst_jobs = max_burst_jobs
         self.job_serializer = job_serializer
         self.job_deserializer = job_deserializer
@@ -365,7 +365,7 @@ class Worker:
                 task.cancel()
 
         if aborted:
-            self._aborting_tasks.update(aborted)
+            self.aborting_tasks.update(aborted)
             await self.pool.zrem(abort_jobs_ss, *aborted)
 
     async def start_jobs(self, job_ids: List[str]) -> None:
@@ -540,11 +540,11 @@ class Worker:
                 if e.defer_score:
                     incr_score = e.defer_score + (timestamp_ms() - score)
                 self.jobs_retried += 1
-            elif job_id in self._aborting_tasks and isinstance(e, asyncio.CancelledError):
+            elif job_id in self.aborting_tasks and isinstance(e, asyncio.CancelledError):
                 logger.info('%6.2fs ⊘ %s aborted', t, ref)
                 result = e
                 finish = True
-                self._aborting_tasks.remove(job_id)
+                self.aborting_tasks.remove(job_id)
                 self.jobs_failed += 1
             elif self.retry_jobs and isinstance(e, (asyncio.CancelledError, RetryJob)):
                 logger.info('%6.2fs ↻ %s cancelled, will be run again', t, ref)
