@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from aioredis import Redis
 
-from .constants import default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
+from .constants import abort_jobs_ss, default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
 from .utils import ms_to_datetime, poll, timestamp_ms
 
 logger = logging.getLogger('arq.jobs')
@@ -131,6 +131,23 @@ class Job:
             if not score:
                 return JobStatus.not_found
             return JobStatus.deferred if score > timestamp_ms() else JobStatus.queued
+
+    async def abort(self, *, timeout: Optional[float] = None, pole_delay: float = 0.5) -> bool:
+        """
+        Abort the job.
+
+        :param timeout: maximum time to wait for the job result before raising ``TimeoutError``,
+        will wait forever on None
+        :param pole_delay: how often to poll redis for the job result
+        :return: True if the job aborted properly, False otherwise
+        """
+        await self._redis.zadd(abort_jobs_ss, timestamp_ms(), self.job_id)
+        try:
+            await self.result(timeout=timeout, pole_delay=pole_delay)
+        except asyncio.CancelledError:
+            return True
+        else:
+            return False
 
     def __repr__(self) -> str:
         return f'<arq job {self.job_id}>'

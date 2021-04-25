@@ -55,7 +55,6 @@ setup(
         arq=arq.cli:cli
     """,
     install_requires=[
-        'async-timeout>=3.0.0',
         'aioredis>=1.1.0',
         'click>=6.7',
         'pydantic>=1',
