@@ -18,7 +18,8 @@ from arq.jobs import Deserializer, JobResult, SerializationError, Serializer, de
 
 from .connections import ArqRedis, RedisSettings, create_pool, log_redis_info
 from .constants import (
-    abort_key_prefix,
+    abort_job_max_age,
+    abort_jobs_ss,
     default_queue_name,
     health_check_key_suffix,
     in_progress_key_prefix,
@@ -152,7 +153,7 @@ class Worker:
     :param health_check_key: redis key under which health check is set
     :param ctx: dictionary to hold extra user defined state
     :param retry_jobs: whether to retry jobs on Retry or CancelledError or not
-    :param abort_jobs: whether to abort jobs on a call to :func:`arq.jobs.Job.abort`
+    :param allow_abort_jobs: whether to abort jobs on a call to :func:`arq.jobs.Job.abort`
     :param max_burst_jobs: the maximum number of jobs to process in burst mode (disabled with negative values)
     :param job_serializer: a function that serializes Python objects to bytes, defaults to pickle.dumps
     :param job_deserializer: a function that deserializes bytes into Python objects, defaults to pickle.loads
@@ -331,7 +332,7 @@ class Worker:
         await self.start_jobs(job_ids)
 
         if self.allow_abort_jobs:
-            await self._scan_abort_jobs()
+            await self._cancel_aborted_jobs()
 
         for job_id, t in list(self.tasks.items()):
             if t.done():
@@ -343,21 +344,24 @@ class Worker:
 
         await self.heart_beat()
 
-    async def _scan_abort_jobs(self) -> None:
-        orphaned_job_keys = []
-        cursor = b'0'
-        abort_key_len = len(abort_key_prefix)
-        abort_key_match = f'{abort_key_prefix}*'
-        while cursor:
-            cursor, keys = await self.pool.scan(cursor, match=abort_key_match)
-            for job_key in keys:
-                job_id = job_key[abort_key_len:]
-                if job_id in self.tasks:
-                    self._aborting_tasks.add(job_id)
-                else:
-                    orphaned_job_keys.append(job_key)
-        if orphaned_job_keys:
-            await self.pool.delete(*orphaned_job_keys)
+    async def _cancel_aborted_jobs(self) -> None:
+        """
+        Go through job_ids in the abort_jobs_ss sorted set and cancel those tasks.
+        """
+        with await self.pool as conn:
+            abort_job_ids, _ = await asyncio.gather(
+                conn.zrange(abort_jobs_ss),
+                conn.zremrangebyscore(abort_jobs_ss, min=timestamp_ms() + abort_job_max_age),
+            )
+
+        abort_done: Set[str] = set()
+        for job_id in abort_job_ids:
+            if job_id in self.tasks:
+                self._aborting_tasks.add(job_id)
+                abort_done.add(job_id)
+
+        if abort_done:
+            await self.pool.zrem(abort_jobs_ss, *abort_done)
 
     async def start_jobs(self, job_ids: List[str]) -> None:
         """
@@ -421,7 +425,7 @@ class Worker:
                 serializer=self.job_serializer,
                 queue_name=self.queue_name,
             )
-            await asyncio.shield(self.abort_job(job_id, result_data_))
+            await asyncio.shield(self.finish_failed_job(job_id, result_data_))
 
         if not v:
             logger.warning('job %s expired', job_id)
@@ -472,7 +476,7 @@ class Worker:
                 self.queue_name,
                 serializer=self.job_serializer,
             )
-            return await asyncio.shield(self.abort_job(job_id, result_data))
+            return await asyncio.shield(self.finish_failed_job(job_id, result_data))
 
         result = no_result
         exc_extra = None
@@ -588,23 +592,22 @@ class Worker:
                 if result_data:
                     expire = 0 if keep_result_forever else result_timeout_s
                     tr.set(result_key_prefix + job_id, result_data, expire=expire)
-                delete_keys += [retry_key_prefix + job_id, job_key_prefix + job_id, abort_key_prefix + job_id]
+                delete_keys += [retry_key_prefix + job_id, job_key_prefix + job_id]
+                tr.zrem(abort_jobs_ss, job_id)
                 tr.zrem(self.queue_name, job_id)
             elif incr_score:
                 tr.zincrby(self.queue_name, incr_score, job_id)
             tr.delete(*delete_keys)
             await tr.execute()
 
-    async def abort_job(self, job_id: str, result_data: Optional[bytes]) -> None:
+    async def finish_failed_job(self, job_id: str, result_data: Optional[bytes]) -> None:
         with await self.pool as conn:
             await conn.unwatch()
             tr = conn.multi_exec()
             tr.delete(
-                retry_key_prefix + job_id,
-                in_progress_key_prefix + job_id,
-                job_key_prefix + job_id,
-                abort_key_prefix + job_id,
+                retry_key_prefix + job_id, in_progress_key_prefix + job_id, job_key_prefix + job_id,
             )
+            tr.zrem(abort_jobs_ss, job_id)
             tr.zrem(self.queue_name, job_id)
             # result_data would only be None if serializing the result fails
             keep_result = self.keep_result_forever or self.keep_result_s > 0
