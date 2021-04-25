@@ -89,6 +89,8 @@ class Job:
                     return result
                 elif isinstance(result, (Exception, asyncio.CancelledError)):
                     raise result
+                elif result is None:
+                    return None
                 else:
                     raise SerializationError(result)
             if timeout is not None and delay > timeout:

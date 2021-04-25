@@ -9,7 +9,6 @@ from signal import Signals
 from time import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union, cast
 
-import async_timeout
 from aioredis import MultiExecError
 from pydantic.utils import import_string
 
@@ -221,7 +220,10 @@ class Worker:
             self.redis_settings: Optional[RedisSettings] = redis_settings or RedisSettings()
         else:
             self.redis_settings = None
+        # self.tasks holds references to run_job coroutines currently running
         self.tasks: Dict[str, asyncio.Task[Any]] = {}
+        # self.job_tasks holds references the actual jobs running
+        self.job_tasks: Dict[str, asyncio.Task[Any]] = {}
         self.main_task: Optional[asyncio.Task[None]] = None
         self.loop = asyncio.get_event_loop()
         self.ctx = ctx or {}
@@ -339,8 +341,6 @@ class Worker:
                 del self.tasks[job_id]
                 # required to make sure errors in run_job get propagated
                 t.result()
-            elif self.allow_abort_jobs and job_id in self._aborting_tasks:
-                t.cancel()
 
         await self.heart_beat()
 
@@ -354,14 +354,19 @@ class Worker:
                 conn.zremrangebyscore(abort_jobs_ss, min=timestamp_ms() + abort_job_max_age),
             )
 
-        abort_done: Set[str] = set()
+        aborted: Set[str] = set()
         for job_id in abort_job_ids:
-            if job_id in self.tasks:
-                self._aborting_tasks.add(job_id)
-                abort_done.add(job_id)
+            try:
+                task = self.job_tasks[job_id]
+            except KeyError:
+                pass
+            else:
+                aborted.add(job_id)
+                task.cancel()
 
-        if abort_done:
-            await self.pool.zrem(abort_jobs_ss, *abort_done)
+        if aborted:
+            self._aborting_tasks.update(aborted)
+            await self.pool.zrem(abort_jobs_ss, *aborted)
 
     async def start_jobs(self, job_ids: List[str]) -> None:
         """
@@ -400,16 +405,22 @@ class Worker:
 
     async def run_job(self, job_id: str, score: int) -> None:  # noqa: C901
         start_ms = timestamp_ms()
-        v, job_try, _ = await asyncio.gather(
+        coros = (
             self.pool.get(job_key_prefix + job_id, encoding=None),
             self.pool.incr(retry_key_prefix + job_id),
             self.pool.expire(retry_key_prefix + job_id, 88400),
         )
+        if self.allow_abort_jobs:
+            abort_job, v, job_try, _ = await asyncio.gather(self.pool.zrem(abort_jobs_ss, job_id), *coros)
+        else:
+            v, job_try, _ = await asyncio.gather(*coros)
+            abort_job = False
+
         function_name, enqueue_time_ms = '<unknown>', 0
         args: Tuple[Any, ...] = ()
         kwargs: Dict[Any, Any] = {}
 
-        async def job_failed(exc: Exception) -> None:
+        async def job_failed(exc: BaseException) -> None:
             self.jobs_failed += 1
             result_data_ = serialize_result(
                 function=function_name,
@@ -438,6 +449,11 @@ class Worker:
         except SerializationError as e:
             logger.exception('deserializing job %s failed', job_id)
             return await job_failed(e)
+
+        if abort_job:
+            t = (timestamp_ms() - enqueue_time_ms) / 1000
+            logger.info('%6.2fs ⊘ %s:%s aborted before start', t, job_id, function_name)
+            return await job_failed(asyncio.CancelledError())
 
         try:
             function: Union[Function, CronJob] = self.functions[function_name]
@@ -498,10 +514,12 @@ class Worker:
             if (start_ms - score) > 1200:
                 extra += f' delayed={(start_ms - score) / 1000:0.2f}s'
             logger.info('%6.2fs → %s(%s)%s', (start_ms - enqueue_time_ms) / 1000, ref, s, extra)
+            self.job_tasks[job_id] = task = self.loop.create_task(function.coroutine(ctx, *args, **kwargs))
+
+            cancel_handler = self.loop.call_at(self.loop.time() + timeout_s, task.cancel)
             # run repr(result) and extra inside try/except as they can raise exceptions
             try:
-                async with async_timeout.timeout(timeout_s):
-                    result = await function.coroutine(ctx, *args, **kwargs)
+                result = await task
             except (Exception, asyncio.CancelledError) as e:
                 exc_extra = getattr(e, 'extra', None)
                 if callable(exc_extra):
@@ -509,6 +527,10 @@ class Worker:
                 raise
             else:
                 result_str = '' if result is None else truncate(repr(result))
+            finally:
+                del self.job_tasks[job_id]
+                cancel_handler.cancel()
+
         except (Exception, asyncio.CancelledError) as e:
             finished_ms = timestamp_ms()
             t = (finished_ms - start_ms) / 1000
