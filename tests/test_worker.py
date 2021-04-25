@@ -11,7 +11,7 @@ import pytest
 from aioredis import create_redis_pool
 
 from arq.connections import ArqRedis
-from arq.constants import abort_key_prefix, default_queue_name, health_check_key_suffix, job_key_prefix
+from arq.constants import abort_jobs_ss, default_queue_name, health_check_key_suffix, job_key_prefix
 from arq.jobs import Job, JobStatus
 from arq.worker import (
     FailedJobs,
@@ -748,8 +748,7 @@ async def test_abort_job(arq_redis: ArqRedis, worker, caplog, loop):
         await job.abort()
 
     caplog.set_level(logging.INFO)
-    # try autodelete unknown job_ids
-    await arq_redis.set(f'{abort_key_prefix}todel', b'1')
+
     job = await arq_redis.enqueue_job('longfunc', _job_id='testing')
 
     worker: Worker = worker(functions=[func(longfunc, name='longfunc')], allow_abort_jobs=True, poll_delay=0.1)
@@ -761,4 +760,4 @@ async def test_abort_job(arq_redis: ArqRedis, worker, caplog, loop):
     assert worker.jobs_failed == 1
     assert worker.jobs_retried == 0
     log = re.sub(r'\d+.\d\ds', 'X.XXs', '\n'.join(r.message for r in caplog.records))
-    assert 'X.XXs → testing:longfunc()\n  X.XXs 🛇  testing:longfunc aborted' in log
+    assert 'X.XXs → testing:longfunc()\n  X.XXs ⊘ testing:longfunc aborted' in log
