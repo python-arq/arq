@@ -87,7 +87,7 @@ class Job:
                 result = info.result
                 if info.success:
                     return result
-                elif isinstance(result, Exception):
+                elif isinstance(result, (Exception, asyncio.CancelledError)):
                     raise result
                 else:
                     raise SerializationError(result)
