@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import pickle
+import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -73,15 +74,24 @@ class Job:
         self._queue_name = _queue_name
         self._deserializer = _deserializer
 
-    async def result(self, timeout: Optional[float] = None, *, pole_delay: float = 0.5) -> Any:
+    async def result(
+        self, timeout: Optional[float] = None, *, poll_delay: float = 0.5, pole_delay: float = None
+    ) -> Any:
         """
         Get the result of the job, including waiting if it's not yet available. If the job raised an exception,
         it will be raised here.
 
         :param timeout: maximum time to wait for the job result before raising ``TimeoutError``, will wait forever
-        :param pole_delay: how often to poll redis for the job result
+        :param poll_delay: how often to poll redis for the job result
+        :param pole_delay: deprecated, use poll_delay instead
         """
-        async for delay in poll(pole_delay):
+        if pole_delay is not None:
+            warnings.warn(
+                '"pole_delay" is deprecated, use the correct spelling "poll_delay" instead', DeprecationWarning
+            )
+            poll_delay = pole_delay
+
+        async for delay in poll(poll_delay):
             info = await self.result_info()
             if info:
                 result = info.result
@@ -132,18 +142,18 @@ class Job:
                 return JobStatus.not_found
             return JobStatus.deferred if score > timestamp_ms() else JobStatus.queued
 
-    async def abort(self, *, timeout: Optional[float] = None, pole_delay: float = 0.5) -> bool:
+    async def abort(self, *, timeout: Optional[float] = None, poll_delay: float = 0.5) -> bool:
         """
         Abort the job.
 
         :param timeout: maximum time to wait for the job result before raising ``TimeoutError``,
         will wait forever on None
-        :param pole_delay: how often to poll redis for the job result
+        :param poll_delay: how often to poll redis for the job result
         :return: True if the job aborted properly, False otherwise
         """
         await self._redis.zadd(abort_jobs_ss, timestamp_ms(), self.job_id)
         try:
-            await self.result(timeout=timeout, pole_delay=pole_delay)
+            await self.result(timeout=timeout, poll_delay=poll_delay)
         except asyncio.CancelledError:
             return True
         else:

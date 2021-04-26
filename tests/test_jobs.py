@@ -27,7 +27,7 @@ async def test_unknown(arq_redis: ArqRedis):
 async def test_result_timeout(arq_redis: ArqRedis):
     j = Job('foobar', arq_redis)
     with pytest.raises(asyncio.TimeoutError):
-        await j.result(0.1, pole_delay=0)
+        await j.result(0.1, poll_delay=0)
 
 
 async def test_enqueue_job(arq_redis: ArqRedis, worker, queue_name=default_queue_name):
@@ -39,7 +39,7 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker, queue_name=default_queue
     assert JobStatus.queued == await j.status()
     worker: Worker = worker(functions=[func(foobar, name='foobar')], queue_name=queue_name)
     await worker.main()
-    r = await j.result(pole_delay=0)
+    r = await j.result(poll_delay=0)
     assert r == 42
     assert JobStatus.complete == await j.status()
     info = await j.info()
@@ -138,13 +138,13 @@ async def test_deserialize_result(arq_redis: ArqRedis, worker):
     assert JobStatus.queued == await j.status()
     worker: Worker = worker(functions=[func(foobar, name='foobar')])
     await worker.run_check()
-    assert await j.result(pole_delay=0) == 3
-    assert await j.result(pole_delay=0) == 3
+    assert await j.result(poll_delay=0) == 3
+    assert await j.result(poll_delay=0) == 3
     info = await j.info()
     assert info.args == (1, 2)
     await arq_redis.set(result_key_prefix + j.job_id, b'invalid pickle data')
     with pytest.raises(DeserializationError, match='unable to deserialize job result'):
-        assert await j.result(pole_delay=0) == 3
+        assert await j.result(poll_delay=0) == 3
 
 
 async def test_deserialize_info(arq_redis: ArqRedis):
@@ -165,3 +165,13 @@ async def test_deserialize_job_raw():
 async def test_get_job_result(arq_redis: ArqRedis):
     with pytest.raises(KeyError, match='job "foobar" not found'):
         await arq_redis._get_job_result('foobar')
+
+
+async def test_result_pole_delay_dep(arq_redis: ArqRedis):
+    j = Job('foobar', arq_redis)
+    r = serialize_result('foobar', (1,), {}, 1, 123, True, 42, 123, 123, 'testing', 'test-queue')
+    await arq_redis.set(result_key_prefix + j.job_id, r)
+    with pytest.warns(
+        DeprecationWarning, match='"pole_delay" is deprecated, use the correct spelling "poll_delay" instead'
+    ):
+        assert await j.result(0, pole_delay=0) == 42
