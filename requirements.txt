@@ -1,4 +1,3 @@
 -r docs/requirements.txt
--r tests/requirements.txt
-
-pydantic==1.7
+-r tests/requirements-linting.txt
+-r tests/requirements-testing.txt
