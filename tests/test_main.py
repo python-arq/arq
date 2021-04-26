@@ -90,6 +90,30 @@ async def test_enqueue_job_nested_custom_serializer(arq_redis_msgpack: ArqRedis,
     assert inner_result == 42
 
 
+async def test_enqueue_job_custom_queue(arq_redis: ArqRedis, worker):
+    async def foobar(ctx):
+        return 42
+
+    async def parent_job(ctx):
+        inner_job = await ctx['redis'].enqueue_job('foobar')
+        return inner_job.job_id
+
+    job = await arq_redis.enqueue_job('parent_job', _queue_name='spanner')
+
+    worker: Worker = worker(
+        functions=[func(parent_job, name='parent_job'), func(foobar, name='foobar')],
+        arq_redis=None,
+        queue_name='spanner',
+    )
+
+    await worker.main()
+    inner_job_id = await job.result(pole_delay=0)
+    assert inner_job_id is not None
+    inner_job = Job(inner_job_id, arq_redis, _queue_name='spanner')
+    inner_result = await inner_job.result(pole_delay=0)
+    assert inner_result == 42
+
+
 async def test_job_error(arq_redis: ArqRedis, worker):
     async def foobar(ctx):
         raise RuntimeError('foobar error')
