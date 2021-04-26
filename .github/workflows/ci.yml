@@ -9,6 +9,40 @@ on:
   pull_request: {}
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: set up python
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.9
+
+    - run: pip install -r tests/requirements-linting.txt
+    - run: pip install .
+
+    - run: make lint
+
+    - run: make mypy
+
+  docs:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: set up python
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.9
+
+    - run: pip install -r docs/requirements.txt
+    - run: pip install .
+
+    - run: make docs
+
   test:
     name: test py${{ matrix.python-version }} on ${{ matrix.os }}
     strategy:
@@ -38,30 +72,21 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: install dependencies
-      run: |
-        make install
-        pip freeze
+    - run: pip install -r tests/requirements-testing.txt
+    - run: pip install .[watch]
 
-    - name: lint
-      run: make lint
+    - run: make test
 
-    - name: mypy
-      run: make mypy
+    - run: coverage xml
 
-    - name: test
-      run: |
-        make test
-        coverage xml
-
-    - uses: samuelcolvin/codecov-action@env-vars
+    - uses: codecov/codecov-action@v1.4.1
       with:
         file: ./coverage.xml
         env_vars: PYTHON,OS
 
   deploy:
     name: Deploy
-    needs: test
+    needs: [lint, docs, test]
     if: "success() && startsWith(github.ref, 'refs/tags/')"
     runs-on: ubuntu-latest
 

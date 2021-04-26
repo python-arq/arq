@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := all
-isort = isort -rc arq tests
+isort = isort arq tests
 black = black -S -l 120 --target-version py37 arq tests
 
 .PHONY: install
@@ -16,7 +16,7 @@ format:
 .PHONY: lint
 lint:
 	flake8 arq/ tests/
-	$(isort) --check-only -df
+	$(isort) --check-only --df
 	$(black) --check
 
 .PHONY: test

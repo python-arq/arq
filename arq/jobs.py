@@ -147,7 +147,7 @@ class Job:
         Abort the job.
 
         :param timeout: maximum time to wait for the job result before raising ``TimeoutError``,
-        will wait forever on None
+            will wait forever on None
         :param poll_delay: how often to poll redis for the job result
         :return: True if the job aborted properly, False otherwise
         """
