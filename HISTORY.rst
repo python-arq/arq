@@ -3,6 +3,19 @@
 History
 -------
 
+v0.20 (2021-04-26)
+..................
+
+* Added ``queue_name`` attribute to ``JobResult``, #198
+* set ``job_deserializer``, ``job_serializer`` and ``default_queue_name`` on worker pools to better supported
+  nested jobs, #203, #215 and #218
+* All job results to be kept indefinitely, #205
+* refactor ``cron`` jobs to prevent duplicate jobs, #200
+* correctly handle ``CancelledError`` in python 3.8+, #213
+* allow jobs to be aborted, #212
+* depreciate ``pole_delay`` and use correct spelling ``poll_delay``, #242
+* docs improvements, #207 and #232
+
 v0.19.1 (2020-10-26)
 ....................
 
