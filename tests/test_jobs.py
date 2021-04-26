@@ -174,4 +174,4 @@ async def test_result_pole_delay_dep(arq_redis: ArqRedis):
     with pytest.warns(
         DeprecationWarning, match='"pole_delay" is deprecated, use the correct spelling "poll_delay" instead'
     ):
-        assert await j.result(0, pole_delay=0) == 42
+        assert await j.result(pole_delay=0) == 42
