@@ -114,7 +114,7 @@ For details on the *arq* CLI::
 Startup & Shutdown coroutines
 .............................
 
-The ``on_startup`` and ``on_startup`` coroutines are provided as a convenient way to run logic as the worker
+The ``on_startup`` and ``on_shutdown`` coroutines are provided as a convenient way to run logic as the worker
 starts and finishes, see :class:`arq.worker.Worker`.
 
 For example, in the above example ``session`` is created once when the work starts up and is then used in subsequent
@@ -167,6 +167,15 @@ optionally with a duration to defer rerunning the jobs by:
 
 .. literalinclude:: examples/retry.py
 
+To abort a job, call :func:`arq.job.Job.abort`. (Note for the :func:`arq.job.Job.abort` method to
+have any effect, you need to set ``allow_abort_jobs`` to ``True`` on the worker, this is for performance reason.
+``allow_abort_jobs=True`` may become the default in future)
+
+:func:`arq.job.Job.abort` will abort a job if it's already running or prevent it being run if it's currently
+in the queue.
+
+.. literalinclude:: examples/job_abort.py
+
 Health checks
 .............
 
@@ -205,6 +214,15 @@ As per the example sets can be used to run at multiple of the given unit.
 Note that ``second`` defaults to ``0`` so you don't in inadvertently run jobs every second and ``microsecond``
 defaults to ``123456`` so you don't inadvertently run jobs every microsecond and so *arq* avoids enqueuing jobs
 at the top of a second when the world is generally slightly busier.
+
+Synchronous Jobs
+................
+
+Functions that can block the loop for extended periods should be run in an executor like
+``concurrent.futures.ThreadPoolExecutor`` or ``concurrent.futures.ProcessPoolExecutor`` using
+``loop.run_in_executor`` as shown below.
+
+.. literalinclude:: examples/sync_job.py
 
 Custom job serializers
 ......................

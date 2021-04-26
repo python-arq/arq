@@ -104,12 +104,13 @@ class CronJob:
     unique: bool
     timeout_s: Optional[float]
     keep_result_s: Optional[float]
+    keep_result_forever: Optional[bool]
     max_tries: Optional[int]
     next_run: Optional[datetime] = None
 
-    def set_next(self, dt: datetime) -> None:
+    def calculate_next(self, prev_run: datetime) -> None:
         self.next_run = next_cron(
-            dt,
+            prev_run,
             month=self.month,
             day=self.day,
             weekday=self.weekday,
@@ -138,6 +139,7 @@ def cron(
     unique: bool = True,
     timeout: Optional[SecondsTimedelta] = None,
     keep_result: Optional[float] = 0,
+    keep_result_forever: Optional[bool] = False,
     max_tries: Optional[int] = 1,
 ) -> CronJob:
     """
@@ -160,6 +162,7 @@ def cron(
     :param unique: whether the job should be only be executed once at each time
     :param timeout: job timeout
     :param keep_result: how long to keep the result for
+    :param keep_result_forever: whether to keep results forever
     :param max_tries: maximum number of tries for the job
     """
 
@@ -187,5 +190,6 @@ def cron(
         unique,
         timeout,
         keep_result,
+        keep_result_forever,
         max_tries,
     )
