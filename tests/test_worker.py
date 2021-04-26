@@ -489,7 +489,7 @@ async def test_return_exception(arq_redis: ArqRedis, worker):
     worker: Worker = worker(functions=[func(return_error, name='return_error')])
     await worker.main()
     assert (worker.jobs_complete, worker.jobs_failed, worker.jobs_retried) == (1, 0, 0)
-    r = await j.result(pole_delay=0)
+    r = await j.result(poll_delay=0)
     assert isinstance(r, TypeError)
     info = await j.result_info()
     assert info.success is True

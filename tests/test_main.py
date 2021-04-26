@@ -25,7 +25,7 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker):
     j = await arq_redis.enqueue_job('foobar')
     worker: Worker = worker(functions=[func(foobar, name='foobar')])
     await worker.main()
-    r = await j.result(pole_delay=0)
+    r = await j.result(poll_delay=0)
     assert r == 42  # 1
 
 
@@ -40,8 +40,8 @@ async def test_enqueue_job_different_queues(arq_redis: ArqRedis, worker):
 
     await worker1.main()
     await worker2.main()
-    r1 = await j1.result(pole_delay=0)
-    r2 = await j2.result(pole_delay=0)
+    r1 = await j1.result(poll_delay=0)
+    r2 = await j2.result(poll_delay=0)
     assert r1 == 42  # 1
     assert r2 == 42  # 2
 
@@ -58,10 +58,10 @@ async def test_enqueue_job_nested(arq_redis: ArqRedis, worker):
     worker: Worker = worker(functions=[func(parent_job, name='parent_job'), func(foobar, name='foobar')])
 
     await worker.main()
-    result = await job.result(pole_delay=0)
+    result = await job.result(poll_delay=0)
     assert result is not None
     inner_job = Job(result, arq_redis)
-    inner_result = await inner_job.result(pole_delay=0)
+    inner_result = await inner_job.result(poll_delay=0)
     assert inner_result == 42
 
 
@@ -83,10 +83,10 @@ async def test_enqueue_job_nested_custom_serializer(arq_redis_msgpack: ArqRedis,
     )
 
     await worker.main()
-    result = await job.result(pole_delay=0)
+    result = await job.result(poll_delay=0)
     assert result is not None
     inner_job = Job(result, arq_redis_msgpack, _deserializer=functools.partial(msgpack.unpackb, raw=False))
-    inner_result = await inner_job.result(pole_delay=0)
+    inner_result = await inner_job.result(poll_delay=0)
     assert inner_result == 42
 
 
@@ -107,10 +107,10 @@ async def test_enqueue_job_custom_queue(arq_redis: ArqRedis, worker):
     )
 
     await worker.main()
-    inner_job_id = await job.result(pole_delay=0)
+    inner_job_id = await job.result(poll_delay=0)
     assert inner_job_id is not None
     inner_job = Job(inner_job_id, arq_redis, _queue_name='spanner')
-    inner_result = await inner_job.result(pole_delay=0)
+    inner_result = await inner_job.result(poll_delay=0)
     assert inner_result == 42
 
 
@@ -123,7 +123,7 @@ async def test_job_error(arq_redis: ArqRedis, worker):
     await worker.main()
 
     with pytest.raises(RuntimeError, match='foobar error'):
-        await j.result(pole_delay=0)
+        await j.result(poll_delay=0)
 
 
 async def test_job_info(arq_redis: ArqRedis):
@@ -190,12 +190,12 @@ async def test_custom_try(arq_redis: ArqRedis, worker):
     j1 = await arq_redis.enqueue_job('foobar')
     w: Worker = worker(functions=[func(foobar, name='foobar')])
     await w.main()
-    r = await j1.result(pole_delay=0)
+    r = await j1.result(poll_delay=0)
     assert r == 1
 
     j2 = await arq_redis.enqueue_job('foobar', _job_try=3)
     await w.main()
-    r = await j2.result(pole_delay=0)
+    r = await j2.result(poll_delay=0)
     assert r == 3
 
 
@@ -208,7 +208,7 @@ async def test_custom_try2(arq_redis: ArqRedis, worker):
     j1 = await arq_redis.enqueue_job('foobar', _job_try=3)
     w: Worker = worker(functions=[func(foobar, name='foobar')])
     await w.main()
-    r = await j1.result(pole_delay=0)
+    r = await j1.result(poll_delay=0)
     assert r == 4
 
 
@@ -233,7 +233,7 @@ async def test_cant_pickle_result(arq_redis: ArqRedis, worker):
     w: Worker = worker(functions=[func(foobar, name='foobar')])
     await w.main()
     with pytest.raises(SerializationError, match='unable to serialize result'):
-        await j1.result(pole_delay=0)
+        await j1.result(poll_delay=0)
 
 
 async def test_get_jobs(arq_redis: ArqRedis):
