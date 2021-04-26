@@ -79,7 +79,7 @@ jobs:
 
     - run: coverage xml
 
-    - uses: codecov/codecov-action@v1.41
+    - uses: codecov/codecov-action@v1.4.1
       with:
         file: ./coverage.xml
         env_vars: PYTHON,OS
