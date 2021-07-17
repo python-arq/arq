@@ -3,7 +3,6 @@ import functools
 
 import msgpack
 import pytest
-from aioredis import create_redis_pool
 
 from arq.connections import ArqRedis, create_pool
 from arq.worker import Worker
@@ -11,29 +10,24 @@ from arq.worker import Worker
 
 @pytest.yield_fixture
 async def arq_redis(loop):
-    redis_ = await create_redis_pool(
-        ('localhost', 6379), encoding='utf8', loop=loop, commands_factory=ArqRedis, minsize=5
-    )
+    redis_ = ArqRedis(host="localhost", port=6379, encoding="utf-8", )
     await redis_.flushall()
     yield redis_
-    redis_.close()
-    await redis_.wait_closed()
+    await redis_.close()
 
 
 @pytest.yield_fixture
 async def arq_redis_msgpack(loop):
-    redis_ = await create_redis_pool(
-        ('localhost', 6379),
-        encoding='utf8',
-        loop=loop,
-        commands_factory=functools.partial(
-            ArqRedis, job_serializer=msgpack.packb, job_deserializer=functools.partial(msgpack.unpackb, raw=False)
-        ),
+    redis_ = ArqRedis(
+        host="localhost",
+        port=6379,
+        encoding="utf-8",
+        job_serializer=msgpack.packb,
+        job_deserializer=functools.partial(msgpack.unpackb, raw=False)
     )
     await redis_.flushall()
     yield redis_
-    redis_.close()
-    await redis_.wait_closed()
+    await redis_.close()
 
 
 @pytest.yield_fixture
@@ -64,7 +58,4 @@ async def fix_create_pool(loop):
 
     yield create_pool_
 
-    for p in pools:
-        p.close()
-
-    await asyncio.gather(*[p.wait_closed() for p in pools])
+    await asyncio.gather(*[p.close() for p in pools])

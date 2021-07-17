@@ -45,13 +45,11 @@ async def test_redis_success_log(caplog, create_pool):
     settings = RedisSettings()
     pool = await create_pool(settings)
     assert 'redis connection successful' not in [r.message for r in caplog.records]
-    pool.close()
-    await pool.wait_closed()
+    await pool.close()
 
     pool = await create_pool(settings, retry=1)
     assert 'redis connection successful' in [r.message for r in caplog.records]
-    pool.close()
-    await pool.wait_closed()
+    await pool.close()
 
 
 async def test_redis_log(create_pool):

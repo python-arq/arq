@@ -5,7 +5,7 @@ import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 from aioredis import Redis
 
@@ -44,6 +44,10 @@ class JobDef:
     enqueue_time: datetime
     score: Optional[int]
 
+    def __post_init__(self):
+        if isinstance(self.score, float):
+            self.score = int(self.score)
+
 
 @dataclass
 class JobResult(JobDef):
@@ -53,6 +57,10 @@ class JobResult(JobDef):
     finish_time: datetime
     queue_name: str
     job_id: Optional[str] = None
+
+    def __post_init__(self):
+        if isinstance(self.job_id, bytes):
+            self.job_id = self.job_id.decode("utf-8")
 
 
 class Job:
@@ -64,11 +72,13 @@ class Job:
 
     def __init__(
         self,
-        job_id: str,
+        job_id: Union[bytes, str],
         redis: Redis,
         _queue_name: str = default_queue_name,
         _deserializer: Optional[Deserializer] = None,
     ):
+        if isinstance(job_id, bytes):
+            job_id = job_id.decode("utf-8")
         self.job_id = job_id
         self._redis = redis
         self._queue_name = _queue_name
@@ -110,7 +120,7 @@ class Job:
         """
         info: Optional[JobDef] = await self.result_info()
         if not info:
-            v = await self._redis.get(job_key_prefix + self.job_id, encoding=None)
+            v = await self._redis.get(job_key_prefix + self.job_id)
             if v:
                 info = deserialize_job(v, deserializer=self._deserializer)
         if info:
@@ -122,7 +132,7 @@ class Job:
         Information about the job result if available, does not wait for the result. Does not raise an exception
         even if the job raised one.
         """
-        v = await self._redis.get(result_key_prefix + self.job_id, encoding=None)
+        v = await self._redis.get(result_key_prefix + self.job_id)
         if v:
             return deserialize_result(v, deserializer=self._deserializer)
         else:
@@ -151,7 +161,7 @@ class Job:
         :param poll_delay: how often to poll redis for the job result
         :return: True if the job aborted properly, False otherwise
         """
-        await self._redis.zadd(abort_jobs_ss, timestamp_ms(), self.job_id)
+        await self._redis.zadd(abort_jobs_ss, {self.job_id: timestamp_ms()})
         try:
             await self.result(timeout=timeout, poll_delay=poll_delay)
         except asyncio.CancelledError:
