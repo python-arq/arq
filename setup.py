@@ -55,7 +55,7 @@ setup(
         arq=arq.cli:cli
     """,
     install_requires=[
-        'aioredis>=1.1.0',
+        'aioredis>=1.1.0,<2.0.0',
         'click>=6.7',
         'pydantic>=1',
         'dataclasses>=0.6;python_version == "3.6"',
