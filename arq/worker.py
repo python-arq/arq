@@ -19,6 +19,7 @@ from .constants import (
     abort_job_max_age,
     abort_jobs_ss,
     default_queue_name,
+    expires_extra_ms,
     health_check_key_suffix,
     in_progress_key_prefix,
     job_key_prefix,
@@ -167,6 +168,8 @@ class Worker:
     :param max_burst_jobs: the maximum number of jobs to process in burst mode (disabled with negative values)
     :param job_serializer: a function that serializes Python objects to bytes, defaults to pickle.dumps
     :param job_deserializer: a function that deserializes bytes into Python objects, defaults to pickle.loads
+    :param expires_extra_ms: the default length of time from when a job is expected to start
+     after which the job expires, defaults to 1 day in ms.
     """
 
     def __init__(
@@ -198,6 +201,7 @@ class Worker:
         max_burst_jobs: int = -1,
         job_serializer: Optional[Serializer] = None,
         job_deserializer: Optional[Deserializer] = None,
+        expires_extra_ms: int = expires_extra_ms,
     ):
         self.functions: Dict[str, Union[Function, CronJob]] = {f.name: f for f in map(func, functions)}
         if queue_name is None:
@@ -261,6 +265,7 @@ class Worker:
         self.max_burst_jobs = max_burst_jobs
         self.job_serializer = job_serializer
         self.job_deserializer = job_deserializer
+        self.expires_extra_ms = expires_extra_ms
 
     def run(self) -> None:
         """
@@ -311,6 +316,7 @@ class Worker:
                 job_deserializer=self.job_deserializer,
                 job_serializer=self.job_serializer,
                 default_queue_name=self.queue_name,
+                expires_extra_ms=self.expires_extra_ms,
             )
 
         logger.info('Starting worker for %d functions: %s', len(self.functions), ', '.join(self.functions))

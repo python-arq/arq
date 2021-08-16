@@ -12,7 +12,7 @@ from redis.asyncio import ConnectionPool, Redis
 from redis.asyncio.sentinel import Sentinel
 from redis.exceptions import RedisError, WatchError
 
-from .constants import default_queue_name, job_key_prefix, result_key_prefix
+from .constants import default_queue_name, expires_extra_ms, job_key_prefix, result_key_prefix
 from .jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
@@ -71,10 +71,6 @@ class RedisSettings:
         return 'RedisSettings({})'.format(', '.join(f'{k}={v!r}' for k, v in self.__dict__.items()))
 
 
-# extra time after the job is expected to start when the job key should expire, 1 day in ms
-expires_extra_ms = 86_400_000
-
-
 if TYPE_CHECKING:
     BaseRedis = Redis[bytes]
 else:
@@ -89,6 +85,8 @@ class ArqRedis(BaseRedis):
     :param job_serializer: a function that serializes Python objects to bytes, defaults to pickle.dumps
     :param job_deserializer: a function that deserializes bytes into Python objects, defaults to pickle.loads
     :param default_queue_name: the default queue name to use, defaults to ``arq.queue``.
+    :param expires_extra_ms: the default length of time from when a job is expected to start
+     after which the job expires, defaults to 1 day in ms.
     :param kwargs: keyword arguments directly passed to ``redis.asyncio.Redis``.
     """
 
@@ -98,6 +96,7 @@ class ArqRedis(BaseRedis):
         job_serializer: Optional[Serializer] = None,
         job_deserializer: Optional[Deserializer] = None,
         default_queue_name: str = default_queue_name,
+        expires_extra_ms: int = expires_extra_ms,
         **kwargs: Any,
     ) -> None:
         self.job_serializer = job_serializer
@@ -105,6 +104,7 @@ class ArqRedis(BaseRedis):
         self.default_queue_name = default_queue_name
         if pool_or_conn:
             kwargs['connection_pool'] = pool_or_conn
+        self.expires_extra_ms = expires_extra_ms
         super().__init__(**kwargs)
 
     async def enqueue_job(
@@ -157,7 +157,7 @@ class ArqRedis(BaseRedis):
             else:
                 score = enqueue_time_ms
 
-            expires_ms = expires_ms or score - enqueue_time_ms + expires_extra_ms
+            expires_ms = expires_ms or score - enqueue_time_ms + self.expires_extra_ms
 
             job = serialize_job(function, args, kwargs, _job_try, enqueue_time_ms, serializer=self.job_serializer)
             pipe.multi()
@@ -210,6 +210,7 @@ async def create_pool(
     job_serializer: Optional[Serializer] = None,
     job_deserializer: Optional[Deserializer] = None,
     default_queue_name: str = default_queue_name,
+    expires_extra_ms: int = expires_extra_ms,
 ) -> ArqRedis:
     """
     Create a new redis pool, retrying up to ``conn_retries`` times if the connection fails.
@@ -257,6 +258,7 @@ async def create_pool(
             pool.job_serializer = job_serializer
             pool.job_deserializer = job_deserializer
             pool.default_queue_name = default_queue_name
+            pool.expires_extra_ms = expires_extra_ms
             await pool.ping()
 
         except (ConnectionError, OSError, RedisError, asyncio.TimeoutError) as e:
