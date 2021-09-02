@@ -519,10 +519,9 @@ class Worker:
             logger.info('%6.2fs → %s(%s)%s', (start_ms - enqueue_time_ms) / 1000, ref, s, extra)
             self.job_tasks[job_id] = task = self.loop.create_task(function.coroutine(ctx, *args, **kwargs))
 
-            cancel_handler = self.loop.call_at(self.loop.time() + timeout_s, task.cancel)
             # run repr(result) and extra inside try/except as they can raise exceptions
             try:
-                result = await task
+                result = await asyncio.wait_for(task, timeout_s)
             except (Exception, asyncio.CancelledError) as e:
                 exc_extra = getattr(e, 'extra', None)
                 if callable(exc_extra):
@@ -532,7 +531,6 @@ class Worker:
                 result_str = '' if result is None else truncate(repr(result))
             finally:
                 del self.job_tasks[job_id]
-                cancel_handler.cancel()
 
         except (Exception, asyncio.CancelledError) as e:
             finished_ms = timestamp_ms()

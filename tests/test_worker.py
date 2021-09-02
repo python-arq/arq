@@ -817,3 +817,21 @@ async def test_not_abort_job(arq_redis: ArqRedis, worker, caplog, loop):
     assert worker.aborting_tasks == set()
     assert worker.tasks == {}
     assert worker.job_tasks == {}
+
+
+async def test_job_timeout(arq_redis: ArqRedis, worker, caplog):
+    async def longfunc(ctx):
+        await asyncio.sleep(0.3)
+
+    caplog.set_level(logging.ERROR)
+    await arq_redis.enqueue_job('longfunc', _job_id='testing')
+    worker: Worker = worker(functions=[func(longfunc, name='longfunc')], job_timeout=0.2, poll_delay=0.1)
+    assert worker.jobs_complete == 0
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+    await worker.main()
+    assert worker.jobs_complete == 0
+    assert worker.jobs_failed == 1
+    assert worker.jobs_retried == 0
+    log = re.sub(r'\d+.\d\ds', 'X.XXs', '\n'.join(r.message for r in caplog.records))
+    assert 'X.XXs ! testing:longfunc failed, TimeoutError:' in log
