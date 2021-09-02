@@ -1,3 +1,3 @@
-__all__ = ('VERSION',)
+__all__ = ['VERSION']
 
-VERSION = '0.21'
+VERSION = 'dev'
