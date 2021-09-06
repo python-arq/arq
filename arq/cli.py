@@ -1,4 +1,5 @@
 import asyncio
+import importlib
 import logging.config
 import os
 import sys
@@ -19,6 +20,7 @@ burst_help = 'Batch mode: exit once no jobs are found in any queue.'
 health_check_help = 'Health Check: run a health check and exit.'
 watch_help = 'Watch a directory and reload the worker upon changes.'
 verbose_help = 'Enable verbose output.'
+logdict_help = "Import path for a dictionary in logdict form, to configure Arq's own logging."
 
 
 @click.command('arq')
@@ -28,7 +30,8 @@ verbose_help = 'Enable verbose output.'
 @click.option('--check', is_flag=True, help=health_check_help)
 @click.option('--watch', type=click.Path(exists=True, dir_okay=True, file_okay=False), help=watch_help)
 @click.option('-v', '--verbose', is_flag=True, help=verbose_help)
-def cli(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: bool) -> None:
+@click.option('--custom-log-dict', type=str, help=logdict_help)
+def cli(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: bool, custom_log_dict: str) -> None:
     """
     Job queues in python with asyncio and redis.
 
@@ -36,7 +39,15 @@ def cli(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: 
     """
     sys.path.append(os.getcwd())
     worker_settings_ = cast('WorkerSettingsType', import_string(worker_settings))
-    logging.config.dictConfig(default_log_config(verbose))
+    if custom_log_dict:
+        try:
+            config_path, config_dict = custom_log_dict.rsplit('.', maxsplit=1)
+            log_config = getattr(importlib.import_module(config_path), config_dict)
+        except (TypeError, AttributeError):
+            log_config = default_log_config(verbose)
+    else:
+        log_config = default_log_config(verbose)
+    logging.config.dictConfig(log_config)
 
     if check:
         exit(check_health(worker_settings_))
