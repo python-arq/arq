@@ -396,10 +396,10 @@ class Worker:
                     continue
 
                 pipe.multi()
-                pipe.setex(in_progress_key, self.in_progress_timeout_s, b'1')
+                pipe.psetex(in_progress_key, int(self.in_progress_timeout_s * 1000), b'1')
                 try:
                     await pipe.execute()
-                except (ResponseError, WatchError):
+                except (ResponseError, WatchError) as e:
                     # job already started elsewhere since we got 'existing'
                     self.sem.release()
                     logger.debug('multi-exec error, job %s already started elsewhere', job_id)
@@ -690,7 +690,7 @@ class Worker:
             f'{datetime.now():%b-%d %H:%M:%S} j_complete={self.jobs_complete} j_failed={self.jobs_failed} '
             f'j_retried={self.jobs_retried} j_ongoing={pending_tasks} queued={queued}'
         )
-        await self.pool.setex(self.health_check_key, self.health_check_interval + 1, info.encode())
+        await self.pool.psetex(self.health_check_key, int((self.health_check_interval + 1) * 1000), info.encode())
         log_suffix = info[info.index('j_complete=') :]
         if self._last_health_check_log and log_suffix != self._last_health_check_log:
             logger.info('recording health: %s', info)
