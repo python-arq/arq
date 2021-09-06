@@ -103,13 +103,13 @@ jobs:
           make install
           pip install -U wheel twine
 
+      - name: set version
+        run: VERSION_PATH='arq/version.py' python <(curl -Ls https://git.io/JT3rm)
+
       - name: build
         run: python setup.py sdist bdist_wheel
 
       - run: twine check dist/*
-
-      - name: check tag
-        run: PACKAGE=arq python <(curl -Ls https://git.io/JvQsH)
 
       - name: upload to pypi
         run: twine upload dist/*
