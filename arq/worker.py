@@ -690,7 +690,7 @@ class Worker:
             f'{datetime.now():%b-%d %H:%M:%S} j_complete={self.jobs_complete} j_failed={self.jobs_failed} '
             f'j_retried={self.jobs_retried} j_ongoing={pending_tasks} queued={queued}'
         )
-        await self.pool.psetex(self.health_check_key, int(self.health_check_interval * 1000) + 1, info.encode())
+        await self.pool.psetex(self.health_check_key, int((self.health_check_interval + 1) * 1000), info.encode())
         log_suffix = info[info.index('j_complete=') :]
         if self._last_health_check_log and log_suffix != self._last_health_check_log:
             logger.info('recording health: %s', info)
