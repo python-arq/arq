@@ -2,6 +2,7 @@ import asyncio
 import functools
 import logging
 import ssl
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
@@ -10,13 +11,14 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 import aioredis
-from aioredis import Redis, ConnectionPool
-from aioredis.sentinel import Sentinel
+from aioredis import ConnectionPool, Redis
 from aioredis.exceptions import ResponseError, WatchError
+from aioredis.sentinel import Sentinel
 from pydantic.validators import make_arbitrary_type_validator
 
 from .constants import default_queue_name, job_key_prefix, result_key_prefix
 from .jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
+from .parser import ContextAwareDefaultParser, ContextAwareEncoder, encoder_options_var  # type: ignore
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('arq.connections')
@@ -72,7 +74,7 @@ class RedisSettings:
 expires_extra_ms = 86_400_000
 
 
-class ArqRedis(Redis):  # type: ignore
+class ArqRedis(Redis):
     """
     Thin subclass of ``aioredis.Redis`` which adds :func:`arq.connections.enqueue_job`.
 
@@ -95,8 +97,16 @@ class ArqRedis(Redis):  # type: ignore
         self.job_deserializer = job_deserializer
         self.default_queue_name = default_queue_name
         if pool_or_conn:
-            kwargs["connection_pool"] = pool_or_conn
+            kwargs['connection_pool'] = pool_or_conn
         super().__init__(**kwargs)
+        self.connection_pool.connection_kwargs['parser_class'] = ContextAwareDefaultParser
+        self.connection_pool.connection_kwargs['encoder_class'] = ContextAwareEncoder
+
+    @contextmanager
+    def encoder_context(self, **options: Any) -> Generator['ArqRedis', None, None]:
+        token = encoder_options_var.set(options)
+        yield self
+        encoder_options_var.reset(token)
 
     async def enqueue_job(
         self,
@@ -167,9 +177,7 @@ class ArqRedis(Redis):  # type: ignore
                 return None
         return Job(job_id, redis=self, _queue_name=_queue_name, _deserializer=self.job_deserializer)
 
-    async def _get_job_result(self, key: Union[str, bytes]) -> JobResult:
-        if isinstance(key, bytes):
-            key = key.decode("utf-8")
+    async def _get_job_result(self, key: Union[str]) -> JobResult:
         job_id = key[len(result_key_prefix) :]
         job = Job(job_id, self, _deserializer=self.job_deserializer)
         r = await job.result_info()
@@ -182,13 +190,12 @@ class ArqRedis(Redis):  # type: ignore
         """
         Get results for all jobs in redis.
         """
-        keys = await self.keys(result_key_prefix + '*')
+        with self.encoder_context(decode_responses=True):
+            keys = await self.keys(result_key_prefix + '*')
         results = await asyncio.gather(*[self._get_job_result(k) for k in keys])
         return sorted(results, key=attrgetter('enqueue_time'))
 
-    async def _get_job_def(self, job_id: Union[str, bytes], score: int) -> JobDef:
-        if isinstance(job_id, bytes):
-            job_id = job_id.decode()
+    async def _get_job_def(self, job_id: str, score: int) -> JobDef:
         v = await self.get(job_key_prefix + job_id)
         jd = deserialize_job(v, deserializer=self.job_deserializer)
         jd.score = score
@@ -198,7 +205,8 @@ class ArqRedis(Redis):  # type: ignore
         """
         Get information about queued, mostly useful when testing.
         """
-        jobs = await self.zrange(queue_name, withscores=True, start=0, end=-1)
+        with self.encoder_context(decode_responses=True):
+            jobs = await self.zrange(queue_name, withscores=True, start=0, end=-1)
         return await asyncio.gather(*[self._get_job_def(job_id, int(score)) for job_id, score in jobs])
 
 
@@ -223,8 +231,9 @@ async def create_pool(
     ), "str provided for 'host' but 'sentinel' is true; list of sentinels expected"
 
     if settings.sentinel:
+
         def pool_factory(*args: Any, **kwargs: Any) -> ArqRedis:
-            client = Sentinel(*args, sentinels=settings.host, ssl=settings.ssl, **kwargs)
+            client = Sentinel(*args, sentinels=settings.host, ssl=settings.ssl, **kwargs)  # type: ignore
             return client.master_for(settings.sentinel_master, redis_class=ArqRedis)
 
     else:
@@ -233,7 +242,7 @@ async def create_pool(
             host=settings.host,
             port=settings.port,
             socket_connect_timeout=settings.conn_timeout,
-            ssl=settings.ssl
+            ssl=settings.ssl,
         )
 
     try:

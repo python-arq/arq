@@ -5,7 +5,7 @@ import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from aioredis import Redis
 
@@ -44,7 +44,7 @@ class JobDef:
     enqueue_time: datetime
     score: Optional[int]
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if isinstance(self.score, float):
             self.score = int(self.score)
 
@@ -58,10 +58,6 @@ class JobResult(JobDef):
     queue_name: str
     job_id: Optional[str] = None
 
-    def __post_init__(self):
-        if isinstance(self.job_id, bytes):
-            self.job_id = self.job_id.decode("utf-8")
-
 
 class Job:
     """
@@ -72,13 +68,11 @@ class Job:
 
     def __init__(
         self,
-        job_id: Union[bytes, str],
+        job_id: str,
         redis: Redis,
         _queue_name: str = default_queue_name,
         _deserializer: Optional[Deserializer] = None,
     ):
-        if isinstance(job_id, bytes):
-            job_id = job_id.decode("utf-8")
         self.job_id = job_id
         self._redis = redis
         self._queue_name = _queue_name

@@ -329,10 +329,11 @@ class Worker:
             count = min(burst_jobs_remaining, count)
 
         async with self.sem:  # don't bother with zrangebyscore until we have "space" to run the jobs
-            now = timestamp_ms()
-            job_ids = await self.pool.zrangebyscore(
-                self.queue_name, min=float('-inf'), start=self._queue_read_offset, num=count, max=now
-            )
+            with self.pool.encoder_context(decode_responses=True):
+                now = timestamp_ms()
+                job_ids = await self.pool.zrangebyscore(
+                    self.queue_name, min=float('-inf'), start=self._queue_read_offset, num=count, max=now
+                )
 
         await self.start_jobs(job_ids)
 
@@ -352,15 +353,14 @@ class Worker:
         Go through job_ids in the abort_jobs_ss sorted set and cancel those tasks.
         """
         async with self.pool as conn:
-            pipe = conn.pipeline()
-            pipe.zrange(abort_jobs_ss, start=0, end=-1)
-            pipe.zremrangebyscore(abort_jobs_ss, min=timestamp_ms() + abort_job_max_age, max=float("inf"))
-            abort_job_ids, _ = await pipe.execute()
+            with conn.encoder_context(decode_responses=True):
+                pipe = conn.pipeline()
+                pipe.zrange(abort_jobs_ss, start=0, end=-1)
+                pipe.zremrangebyscore(abort_jobs_ss, min=timestamp_ms() + abort_job_max_age, max=float('inf'))
+                abort_job_ids, _ = await pipe.execute()
 
         aborted: Set[str] = set()
         for job_id in abort_job_ids:
-            if isinstance(job_id, bytes):
-                job_id = job_id.decode("utf-8")
             try:
                 task = self.job_tasks[job_id]
             except KeyError:
@@ -373,14 +373,12 @@ class Worker:
             self.aborting_tasks.update(aborted)
             await self.pool.zrem(abort_jobs_ss, *aborted)
 
-    async def start_jobs(self, job_ids: List[Union[bytes, str]]) -> None:
+    async def start_jobs(self, job_ids: List[str]) -> None:
         """
         For each job id, get the job definition, check it's not running and start it in a task
         """
         for job_id in job_ids:
             await self.sem.acquire()
-            if isinstance(job_id, bytes):
-                job_id = job_id.decode("utf-8")
             in_progress_key = in_progress_key_prefix + job_id
             async with self.pool as conn:
                 pipe = conn.pipeline()
@@ -399,7 +397,7 @@ class Worker:
                 pipe.psetex(in_progress_key, int(self.in_progress_timeout_s * 1000), b'1')
                 try:
                     await pipe.execute()
-                except (ResponseError, WatchError) as e:
+                except (ResponseError, WatchError):
                     # job already started elsewhere since we got 'existing'
                     self.sem.release()
                     logger.debug('multi-exec error, job %s already started elsewhere', job_id)
@@ -685,7 +683,8 @@ class Worker:
             return
         self._last_health_check = now_ts
         pending_tasks = sum(not t.done() for t in self.tasks.values())
-        queued = await self.pool.zcard(self.queue_name)
+        with self.pool.encoder_context(decode_responses=True):
+            queued = await self.pool.zcard(self.queue_name)
         info = (
             f'{datetime.now():%b-%d %H:%M:%S} j_complete={self.jobs_complete} j_failed={self.jobs_failed} '
             f'j_retried={self.jobs_retried} j_ongoing={pending_tasks} queued={queued}'
@@ -732,7 +731,7 @@ class Worker:
         await self.pool.delete(self.health_check_key)
         if self.on_shutdown:
             await self.on_shutdown(self.ctx)
-        await self.pool.close()
+        await self.pool.close()  # type: ignore
         self._pool = None
 
     def __repr__(self) -> str:
@@ -773,7 +772,7 @@ async def async_check_health(
     else:
         logger.info('Health check successful: %s', data)
         r = 0
-    await redis.close()
+    await redis.close()  # type: ignore
     return r
 
 
