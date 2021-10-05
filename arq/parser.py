@@ -7,6 +7,7 @@ from typing import Any, Dict, Generator, Optional, Type, Union
 
 from aioredis.connection import (
     SERVER_CLOSED_CONNECTION_ERROR,
+    Connection,
     EncodableT,
     EncodedT,
     Encoder,
@@ -46,30 +47,49 @@ class ContextAwareEncoder(Encoder):
 
     def encode(self, value: EncodableT) -> EncodedT:
         with self._encoder_context():
-            return super(ContextAwareEncoder, self).encode(value)
+            return super().encode(value)
 
     def decode(self, value: EncodableT, force=False) -> EncodableT:
         with self._encoder_context():
-            return super(ContextAwareEncoder, self).decode(value, force)
+            return super().decode(value, force)
 
 
 class ContextAwareHiredisParser(HiredisParser):
+    """
+    HiredisParser has no properties, therefore we need to subclass
+    almost every method to store encoder from the connection
+    """
+
+    __slots__ = HiredisParser.__slots__ + ('_encoder',)
+
+    def __init__(self, socket_read_size: int):
+        super().__init__(socket_read_size=socket_read_size)
+        self._encoder: Optional[ContextAwareEncoder] = None
+
+    def on_connect(self, connection: 'Connection'):
+        super().on_connect(connection)
+        self._encoder = connection.encoder
+
+    def on_disconnect(self):
+        super().on_disconnect()
+        self._encoder = None
+
     @contextmanager
     def _encoder_context(self):
-        encoding = self._reader.encoding
-        encoding_errors = self._reader.errors
-        encoder_options = encoder_options_var.get()
-        if encoder_options:
-            decode_responses = encoder_options.get('decode_responses', encoding is not None)
-            self._reader.set_encoding(
-                encoding=encoder_options.get('encoding', encoding if decode_responses else None),
-                errors=encoder_options.get('encoding_errors', encoding_errors),
-            )
+        if self._encoder:
+            with self._encoder._encoder_context():
+                self._reader.set_encoding(
+                    encoding=self._encoder.encoding if self._encoder.decode_responses else None,
+                    errors=self._encoder.encoding_errors,
+                )
 
         yield
 
-        if encoder_options:
-            self._reader.set_encoding(encoding=encoding, errors=encoding_errors)
+        if self._encoder:
+            self._reader.set_encoding(
+                encoding=self._encoder.encoding if self._encoder.decode_responses else None,
+                errors=self._encoder.encoding_errors,
+            )
 
     async def read_response(self) -> EncodableT:
         if not self._stream or not self._reader:
