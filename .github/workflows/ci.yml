@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - '**'
+  pull_request: {}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: set up python
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.9
+
+    - run: pip install -r tests/requirements-linting.txt
+    - run: pip install .
+
+    - run: make lint
+
+    - run: make mypy
+
+  docs:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: set up python
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.9
+
+    - run: pip install -r docs/requirements.txt
+    - run: pip install .
+
+    - run: make docs
+
+  test:
+    name: test py${{ matrix.python-version }} on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu]
+        python-version: ['3.6', '3.7', '3.8', '3.9']
+
+    env:
+      PYTHON: ${{ matrix.python-version }}
+      OS: ${{ matrix.os }}
+
+    runs-on: ${{ format('{0}-latest', matrix.os) }}
+
+    services:
+      redis:
+        image: redis:5
+        ports:
+        - 6379:6379
+        options: --entrypoint redis-server
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: set up python
+      uses: actions/setup-python@v1
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - run: pip install -r tests/requirements-testing.txt
+    - run: pip install .[watch]
+
+    - run: make test
+
+    - run: coverage xml
+
+    - uses: codecov/codecov-action@v1.5.2
+      with:
+        file: ./coverage.xml
+        env_vars: PYTHON,OS
+
+  deploy:
+    name: Deploy
+    needs: [lint, docs, test]
+    if: "success() && startsWith(github.ref, 'refs/tags/')"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: set up python
+        uses: actions/setup-python@v1
+        with:
+          python-version: '3.8'
+
+      - name: install
+        run: |
+          make install
+          pip install -U wheel twine
+
+      - name: build
+        run: python setup.py sdist bdist_wheel
+
+      - run: twine check dist/*
+
+      - name: upload to pypi
+        run: twine upload dist/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.pypi_token }}
+
+      - name: publish docs
+        run: make publish-docs
+        env:
+          NETLIFY: ${{ secrets.netlify_token }}
