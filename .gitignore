@@ -1,4 +1,5 @@
 /env
+/env3*
 /.idea
 __pycache__/
 *.py[cod]
@@ -16,3 +17,5 @@ __pycache__/
 /demo/tmp/
 .vscode/
 .venv/
+/demo.py
+/scratch/
