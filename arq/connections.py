@@ -40,6 +40,7 @@ class RedisSettings:
 
     host: Union[str, List[Tuple[str, int]]] = 'localhost'
     port: int = 6379
+    socket_address: Optional[str] = None
     database: int = 0
     password: Optional[str] = None
     ssl: Union[bool, None, SSLContext] = None
@@ -224,7 +225,7 @@ async def create_pool(
         pool_factory = functools.partial(
             aioredis.create_pool, create_connection_timeout=settings.conn_timeout, ssl=settings.ssl
         )
-        addr = settings.host, settings.port
+        addr = (settings.host, settings.port) if settings.socket_address is None else settings.socket_address
 
     try:
         pool = await pool_factory(addr, db=settings.database, password=settings.password, encoding='utf8')

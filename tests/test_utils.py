@@ -14,8 +14,8 @@ def test_settings_changed():
     settings = RedisSettings(port=123)
     assert settings.port == 123
     assert (
-        "RedisSettings(host='localhost', port=123, database=0, password=None, ssl=None, conn_timeout=1, "
-        "conn_retries=5, conn_retry_delay=1, sentinel=False, sentinel_master='mymaster')"
+        "RedisSettings(host='localhost', port=123, socket_address=None, database=0, password=None, "
+        "ssl=None, conn_timeout=1, conn_retries=5, conn_retry_delay=1, sentinel=False, sentinel_master='mymaster')"
     ) == str(settings)
 
 
@@ -43,6 +43,20 @@ async def test_redis_sentinel_failure(create_pool):
 async def test_redis_success_log(caplog, create_pool):
     caplog.set_level(logging.INFO)
     settings = RedisSettings()
+    pool = await create_pool(settings)
+    assert 'redis connection successful' not in [r.message for r in caplog.records]
+    pool.close()
+    await pool.wait_closed()
+
+    pool = await create_pool(settings, retry=1)
+    assert 'redis connection successful' in [r.message for r in caplog.records]
+    pool.close()
+    await pool.wait_closed()
+
+
+async def test_redis_socket_connection(caplog, create_pool):
+    caplog.set_level(logging.INFO)
+    settings = RedisSettings(socket_address='/tmp/redis/redis.sock')
     pool = await create_pool(settings)
     assert 'redis connection successful' not in [r.message for r in caplog.records]
     pool.close()
