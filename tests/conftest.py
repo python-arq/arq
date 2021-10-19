@@ -1,9 +1,11 @@
 import asyncio
 import functools
+import os
 
 import msgpack
 import pytest
 from aioredis import create_redis_pool
+from redislite import Redis
 
 from arq.connections import ArqRedis, create_pool
 from arq.worker import Worker
@@ -34,6 +36,16 @@ async def arq_redis_msgpack(loop):
     yield redis_
     redis_.close()
     await redis_.wait_closed()
+
+
+@pytest.yield_fixture
+def socket_address():
+    redis_db_path = '/tmp/redis.db'
+    if os.path.exists(redis_db_path):
+        os.unlink(redis_db_path)
+    rdb = Redis(redis_db_path)
+    yield rdb.socket_file
+    rdb.close()
 
 
 @pytest.yield_fixture

@@ -13,35 +13,35 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
 
-    - name: set up python
-      uses: actions/setup-python@v1
-      with:
-        python-version: 3.9
+      - name: set up python
+        uses: actions/setup-python@v1
+        with:
+          python-version: 3.9
 
-    - run: pip install -r tests/requirements-linting.txt
-    - run: pip install .
+      - run: pip install -r tests/requirements-linting.txt
+      - run: pip install .
 
-    - run: make lint
+      - run: make lint
 
-    - run: make mypy
+      - run: make mypy
 
   docs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
 
-    - name: set up python
-      uses: actions/setup-python@v1
-      with:
-        python-version: 3.9
+      - name: set up python
+        uses: actions/setup-python@v1
+        with:
+          python-version: 3.9
 
-    - run: pip install -r docs/requirements.txt
-    - run: pip install .
+      - run: pip install -r docs/requirements.txt
+      - run: pip install .
 
-    - run: make docs
+      - run: make docs
 
   test:
     name: test py${{ matrix.python-version }} on ${{ matrix.os }}
@@ -56,27 +56,33 @@ jobs:
       OS: ${{ matrix.os }}
 
     runs-on: ${{ format('{0}-latest', matrix.os) }}
-    
+
+    services:
+      redis:
+        image: redis:5
+        ports:
+          - 6379:6379
+        options: --entrypoint redis-server
+
     steps:
-    - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
 
-    - name: set up python
-      uses: actions/setup-python@v1
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: set up python
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ matrix.python-version }}
 
-    - run: docker-compose up -d
-    - run: pip install -r tests/requirements-testing.txt
-    - run: pip install .[watch]
+      - run: pip install -r tests/requirements-testing.txt
+      - run: pip install .[watch]
 
-    - run: make test
+      - run: make test
 
-    - run: coverage xml
+      - run: coverage xml
 
-    - uses: codecov/codecov-action@v1.5.2
-      with:
-        file: ./coverage.xml
-        env_vars: PYTHON,OS
+      - uses: codecov/codecov-action@v1.5.2
+        with:
+          file: ./coverage.xml
+          env_vars: PYTHON,OS
 
   deploy:
     name: Deploy
@@ -96,7 +102,6 @@ jobs:
         run: |
           make install
           pip install -U wheel twine
-
       - name: set version
         run: VERSION_PATH='arq/version.py' python <(curl -Ls https://git.io/JT3rm)
 
