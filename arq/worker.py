@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import logging
 import signal
+import traceback
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import partial
@@ -125,6 +126,18 @@ class RetryJob(RuntimeError):
     pass
 
 
+class Traceback(RuntimeError):
+    def __init__(self, error: RuntimeError, traceback: str):
+        self.error = error
+        self.traceback = traceback
+
+    def __str__(self) -> str:
+        return self.traceback
+
+    def __repr__(self) -> str:
+        return str(self)
+
+
 class Worker:
     """
     Main class for running jobs.
@@ -145,6 +158,7 @@ class Worker:
     :param keep_result: default duration to keep job results for
     :param keep_result_forever: whether to keep results forever
     :param poll_delay: duration between polling the queue for new jobs
+    :param traceback: stores traceback.exc instead of Exception
     :param queue_read_limit: the maximum number of jobs to pull from the queue each time it's polled; by default it
                              equals ``max_jobs``
     :param max_tries: default maximum number of times to retry a job
@@ -175,6 +189,7 @@ class Worker:
         keep_result: 'SecondsTimedelta' = 3600,
         keep_result_forever: bool = False,
         poll_delay: 'SecondsTimedelta' = 0.5,
+        traceback: bool = False,
         queue_read_limit: Optional[int] = None,
         max_tries: int = 5,
         health_check_interval: 'SecondsTimedelta' = 3600,
@@ -207,6 +222,7 @@ class Worker:
         self.keep_result_s = to_seconds(keep_result)
         self.keep_result_forever = keep_result_forever
         self.poll_delay_s = to_seconds(poll_delay)
+        self.traceback = traceback
         self.queue_read_limit = queue_read_limit or max(max_jobs * 5, 100)
         self._queue_read_offset = 0
         self.max_tries = max_tries
@@ -554,7 +570,12 @@ class Worker:
                 logger.exception(
                     '%6.2fs ! %s failed, %s: %s', t, ref, e.__class__.__name__, e, extra={'extra': exc_extra}
                 )
-                result = e
+
+                if self.traceback:
+                    result = Traceback(e, traceback.format_exc())
+                else:
+                    result = e
+
                 finish = True
                 self.jobs_failed += 1
         else:

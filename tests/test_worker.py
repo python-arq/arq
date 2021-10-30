@@ -18,6 +18,7 @@ from arq.worker import (
     JobExecutionFailed,
     Retry,
     RetryJob,
+    Traceback,
     Worker,
     async_check_health,
     check_health,
@@ -502,6 +503,17 @@ async def test_error_success(arq_redis: ArqRedis, worker):
     assert (worker.jobs_complete, worker.jobs_failed, worker.jobs_retried) == (0, 1, 0)
     info = await j.result_info()
     assert info.success is False
+
+
+async def test_traceback(arq_redis: ArqRedis, worker):
+    j = await arq_redis.enqueue_job('fails')
+    worker: Worker = worker(functions=[func(fails, name='fails')], traceback=True)
+    await worker.main()
+    with pytest.raises(Traceback):
+        await j.result()
+    info = await j.result_info()
+    assert isinstance(info.result.error, TypeError)
+    assert 'arq/tests/test_worker.py' in info.result.traceback
 
 
 async def test_many_jobs_expire(arq_redis: ArqRedis, worker, caplog):
