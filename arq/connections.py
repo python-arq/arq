@@ -149,7 +149,6 @@ class ArqRedis(Redis):
             await pipe.watch(job_key)
             job_exists = await pipe.exists(job_key)
             job_result_exists = await pipe.exists(result_key_prefix + job_id)
-            # job_exists, job_result_exists = await pipe.execute()
             if job_exists or job_result_exists:
                 await pipe.reset()
                 return None
@@ -172,8 +171,6 @@ class ArqRedis(Redis):
                 await pipe.execute()
             except (ResponseError, WatchError):
                 # job got enqueued since we checked 'job_exists'
-                # https://github.com/samuelcolvin/arq/issues/131, avoid warnings in log
-                # await asyncio.gather(*tr._results, return_exceptions=True)
                 return None
         return Job(job_id, redis=self, _queue_name=_queue_name, _deserializer=self.job_deserializer)
 
