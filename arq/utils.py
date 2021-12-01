@@ -6,6 +6,7 @@ from pytz.exceptions import UnknownTimeZoneError
 from datetime import datetime, timedelta, timezone
 from time import time
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Optional, Sequence, overload
+from .constants import timezone_keys
 
 logger = logging.getLogger('arq.utils')
 
@@ -32,7 +33,12 @@ def ms_to_datetime(unix_ms: int) -> datetime:
     """
     convert milliseconds to datetime, use the timezone in os.environ
     """
-    tz = os.environ.get("timezone") or os.environ.get("TIMEZONE")
+    tz = None
+    for timezone_key in timezone_keys:
+        tz = os.environ.get(timezone_key)
+        if tz:
+            break
+
     if tz is not None and isinstance(tz, str):
         try:
             tz = pytz.timzone(tz)

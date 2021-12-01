@@ -1,4 +1,5 @@
 import asyncio
+import os
 import inspect
 import logging
 import signal
@@ -26,6 +27,7 @@ from .constants import (
     keep_cronjob_progress,
     result_key_prefix,
     retry_key_prefix,
+    arq_timezone
 )
 from .utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate
 
@@ -156,6 +158,7 @@ class Worker:
     :param max_burst_jobs: the maximum number of jobs to process in burst mode (disabled with negative values)
     :param job_serializer: a function that serializes Python objects to bytes, defaults to pickle.dumps
     :param job_deserializer: a function that deserializes bytes into Python objects, defaults to pickle.loads
+    :param timezone: the timezone by ms_to_datetime to show the enqueue_time in context
     """
 
     def __init__(
@@ -185,6 +188,7 @@ class Worker:
         max_burst_jobs: int = -1,
         job_serializer: Optional[Serializer] = None,
         job_deserializer: Optional[Deserializer] = None,
+        timezone: Optional[str] = None
     ):
         self.functions: Dict[str, Union[Function, CronJob]] = {f.name: f for f in map(func, functions)}
         if queue_name is None:
@@ -246,6 +250,9 @@ class Worker:
         self.max_burst_jobs = max_burst_jobs
         self.job_serializer = job_serializer
         self.job_deserializer = job_deserializer
+
+        if timezone is not None and isinstance(timezone, str):
+            os.environ[arq_timezone] = timezone
 
     def run(self) -> None:
         """
