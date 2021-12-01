@@ -58,6 +58,7 @@ setup(
         'aioredis>=1.1.0,<2.0.0',
         'click>=6.7',
         'pydantic>=1',
+        'pytz',
         'dataclasses>=0.6;python_version == "3.6"',
         'typing-extensions>=3.7;python_version < "3.8"'
     ],
