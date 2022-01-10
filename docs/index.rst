@@ -154,7 +154,7 @@ You can access job information, status and job results using the :class:`arq.job
 Retrying jobs and cancellation
 ..............................
 
-As described above, when an arq work shuts down any going jobs are cancelled immediately
+As described above, when an arq worker shuts down, any ongoing jobs are cancelled immediately
 (via vanilla ``task.cancel()``, so a ``CancelledError`` will be raised). You can see this by running a slow job
 (eg. add ``await asyncio.sleep(5)``) and hitting ``Ctrl+C`` once it's started.
 
