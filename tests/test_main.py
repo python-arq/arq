@@ -172,9 +172,10 @@ async def test_mung(arq_redis: ArqRedis, worker):
 
     tasks = []
     for i in range(50):
-        tasks.extend(
-            [arq_redis.enqueue_job('count', i, _job_id=f'v-{i}'), arq_redis.enqueue_job('count', i, _job_id=f'v-{i}')]
-        )
+        tasks += [
+            arq_redis.enqueue_job('count', i, _job_id=f'v-{i}'),
+            arq_redis.enqueue_job('count', i, _job_id=f'v-{i}'),
+        ]
     shuffle(tasks)
     await asyncio.gather(*tasks)
 

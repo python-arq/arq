@@ -26,20 +26,6 @@ async def test_redis_timeout(mocker, create_pool):
     assert arq.utils.asyncio.sleep.call_count == 5
 
 
-async def test_redis_sentinel_failure(create_pool):
-    """
-    FIXME: this is currently causing 3 "Task was destroyed but it is pending!" warnings
-    """
-    settings = RedisSettings()
-    settings.host = [('localhost', 6379), ('localhost', 6379)]
-    settings.sentinel = True
-    try:
-        pool = await create_pool(settings)
-        await pool.ping('ping')
-    except Exception as e:
-        assert 'unknown command `SENTINEL`' in str(e)
-
-
 async def test_redis_success_log(caplog, create_pool):
     caplog.set_level(logging.INFO)
     settings = RedisSettings()
