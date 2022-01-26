@@ -1,6 +1,7 @@
 [tool.pytest.ini_options]
 testpaths = 'tests'
 filterwarnings = ['error', 'ignore::DeprecationWarning:aioredis']
+asyncio_mode = 'auto'
 
 [tool.coverage.run]
 source = ['src']

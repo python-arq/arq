@@ -9,7 +9,13 @@ from arq.connections import ArqRedis, create_pool
 from arq.worker import Worker
 
 
-@pytest.yield_fixture
+@pytest.fixture(name='loop')
+def _fix_loop(event_loop):
+    asyncio.set_event_loop(event_loop)
+    return event_loop
+
+
+@pytest.fixture
 async def arq_redis(loop):
     redis_ = await create_redis_pool(
         ('localhost', 6379), encoding='utf8', loop=loop, commands_factory=ArqRedis, minsize=5
@@ -20,7 +26,7 @@ async def arq_redis(loop):
     await redis_.wait_closed()
 
 
-@pytest.yield_fixture
+@pytest.fixture
 async def arq_redis_msgpack(loop):
     redis_ = await create_redis_pool(
         ('localhost', 6379),
@@ -36,7 +42,7 @@ async def arq_redis_msgpack(loop):
     await redis_.wait_closed()
 
 
-@pytest.yield_fixture
+@pytest.fixture
 async def worker(arq_redis):
     worker_: Worker = None
 
