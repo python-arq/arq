@@ -620,7 +620,8 @@ class Worker:
                 tr.zrem(self.queue_name, job_id)
             elif incr_score:
                 tr.zincrby(self.queue_name, incr_score, job_id)
-            tr.delete(*delete_keys)
+            if delete_keys:
+                tr.delete(*delete_keys)
             await tr.execute()
 
     async def finish_failed_job(self, job_id: str, result_data: Optional[bytes]) -> None:
