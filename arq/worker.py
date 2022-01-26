@@ -138,6 +138,8 @@ class Worker:
     :param burst: whether to stop the worker once all jobs have been run
     :param on_startup: coroutine function to run at startup
     :param on_shutdown: coroutine function to run at shutdown
+    :param on_job_start: coroutine function to run on job start
+    :param on_job_end: coroutine function to run on job end
     :param handle_signals: default true, register signal handlers,
       set to false when running inside other async framework
     :param max_jobs: maximum number of jobs to run at a time
@@ -169,6 +171,8 @@ class Worker:
         burst: bool = False,
         on_startup: Optional['StartupShutdown'] = None,
         on_shutdown: Optional['StartupShutdown'] = None,
+        on_job_start: Optional['StartupShutdown'] = None,
+        on_job_end: Optional['StartupShutdown'] = None,
         handle_signals: bool = True,
         max_jobs: int = 10,
         job_timeout: 'SecondsTimedelta' = 300,
@@ -202,6 +206,8 @@ class Worker:
         self.burst = burst
         self.on_startup = on_startup
         self.on_shutdown = on_shutdown
+        self.on_job_start = on_job_start
+        self.on_job_end = on_job_end
         self.sem = asyncio.BoundedSemaphore(max_jobs)
         self.job_timeout_s = to_seconds(job_timeout)
         self.keep_result_s = to_seconds(keep_result)
@@ -509,6 +515,10 @@ class Worker:
             'score': score,
         }
         ctx = {**self.ctx, **job_ctx}
+
+        if self.on_job_start:
+            await self.on_job_start(ctx)
+
         start_ms = timestamp_ms()
         success = False
         try:
@@ -584,6 +594,9 @@ class Worker:
                 self.queue_name,
                 serializer=self.job_serializer,
             )
+
+        if self.on_job_end:
+            await self.on_job_end(ctx)
 
         await asyncio.shield(
             self.finish_job(

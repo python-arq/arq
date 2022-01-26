@@ -835,3 +835,32 @@ async def test_job_timeout(arq_redis: ArqRedis, worker, caplog):
     assert worker.jobs_retried == 0
     log = re.sub(r'\d+.\d\ds', 'X.XXs', '\n'.join(r.message for r in caplog.records))
     assert 'X.XXs ! testing:longfunc failed, TimeoutError:' in log
+
+
+async def test_on_job(arq_redis: ArqRedis, worker):
+    result = {'called': 0}
+
+    async def on_start(ctx):
+        assert ctx['job_id'] == 'testing'
+        result['called'] += 1
+
+    async def on_end(ctx):
+        assert ctx['job_id'] == 'testing'
+        result['called'] += 1
+
+    async def test(ctx):
+        return
+
+    await arq_redis.enqueue_job('func', _job_id='testing')
+    worker: Worker = worker(
+        functions=[func(test, name='func')], on_job_start=on_start, on_job_end=on_end, job_timeout=0.2, poll_delay=0.1,
+    )
+    assert worker.jobs_complete == 0
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+    assert result['called'] == 0
+    await worker.main()
+    assert worker.jobs_complete == 1
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+    assert result['called'] == 2
