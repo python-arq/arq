@@ -15,7 +15,7 @@ format:
 
 .PHONY: lint
 lint:
-	flake8 arq/ tests/
+	flake8 --max-complexity 10 --max-line-length 120 --ignore E203,W503 arq/ tests/
 	$(isort) --check-only --df
 	$(black) --check
 
