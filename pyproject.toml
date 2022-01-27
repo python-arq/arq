@@ -2,6 +2,7 @@
 testpaths = 'tests'
 filterwarnings = ['error', 'ignore::DeprecationWarning:aioredis']
 asyncio_mode = 'auto'
+timeout = 10
 
 [tool.coverage.run]
 source = ['src']
