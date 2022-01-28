@@ -1,10 +1,10 @@
 coverage==6.3
-dirty-equals==0.0.1
+dirty-equals==0.0.2
 msgpack==1.0.3
 pytest==6.2.5
 pytest-asyncio==0.17.2
 pytest-cov==3.0.0
-pytest-mock==3.6.1
+pytest-mock==3.7.0
 pytest-sugar==0.9.4
 pytest-timeout==2.1.0
 twine==3.7.1
