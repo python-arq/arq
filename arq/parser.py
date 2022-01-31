@@ -19,7 +19,7 @@ try:
     import hiredis  # noqa: F401
 
     HIREDIS_AVAILABLE = True
-except (ImportError, ModuleNotFoundError):
+except ImportError:
     HIREDIS_AVAILABLE = False
 
 
@@ -27,8 +27,17 @@ encoder_options_var: ContextVar[Optional[Dict[str, Any]]] = ContextVar('encoder_
 
 
 class ContextAwareEncoder(Encoder):
+    """
+    Encoder subclass, that is aware of encoder_options_var and can encode/decode on per-request basis
+    """
+
     @contextmanager
     def _encoder_context(self) -> Generator[None, None, None]:
+        """
+        Reads `encoder_options_var` context variable and changes encoding parameters according to it.
+
+        This way we can encode/decode values on per-request basis, which is not support in aioredis v2 currently
+        """
         encoding = self.encoding
         encoding_errors = self.encoding_errors
         decode_responses = self.decode_responses
@@ -46,18 +55,28 @@ class ContextAwareEncoder(Encoder):
             self.decode_responses = decode_responses
 
     def encode(self, value: EncodableT) -> EncodedT:
+        """
+        Calls encode with `_encoder_context`
+        """
         with self._encoder_context():
             return super().encode(value)
 
     def decode(self, value: EncodableT, force=False) -> EncodableT:
+        """
+        Calls decode with `_encoder_context`
+        """
         with self._encoder_context():
             return super().decode(value, force)
 
 
 class ContextAwareHiredisParser(HiredisParser):
     """
-    HiredisParser has no properties, therefore we need to subclass
-    almost every method to store encoder from the connection
+    HiredisParser works differently from PythonParser, because it uses C hiredis Reader to read responses.
+
+    HiredisParser does not store encoder (PythonParser does),
+    so we need to subclass almost every method of the parent class to support `_encoder` property
+
+    This way we can use ContextAwareEncoder and update encoding parameters on per-request basis
     """
 
     __slots__ = HiredisParser.__slots__ + ('_encoder',)
@@ -76,6 +95,10 @@ class ContextAwareHiredisParser(HiredisParser):
 
     @contextmanager
     def _encoder_context(self):
+        """
+        `set_encoding` allows us to update hiredis encoding parameters on runtime,
+        was added by https://github.com/redis/hiredis-py/pull/96
+        """
         if self._encoder:
             with self._encoder._encoder_context():
                 self._reader.set_encoding(
@@ -92,6 +115,9 @@ class ContextAwareHiredisParser(HiredisParser):
             )
 
     async def read_response(self) -> EncodableT:
+        """
+        Basically we port the same method from parent class, but with `_encoder_context` support
+        """
         if not self._stream or not self._reader:
             self.on_disconnect()
             raise ConnectionError(SERVER_CLOSED_CONNECTION_ERROR) from None

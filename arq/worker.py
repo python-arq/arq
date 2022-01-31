@@ -408,16 +408,18 @@ class Worker:
 
     async def run_job(self, job_id: str, score: int) -> None:  # noqa: C901
         start_ms = timestamp_ms()
-        coros = (
-            self.pool.get(job_key_prefix + job_id),
-            self.pool.incr(retry_key_prefix + job_id),
-            self.pool.expire(retry_key_prefix + job_id, 88400),
-        )
-        if self.allow_abort_jobs:
-            abort_job, v, job_try, _ = await asyncio.gather(self.pool.zrem(abort_jobs_ss, job_id), *coros)
-        else:
-            v, job_try, _ = await asyncio.gather(*coros)
-            abort_job = False
+        async with self.pool as conn:
+            pipe = conn.pipeline()
+            pipe.multi()
+            pipe.get(job_key_prefix + job_id)
+            pipe.incr(retry_key_prefix + job_id)
+            pipe.expire(retry_key_prefix + job_id, 88400)
+            if self.allow_abort_jobs:
+                pipe.zrem(abort_jobs_ss, job_id)
+                v, job_try, _, abort_job = await pipe.execute()
+            else:
+                v, job_try, _ = await pipe.execute()
+                abort_job = False
 
         function_name, enqueue_time_ms = '<unknown>', 0
         args: Tuple[Any, ...] = ()
@@ -609,12 +611,12 @@ class Worker:
             if keep_in_progress is None:
                 delete_keys += [in_progress_key]
             else:
-                tr.expire(in_progress_key, keep_in_progress)
+                tr.pexpire(in_progress_key, to_ms(keep_in_progress))
 
             if finish:
                 if result_data:
                     expire = None if keep_result_forever else result_timeout_s
-                    tr.set(result_key_prefix + job_id, result_data, ex=expire)
+                    tr.set(result_key_prefix + job_id, result_data, px=to_ms(expire))
                 delete_keys += [retry_key_prefix + job_id, job_key_prefix + job_id]
                 tr.zrem(abort_jobs_ss, job_id)
                 tr.zrem(self.queue_name, job_id)
@@ -636,7 +638,7 @@ class Worker:
             keep_result = self.keep_result_forever or self.keep_result_s > 0
             if result_data is not None and keep_result:  # pragma: no branch
                 expire = 0 if self.keep_result_forever else self.keep_result_s
-                tr.set(result_key_prefix + job_id, result_data, ex=expire)
+                tr.set(result_key_prefix + job_id, result_data, px=to_ms(expire))
             await tr.execute()
 
     async def heart_beat(self) -> None:

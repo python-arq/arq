@@ -12,7 +12,7 @@ from uuid import uuid4
 
 import aioredis
 from aioredis import ConnectionPool, Redis
-from aioredis.exceptions import ResponseError, WatchError
+from aioredis.exceptions import WatchError
 from aioredis.sentinel import Sentinel
 from pydantic.validators import make_arbitrary_type_validator
 
@@ -145,11 +145,8 @@ class ArqRedis(Redis):
 
         async with self as conn:
             pipe = conn.pipeline()
-            await pipe.unwatch()
             await pipe.watch(job_key)
-            job_exists = await pipe.exists(job_key)
-            job_result_exists = await pipe.exists(result_key_prefix + job_id)
-            if job_exists or job_result_exists:
+            if any(await asyncio.gather(pipe.exists(job_key), pipe.exists(result_key_prefix + job_id))):
                 await pipe.reset()
                 return None
 
@@ -169,7 +166,7 @@ class ArqRedis(Redis):
             pipe.zadd(_queue_name, {job_id: score})
             try:
                 await pipe.execute()
-            except (ResponseError, WatchError):
+            except WatchError:
                 # job got enqueued since we checked 'job_exists'
                 return None
         return Job(job_id, redis=self, _queue_name=_queue_name, _deserializer=self.job_deserializer)
@@ -218,8 +215,7 @@ async def create_pool(
     """
     Create a new redis pool, retrying up to ``conn_retries`` times if the connection fails.
 
-    Similar to ``aioredis.create_redis_pool`` except it returns a :class:`arq.connections.ArqRedis` instance,
-    thus allowing job enqueuing.
+    Returns a :class:`arq.connections.ArqRedis` instance, thus allowing job enqueuing.
     """
     settings: RedisSettings = RedisSettings() if settings_ is None else settings_
 

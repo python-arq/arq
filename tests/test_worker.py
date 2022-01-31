@@ -487,6 +487,16 @@ async def test_run_check_error2(arq_redis: ArqRedis, worker):
     assert len(exc_info.value.job_results) == 2
 
 
+async def test_keep_result_ms(arq_redis: ArqRedis, worker):
+    async def return_something(ctx):
+        return 1
+
+    await arq_redis.enqueue_job('return_something')
+    worker: Worker = worker(functions=[func(return_something, name='return_something')], keep_result=3600.15)
+    await worker.main()
+    assert (worker.jobs_complete, worker.jobs_failed, worker.jobs_retried) == (1, 0, 0)
+
+
 async def test_return_exception(arq_redis: ArqRedis, worker):
     async def return_error(ctx):
         return TypeError('xxx')
