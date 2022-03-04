@@ -22,16 +22,16 @@ def test_help():
     assert result.output.startswith('Usage: arq [OPTIONS] WORKER_SETTINGS\n')
 
 
-def test_run(event_loop):
+def test_run(loop):
     runner = CliRunner()
     result = runner.invoke(cli, ['tests.test_cli.WorkerSettings'])
     assert result.exit_code == 0
     assert 'Starting worker for 1 functions: foobar' in result.output
-    tasks = asyncio.all_tasks(event_loop)
+    tasks = asyncio.all_tasks(loop)
     assert not tasks
 
 
-def test_check(event_loop):
+def test_check(loop):
     runner = CliRunner()
     result = runner.invoke(cli, ['tests.test_cli.WorkerSettings', '--check'])
     assert result.exit_code == 1
@@ -43,7 +43,7 @@ async def mock_awatch():
 
 
 @pytest.mark.filterwarnings('ignore::DeprecationWarning')
-def test_run_watch(mocker, event_loop):
+def test_run_watch(mocker, loop):
     mocker.patch('watchgod.awatch', return_value=mock_awatch())
     runner = CliRunner()
     result = runner.invoke(cli, ['tests.test_cli.WorkerSettings', '--watch', 'tests'])

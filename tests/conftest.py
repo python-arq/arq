@@ -74,3 +74,19 @@ async def fix_create_pool(loop):
         p.close()
 
     await asyncio.gather(*[p.wait_closed() for p in pools])
+
+
+@pytest.fixture(name='cancel_remaining_task')
+def fix_cancel_remaining_task(loop):
+    async def cancel_remaining_task():
+        tasks = asyncio.all_tasks(loop)
+        cancelled = []
+        for task in tasks:
+            if task.get_coro().__name__ != 'cancel_remaining_task':
+                cancelled.append(task)
+                task.cancel()
+        await asyncio.gather(*cancelled, return_exceptions=True)
+
+    yield
+
+    loop.run_until_complete(cancel_remaining_task())

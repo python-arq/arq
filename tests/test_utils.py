@@ -1,9 +1,11 @@
+import asyncio
 import logging
 import re
 from datetime import timedelta
 
 import pytest
 from pydantic import BaseModel, validator
+from aioredis.errors import MasterReplyError
 
 import arq.typing
 import arq.utils
@@ -24,6 +26,15 @@ async def test_redis_timeout(mocker, create_pool):
     with pytest.raises(OSError):
         await create_pool(RedisSettings(port=0, conn_retry_delay=0))
     assert arq.utils.asyncio.sleep.call_count == 5
+
+
+async def test_redis_sentinel_failure(create_pool, cancel_remaining_task):
+    settings = RedisSettings()
+    settings.host = [('localhost', 6379), ('localhost', 6379)]
+    settings.sentinel = True
+    with pytest.raises(MasterReplyError, match='unknown command `SENTINEL`'):
+        pool = await create_pool(settings)
+        await pool.ping('ping')
 
 
 async def test_redis_success_log(caplog, create_pool):
