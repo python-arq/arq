@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 from datetime import datetime, timedelta
@@ -5,6 +6,7 @@ from random import random
 
 import pytest
 
+import arq
 from arq import Worker
 from arq.constants import in_progress_key_prefix
 from arq.cron import cron, next_cron
@@ -142,3 +144,20 @@ async def test_repr():
 async def test_str_function():
     cj = cron('asyncio.sleep', hour=1, run_at_startup=True)
     assert str(cj).startswith('<CronJob name=cron:asyncio.sleep coroutine=<function sleep at')
+
+
+async def test_cron_cancelled(worker, mocker):
+    mocker.patch.object(arq.worker, 'keep_cronjob_progress', 0.1)
+
+    async def try_sleep(ctx):
+        if ctx['job_try'] == 1:
+            raise asyncio.CancelledError
+
+    worker: Worker = worker(
+        cron_jobs=[cron(try_sleep, microsecond=20, run_at_startup=True, max_tries=2)],
+        poll_delay=0.01,
+    )
+    await worker.main()
+    assert worker.jobs_complete == 1
+    assert worker.jobs_retried == 1
+    assert worker.jobs_failed == 0

@@ -277,7 +277,10 @@ async def create_pool(
 async def log_redis_info(redis: Redis, log_func: Callable[[str], Any]) -> None:
     async with redis as r:
         info_server, info_memory, info_clients, key_count = await asyncio.gather(
-            r.info(section='Server'), r.info(section='Memory'), r.info(section='Clients'), r.dbsize(),
+            r.info(section='Server'),
+            r.info(section='Memory'),
+            r.info(section='Clients'),
+            r.dbsize(),
         )
 
     redis_version = info_server.get('redis_version', '?')

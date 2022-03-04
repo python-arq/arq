@@ -8,7 +8,13 @@ from arq.connections import ArqRedis, create_pool
 from arq.worker import Worker
 
 
-@pytest.yield_fixture
+@pytest.fixture(name='loop')
+def _fix_loop(event_loop):
+    asyncio.set_event_loop(event_loop)
+    return event_loop
+
+
+@pytest.fixture
 async def arq_redis(loop):
     redis_ = ArqRedis(host='localhost', port=6379, encoding='utf-8',)
     await redis_.flushall()
@@ -16,7 +22,7 @@ async def arq_redis(loop):
     await redis_.close()
 
 
-@pytest.yield_fixture
+@pytest.fixture
 async def arq_redis_msgpack(loop):
     redis_ = ArqRedis(
         host='localhost',
@@ -30,7 +36,7 @@ async def arq_redis_msgpack(loop):
     await redis_.close()
 
 
-@pytest.yield_fixture
+@pytest.fixture
 async def worker(arq_redis):
     worker_: Worker = None
 
@@ -59,3 +65,20 @@ async def fix_create_pool(loop):
     yield create_pool_
 
     await asyncio.gather(*[p.close() for p in pools])
+
+
+@pytest.fixture(name='cancel_remaining_task')
+def fix_cancel_remaining_task(loop):
+    async def cancel_remaining_task():
+        tasks = asyncio.all_tasks(loop)
+        cancelled = []
+        for task in tasks:
+            # in repr works in 3.7 where get_coro() is not available
+            if 'cancel_remaining_task()' not in repr(task):
+                cancelled.append(task)
+                task.cancel()
+        await asyncio.gather(*cancelled, return_exceptions=True)
+
+    yield
+
+    loop.run_until_complete(cancel_remaining_task())
