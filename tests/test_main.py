@@ -130,7 +130,7 @@ async def test_job_info(arq_redis: ArqRedis):
     t_before = time()
     j = await arq_redis.enqueue_job('foobar', 123, a=456)
     info = await j.info()
-    assert info.enqueue_time == IsNow
+    assert info.enqueue_time == IsNow(tz='utc')
     assert info.job_try is None
     assert info.function == 'foobar'
     assert info.args == (123,)
@@ -250,24 +250,24 @@ async def test_get_jobs(arq_redis: ArqRedis):
             'args': (),
             'kwargs': {'a': 1, 'b': 2, 'c': 3},
             'job_try': None,
-            'enqueue_time': IsNow,
-            'score': IsInt,
+            'enqueue_time': IsNow(tz='utc'),
+            'score': IsInt(),
         },
         {
             'function': 'second',
             'args': (4,),
             'kwargs': {'b': 5, 'c': 6},
             'job_try': None,
-            'enqueue_time': IsNow,
-            'score': IsInt,
+            'enqueue_time': IsNow(tz='utc'),
+            'score': IsInt(),
         },
         {
             'function': 'third',
             'args': (7,),
             'kwargs': {'b': 8},
             'job_try': None,
-            'enqueue_time': IsNow,
-            'score': IsInt,
+            'enqueue_time': IsNow(tz='utc'),
+            'score': IsInt(),
         },
     ]
     assert jobs[0].score < jobs[1].score < jobs[2].score

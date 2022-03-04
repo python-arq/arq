@@ -1,5 +1,5 @@
 coverage==6.3
-dirty-equals==0.0.2
+dirty-equals==0.1
 msgpack==1.0.3
 pytest==6.2.5
 pytest-asyncio==0.17.2
