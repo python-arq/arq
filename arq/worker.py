@@ -600,7 +600,13 @@ class Worker:
 
         await asyncio.shield(
             self.finish_job(
-                job_id, finish, result_data, result_timeout_s, keep_result_forever, incr_score, keep_in_progress,
+                job_id,
+                finish,
+                result_data,
+                result_timeout_s,
+                keep_result_forever,
+                incr_score,
+                keep_in_progress,
             )
         )
 
@@ -642,7 +648,9 @@ class Worker:
             await conn.unwatch()
             tr = conn.multi_exec()
             tr.delete(
-                retry_key_prefix + job_id, in_progress_key_prefix + job_id, job_key_prefix + job_id,
+                retry_key_prefix + job_id,
+                in_progress_key_prefix + job_id,
+                job_key_prefix + job_id,
             )
             tr.zrem(abort_jobs_ss, job_id)
             tr.zrem(self.queue_name, job_id)
@@ -798,5 +806,4 @@ def check_health(settings_cls: 'WorkerSettingsType') -> int:
     redis_settings = cast(Optional[RedisSettings], cls_kwargs.get('redis_settings'))
     health_check_key = cast(Optional[str], cls_kwargs.get('health_check_key'))
     queue_name = cast(Optional[str], cls_kwargs.get('queue_name'))
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(async_check_health(redis_settings, health_check_key, queue_name))
+    return asyncio.run(async_check_health(redis_settings, health_check_key, queue_name))
