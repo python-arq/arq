@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from click.testing import CliRunner
 
@@ -20,16 +22,16 @@ def test_help():
     assert result.output.startswith('Usage: arq [OPTIONS] WORKER_SETTINGS\n')
 
 
-@pytest.mark.skip(reason='this is breaking the event loop for other tests')
-def test_run():
+def test_run(event_loop):
     runner = CliRunner()
     result = runner.invoke(cli, ['tests.test_cli.WorkerSettings'])
     assert result.exit_code == 0
     assert 'Starting worker for 1 functions: foobar' in result.output
+    tasks = asyncio.all_tasks(event_loop)
+    assert not tasks
 
 
-@pytest.mark.skip(reason='this is breaking the event loop for other tests')
-def test_check():
+def test_check(event_loop):
     runner = CliRunner()
     result = runner.invoke(cli, ['tests.test_cli.WorkerSettings', '--check'])
     assert result.exit_code == 1
@@ -40,8 +42,8 @@ async def mock_awatch():
     yield [1]
 
 
-@pytest.mark.skip(reason='this is breaking the event loop for other tests')
-def test_run_watch(mocker):
+@pytest.mark.filterwarnings('ignore::DeprecationWarning')
+def test_run_watch(mocker, event_loop):
     mocker.patch('watchgod.awatch', return_value=mock_awatch())
     runner = CliRunner()
     result = runner.invoke(cli, ['tests.test_cli.WorkerSettings', '--watch', 'tests'])

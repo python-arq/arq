@@ -806,5 +806,4 @@ def check_health(settings_cls: 'WorkerSettingsType') -> int:
     redis_settings = cast(Optional[RedisSettings], cls_kwargs.get('redis_settings'))
     health_check_key = cast(Optional[str], cls_kwargs.get('health_check_key'))
     queue_name = cast(Optional[str], cls_kwargs.get('queue_name'))
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(async_check_health(redis_settings, health_check_key, queue_name))
+    return asyncio.run(async_check_health(redis_settings, health_check_key, queue_name))
