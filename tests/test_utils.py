@@ -1,11 +1,10 @@
-import asyncio
 import logging
 import re
 from datetime import timedelta
 
 import pytest
-from pydantic import BaseModel, validator
 from aioredis.errors import MasterReplyError
+from pydantic import BaseModel, validator
 
 import arq.typing
 import arq.utils

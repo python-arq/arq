@@ -82,7 +82,8 @@ def fix_cancel_remaining_task(loop):
         tasks = asyncio.all_tasks(loop)
         cancelled = []
         for task in tasks:
-            if task.get_coro().__name__ != 'cancel_remaining_task':
+            # in repr works in 3.7 where get_coro() is not available
+            if 'cancel_remaining_task()' not in repr(task):
                 cancelled.append(task)
                 task.cancel()
         await asyncio.gather(*cancelled, return_exceptions=True)
