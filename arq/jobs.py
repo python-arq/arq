@@ -183,7 +183,7 @@ def serialize_job(
     enqueue_time_ms: int,
     *,
     serializer: Optional[Serializer] = None,
-) -> Optional[bytes]:
+) -> bytes:
     data = {'t': job_try, 'f': function_name, 'a': args, 'k': kwargs, 'et': enqueue_time_ms}
     if serializer is None:
         serializer = pickle.dumps

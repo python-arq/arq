@@ -388,18 +388,18 @@ class Worker:
             in_progress_key = in_progress_key_prefix + job_id
             async with self.pool as conn:
                 pipe = conn.pipeline()
-                await pipe.unwatch()
+                await pipe.unwatch()  # type: ignore[no-untyped-call]
                 await pipe.watch(in_progress_key)
                 ongoing_exists = await pipe.exists(in_progress_key)
                 score = await pipe.zscore(self.queue_name, job_id)
                 if ongoing_exists or not score:
                     # job already started elsewhere, or already finished and removed from queue
-                    await pipe.reset()
+                    await pipe.reset()  # type: ignore[no-untyped-call]
                     self.sem.release()
                     logger.debug('job %s already running elsewhere', job_id)
                     continue
 
-                pipe.multi()
+                pipe.multi()  # type: ignore[no-untyped-call]
                 pipe.psetex(in_progress_key, int(self.in_progress_timeout_s * 1000), b'1')
                 try:
                     await pipe.execute()
@@ -416,7 +416,7 @@ class Worker:
         start_ms = timestamp_ms()
         async with self.pool as conn:
             pipe = conn.pipeline()
-            pipe.multi()
+            pipe.multi()  # type: ignore[no-untyped-call]
             pipe.get(job_key_prefix + job_id)
             pipe.incr(retry_key_prefix + job_id)
             pipe.expire(retry_key_prefix + job_id, 88400)
@@ -624,7 +624,7 @@ class Worker:
     ) -> None:
         async with self.pool as conn:
             tr = conn.pipeline()
-            tr.multi()
+            tr.multi()  # type: ignore[no-untyped-call]
             delete_keys = []
             in_progress_key = in_progress_key_prefix + job_id
             if keep_in_progress is None:
@@ -648,7 +648,7 @@ class Worker:
     async def finish_failed_job(self, job_id: str, result_data: Optional[bytes]) -> None:
         async with self.pool as conn:
             tr = conn.pipeline()
-            tr.multi()
+            tr.multi()  # type: ignore[no-untyped-call]
             tr.delete(
                 retry_key_prefix + job_id,
                 in_progress_key_prefix + job_id,

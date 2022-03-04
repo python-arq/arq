@@ -147,7 +147,7 @@ class ArqRedis(Redis):
             pipe = conn.pipeline()
             await pipe.watch(job_key)
             if any(await asyncio.gather(pipe.exists(job_key), pipe.exists(result_key_prefix + job_id))):
-                await pipe.reset()
+                await pipe.reset()  # type: ignore[no-untyped-call]
                 return None
 
             enqueue_time_ms = timestamp_ms()
@@ -161,7 +161,7 @@ class ArqRedis(Redis):
             expires_ms = expires_ms or score - enqueue_time_ms + expires_extra_ms
 
             job = serialize_job(function, args, kwargs, _job_try, enqueue_time_ms, serializer=self.job_serializer)
-            pipe.multi()
+            pipe.multi()  # type: ignore[no-untyped-call]
             pipe.psetex(job_key, expires_ms, job)
             pipe.zadd(_queue_name, {job_id: score})
             try:

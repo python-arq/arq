@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import sys
 
 import msgpack
 import pytest
@@ -16,7 +17,11 @@ def _fix_loop(event_loop):
 
 @pytest.fixture
 async def arq_redis(loop):
-    redis_ = ArqRedis(host='localhost', port=6379, encoding='utf-8',)
+    redis_ = ArqRedis(
+        host='localhost',
+        port=6379,
+        encoding='utf-8',
+    )
     await redis_.flushall()
     yield redis_
     await redis_.close()
@@ -77,7 +82,9 @@ def fix_cancel_remaining_task(loop):
             if 'cancel_remaining_task()' not in repr(task):
                 cancelled.append(task)
                 task.cancel()
-        await asyncio.gather(*cancelled, return_exceptions=True)
+        if cancelled:
+            print(f'Cancelled {len(cancelled)} ongoing tasks', file=sys.stderr)
+            await asyncio.gather(*cancelled, return_exceptions=True)
 
     yield
 

@@ -3,7 +3,7 @@ import re
 from datetime import timedelta
 
 import pytest
-from aioredis.errors import MasterReplyError
+from aioredis.exceptions import ResponseError
 from pydantic import BaseModel, validator
 
 import arq.typing
@@ -31,9 +31,8 @@ async def test_redis_sentinel_failure(create_pool, cancel_remaining_task):
     settings = RedisSettings()
     settings.host = [('localhost', 6379), ('localhost', 6379)]
     settings.sentinel = True
-    with pytest.raises(MasterReplyError, match='unknown command `SENTINEL`'):
-        pool = await create_pool(settings)
-        await pool.ping('ping')
+    with pytest.raises(ResponseError, match='unknown command `SENTINEL`'):
+        await create_pool(settings)
 
 
 async def test_redis_success_log(caplog, create_pool):

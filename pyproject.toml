@@ -34,6 +34,7 @@ combine_as_imports = true
 color_output = true
 
 [tool.mypy]
+show_error_codes = true
 follow_imports = 'silent'
 strict_optional = true
 warn_redundant_casts = true
