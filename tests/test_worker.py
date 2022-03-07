@@ -853,11 +853,7 @@ async def test_on_job(arq_redis: ArqRedis, worker):
 
     await arq_redis.enqueue_job('func', _job_id='testing')
     worker: Worker = worker(
-        functions=[func(test, name='func')],
-        on_job_start=on_start,
-        on_job_end=on_end,
-        job_timeout=0.2,
-        poll_delay=0.1,
+        functions=[func(test, name='func')], on_job_start=on_start, on_job_end=on_end, job_timeout=0.2, poll_delay=0.1,
     )
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 0

@@ -13,8 +13,4 @@ keep_cronjob_progress = 60
 
 arq_timezone = 'ARQ_TIMEZONE'
 
-timezone_keys = [
-    arq_timezone,
-    'timezone',
-    'TIMEZONE'
-]
+timezone_keys = [arq_timezone, 'timezone', 'TIMEZONE']

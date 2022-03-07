@@ -154,8 +154,7 @@ async def test_cron_cancelled(worker, mocker):
             raise asyncio.CancelledError
 
     worker: Worker = worker(
-        cron_jobs=[cron(try_sleep, microsecond=20, run_at_startup=True, max_tries=2)],
-        poll_delay=0.01,
+        cron_jobs=[cron(try_sleep, microsecond=20, run_at_startup=True, max_tries=2)], poll_delay=0.01,
     )
     await worker.main()
     assert worker.jobs_complete == 1
@@ -211,10 +210,7 @@ async def test_run_at_startup_no_id_only_runs_once(worker):
     will be equal, and should only run once.
     """
     worker: Worker = worker(
-        cron_jobs=[
-            cron(foobar, minute=10, run_at_startup=True),
-            cron(foobar, minute=20, run_at_startup=True),
-        ],
+        cron_jobs=[cron(foobar, minute=10, run_at_startup=True), cron(foobar, minute=20, run_at_startup=True),],
         poll_delay=0.01,
     )
     await worker.main()

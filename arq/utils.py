@@ -39,7 +39,8 @@ def ms_to_datetime(unix_ms: int) -> datetime:
     """
     convert milliseconds to datetime, use the timezone in os.environ
     """
-    @functools.lru_cache
+
+    @functools.lru_cache()
     def get_tz():
         tz = None
         for timezone_key in timezone_keys:
@@ -56,6 +57,7 @@ def ms_to_datetime(unix_ms: int) -> datetime:
         else:
             tz = timezone.utc
         return tz
+
     return datetime.fromtimestamp(unix_ms / 1000, tz=get_tz())
 
 
