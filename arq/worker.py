@@ -188,7 +188,6 @@ class Worker:
         max_burst_jobs: int = -1,
         job_serializer: Optional[Serializer] = None,
         job_deserializer: Optional[Deserializer] = None,
-        timezone: Optional[str] = None
     ):
         self.functions: Dict[str, Union[Function, CronJob]] = {f.name: f for f in map(func, functions)}
         if queue_name is None:
@@ -250,9 +249,6 @@ class Worker:
         self.max_burst_jobs = max_burst_jobs
         self.job_serializer = job_serializer
         self.job_deserializer = job_deserializer
-
-        if timezone is not None and isinstance(timezone, str):
-            os.environ[arq_timezone] = timezone
 
     def run(self) -> None:
         """

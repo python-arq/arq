@@ -1,8 +1,13 @@
 import asyncio
+import functools
 import logging
 import os
-import pytz
-from pytz.exceptions import UnknownTimeZoneError
+
+try:
+    import pytz
+except ImportError:
+    pytz = None
+
 from datetime import datetime, timedelta, timezone
 from time import time
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Optional, Sequence, overload
@@ -33,20 +38,24 @@ def ms_to_datetime(unix_ms: int) -> datetime:
     """
     convert milliseconds to datetime, use the timezone in os.environ
     """
-    tz = None
-    for timezone_key in timezone_keys:
-        tz = os.environ.get(timezone_key)
-        if tz:
-            break
+    @functools.cache
+    def get_tz():
+        tz = None
+        for timezone_key in timezone_keys:
+            tz = os.getenv(timezone_key)
+            if tz:
+                break
 
-    if tz is not None and isinstance(tz, str):
-        try:
-            tz = pytz.timzone(tz)
-        except UnknownTimeZoneError:
+        if tz and pytz:
+            try:
+                tz = pytz.timzone(tz)
+            except KeyError:
+                logger.warning("unknown timezone: %s", tz)
+                tz = timezone.utc
+        else:
             tz = timezone.utc
-    else:
-        tz = timezone.utc
-    return datetime.fromtimestamp(unix_ms / 1000, tz=tz)
+        return tz
+    return datetime.fromtimestamp(unix_ms / 1000, tz=get_tz())
 
 
 @overload
