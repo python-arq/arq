@@ -25,7 +25,7 @@ from .constants import (
     job_key_prefix,
     keep_cronjob_progress,
     result_key_prefix,
-    retry_key_prefix
+    retry_key_prefix,
 )
 from .utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate
 

@@ -11,6 +11,7 @@ except ImportError:
 from datetime import datetime, timedelta, timezone
 from time import time
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Optional, Sequence, overload
+
 from .constants import timezone_keys
 
 logger = logging.getLogger('arq.utils')
@@ -38,7 +39,7 @@ def ms_to_datetime(unix_ms: int) -> datetime:
     """
     convert milliseconds to datetime, use the timezone in os.environ
     """
-    @functools.cache
+    @functools.lru_cache
     def get_tz():
         tz = None
         for timezone_key in timezone_keys:
@@ -48,7 +49,7 @@ def ms_to_datetime(unix_ms: int) -> datetime:
 
         if tz and pytz:
             try:
-                tz = pytz.timzone(tz)
+                tz = pytz.timezone(tz)
             except KeyError:
                 logger.warning('unknown timezone: %s', tz)
                 tz = timezone.utc

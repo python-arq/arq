@@ -1,5 +1,7 @@
 import logging
+import os
 import re
+import time
 from datetime import timedelta
 
 import pytest
@@ -9,6 +11,7 @@ from pydantic import BaseModel, validator
 import arq.typing
 import arq.utils
 from arq.connections import RedisSettings, log_redis_info
+from arq.constants import arq_timezone
 
 
 def test_settings_changed():
@@ -121,3 +124,10 @@ def test_redis_settings_validation():
     s3 = Settings(redis_settings={'ssl': True})
     assert s3.redis_settings.host == 'localhost'
     assert s3.redis_settings.ssl is True
+
+
+def test_ms_to_datetime():
+    os.environ[arq_timezone] = 'Asia/Shanghai'
+    unix_ms = time.time() * 1000
+    dt = arq.utils.ms_to_datetime(unix_ms)
+    assert dt.tzinfo.zone == os.environ[arq_timezone]
