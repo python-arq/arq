@@ -601,7 +601,13 @@ class Worker:
 
         await asyncio.shield(
             self.finish_job(
-                job_id, finish, result_data, result_timeout_s, keep_result_forever, incr_score, keep_in_progress,
+                job_id,
+                finish,
+                result_data,
+                result_timeout_s,
+                keep_result_forever,
+                incr_score,
+                keep_in_progress,
             )
         )
 
@@ -643,7 +649,9 @@ class Worker:
             await conn.unwatch()
             tr = conn.multi_exec()
             tr.delete(
-                retry_key_prefix + job_id, in_progress_key_prefix + job_id, job_key_prefix + job_id,
+                retry_key_prefix + job_id,
+                in_progress_key_prefix + job_id,
+                job_key_prefix + job_id,
             )
             tr.zrem(abort_jobs_ss, job_id)
             tr.zrem(self.queue_name, job_id)
