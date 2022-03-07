@@ -6,11 +6,11 @@ import os
 try:
     import pytz
 except ImportError:
-    pytz = None
+    pytz = None  # type: ignore
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from time import time
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Optional, Sequence, overload
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Optional, Sequence, Union, overload
 
 from .constants import timezone_keys
 
@@ -41,21 +41,21 @@ def ms_to_datetime(unix_ms: int) -> datetime:
     """
 
     @functools.lru_cache()
-    def get_tz():
-        tz = None
+    def get_tz() -> Union[pytz.BaseTzInfo, None]:
+        tz, tz_name = None, None
         for timezone_key in timezone_keys:
-            tz = os.getenv(timezone_key)
-            if tz:
+            tz_name = os.getenv(timezone_key)
+            if tz_name:
                 break
 
-        if tz and pytz:
+        if tz_name and pytz:
             try:
-                tz = pytz.timezone(tz)
+                tz = pytz.timezone(tz_name)
             except KeyError:
-                logger.warning('unknown timezone: %s', tz)
-                tz = timezone.utc
+                logger.warning('unknown timezone: %s', tz_name)
+                tz = pytz.utc
         else:
-            tz = timezone.utc
+            tz = pytz.utc
         return tz
 
     return datetime.fromtimestamp(unix_ms / 1000, tz=get_tz())
