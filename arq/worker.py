@@ -140,6 +140,8 @@ class Worker:
     :param burst: whether to stop the worker once all jobs have been run
     :param on_startup: coroutine function to run at startup
     :param on_shutdown: coroutine function to run at shutdown
+    :param on_job_start: coroutine function to run on job start
+    :param on_job_end: coroutine function to run on job end
     :param handle_signals: default true, register signal handlers,
       set to false when running inside other async framework
     :param max_jobs: maximum number of jobs to run at a time
@@ -147,8 +149,8 @@ class Worker:
     :param keep_result: default duration to keep job results for
     :param keep_result_forever: whether to keep results forever
     :param poll_delay: duration between polling the queue for new jobs
-    :param queue_read_limit: the maximum number of jobs to pull from the queue each time it's polled; by default it
-                             equals ``max_jobs``
+    :param queue_read_limit: the maximum number of jobs to pull from the queue each time it's polled. By default it
+                             equals ``max_jobs`` * 5, or 100; whichever is higher.
     :param max_tries: default maximum number of times to retry a job
     :param health_check_interval: how often to set the health check key
     :param health_check_key: redis key under which health check is set
@@ -172,6 +174,8 @@ class Worker:
         burst: bool = False,
         on_startup: Optional['StartupShutdown'] = None,
         on_shutdown: Optional['StartupShutdown'] = None,
+        on_job_start: Optional['StartupShutdown'] = None,
+        on_job_end: Optional['StartupShutdown'] = None,
         handle_signals: bool = True,
         max_jobs: int = 10,
         job_timeout: 'SecondsTimedelta' = 300,
@@ -205,6 +209,8 @@ class Worker:
         self.burst = burst
         self.on_startup = on_startup
         self.on_shutdown = on_shutdown
+        self.on_job_start = on_job_start
+        self.on_job_end = on_job_end
         self.sem = asyncio.BoundedSemaphore(max_jobs)
         self.job_timeout_s = to_seconds(job_timeout)
         self.keep_result_s = to_seconds(keep_result)
@@ -512,6 +518,10 @@ class Worker:
             'score': score,
         }
         ctx = {**self.ctx, **job_ctx}
+
+        if self.on_job_start:
+            await self.on_job_start(ctx)
+
         start_ms = timestamp_ms()
         success = False
         try:
@@ -588,9 +598,18 @@ class Worker:
                 serializer=self.job_serializer,
             )
 
+        if self.on_job_end:
+            await self.on_job_end(ctx)
+
         await asyncio.shield(
             self.finish_job(
-                job_id, finish, result_data, result_timeout_s, keep_result_forever, incr_score, keep_in_progress,
+                job_id,
+                finish,
+                result_data,
+                result_timeout_s,
+                keep_result_forever,
+                incr_score,
+                keep_in_progress,
             )
         )
 
@@ -623,7 +642,8 @@ class Worker:
                 tr.zrem(self.queue_name, job_id)
             elif incr_score:
                 tr.zincrby(self.queue_name, incr_score, job_id)
-            tr.delete(*delete_keys)
+            if delete_keys:
+                tr.delete(*delete_keys)
             await tr.execute()
 
     async def finish_failed_job(self, job_id: str, result_data: Optional[bytes]) -> None:
@@ -631,7 +651,9 @@ class Worker:
             await conn.unwatch()
             tr = conn.multi_exec()
             tr.delete(
-                retry_key_prefix + job_id, in_progress_key_prefix + job_id, job_key_prefix + job_id,
+                retry_key_prefix + job_id,
+                in_progress_key_prefix + job_id,
+                job_key_prefix + job_id,
             )
             tr.zrem(abort_jobs_ss, job_id)
             tr.zrem(self.queue_name, job_id)
@@ -668,7 +690,10 @@ class Worker:
             # We queue up the cron if the next execution time is in the next
             # delay * num_windows (by default 0.5 * 2 = 1 second).
             if cron_job.next_run < this_hb_cutoff:
-                job_id = f'{cron_job.name}:{to_unix_ms(cron_job.next_run)}' if cron_job.unique else None
+                if cron_job.job_id:
+                    job_id: Optional[str] = cron_job.job_id
+                else:
+                    job_id = f'{cron_job.name}:{to_unix_ms(cron_job.next_run)}' if cron_job.unique else None
                 job_futures.add(
                     self.pool.enqueue_job(
                         cron_job.name, _job_id=job_id, _queue_name=self.queue_name, _defer_until=cron_job.next_run
@@ -787,5 +812,4 @@ def check_health(settings_cls: 'WorkerSettingsType') -> int:
     redis_settings = cast(Optional[RedisSettings], cls_kwargs.get('redis_settings'))
     health_check_key = cast(Optional[str], cls_kwargs.get('health_check_key'))
     queue_name = cast(Optional[str], cls_kwargs.get('queue_name'))
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(async_check_health(redis_settings, health_check_key, queue_name))
+    return asyncio.run(async_check_health(redis_settings, health_check_key, queue_name))

@@ -22,7 +22,8 @@ async def main():
         await redis.enqueue_job('download_content', url)
 
 # WorkerSettings defines the settings to use when creating the work,
-# it's used by the arq cli
+# it's used by the arq cli.
+# For a list of available settings, see https://arq-docs.helpmanual.io/#arq.worker.Worker
 class WorkerSettings:
     functions = [download_content]
     on_startup = startup

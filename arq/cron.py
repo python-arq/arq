@@ -102,6 +102,7 @@ class CronJob:
     microsecond: int
     run_at_startup: bool
     unique: bool
+    job_id: Optional[str]
     timeout_s: Optional[float]
     keep_result_s: Optional[float]
     keep_result_forever: Optional[bool]
@@ -137,6 +138,7 @@ def cron(
     microsecond: int = 123_456,
     run_at_startup: bool = False,
     unique: bool = True,
+    job_id: Optional[str] = None,
     timeout: Optional[SecondsTimedelta] = None,
     keep_result: Optional[float] = 0,
     keep_result_forever: Optional[bool] = False,
@@ -159,7 +161,8 @@ def cron(
     :param microsecond: microsecond(s) to run the job on,
         defaults to 123456 as the world is busier at the top of a second, 0 - 1e6
     :param run_at_startup: whether to run as worker starts
-    :param unique: whether the job should be only be executed once at each time
+    :param unique: whether the job should only be executed once at each time (useful if you have multiple workers)
+    :param job_id: ID of the job, can be used to enforce job uniqueness, spanning multiple cron schedules
     :param timeout: job timeout
     :param keep_result: how long to keep the result for
     :param keep_result_forever: whether to keep results forever
@@ -188,6 +191,7 @@ def cron(
         microsecond,
         run_at_startup,
         unique,
+        job_id,
         timeout,
         keep_result,
         keep_result_forever,

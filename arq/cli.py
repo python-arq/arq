@@ -43,7 +43,7 @@ def cli(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: 
     else:
         kwargs = {} if burst is None else {'burst': burst}
         if watch:
-            asyncio.get_event_loop().run_until_complete(watch_reload(watch, worker_settings_))
+            asyncio.run(watch_reload(watch, worker_settings_))
         else:
             run_worker(worker_settings_, **kwargs)
 
