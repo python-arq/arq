@@ -50,7 +50,7 @@ def ms_to_datetime(unix_ms: int) -> datetime:
             try:
                 tz = pytz.timzone(tz)
             except KeyError:
-                logger.warning("unknown timezone: %s", tz)
+                logger.warning('unknown timezone: %s', tz)
                 tz = timezone.utc
         else:
             tz = timezone.utc
