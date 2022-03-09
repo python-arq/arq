@@ -20,7 +20,8 @@ def test_help():
     assert result.output.startswith('Usage: arq [OPTIONS] WORKER_SETTINGS\n')
 
 
-def test_run(cancel_remaining_task):
+def test_run(cancel_remaining_task, mocker, loop):
+    mocker.patch('asyncio.get_event_loop', lambda: loop)
     runner = CliRunner()
     result = runner.invoke(cli, ['tests.test_cli.WorkerSettings'])
     assert result.exit_code == 0
