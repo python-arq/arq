@@ -1,6 +1,6 @@
 [tool.pytest.ini_options]
 testpaths = 'tests'
-filterwarnings = ['error', 'ignore::DeprecationWarning:aioredis']
+filterwarnings = ['error']
 asyncio_mode = 'auto'
 timeout = 10
 
@@ -56,5 +56,5 @@ disallow_untyped_defs = true
 #warn_return_any = true
 
 [[tool.mypy.overrides]]
-module = ['aioredis',  'watchgod']
+module = ['redis.asyncio', 'redis.asyncio.sentinel',  'watchgod']
 ignore_missing_imports = true

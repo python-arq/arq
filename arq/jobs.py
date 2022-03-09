@@ -7,7 +7,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Dict, Optional, Tuple
 
-from aioredis import Redis
+from redis.asyncio import Redis
 
 from .constants import abort_jobs_ss, default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
 from .utils import ms_to_datetime, poll, timestamp_ms

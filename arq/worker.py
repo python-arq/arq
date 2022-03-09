@@ -9,8 +9,8 @@ from signal import Signals
 from time import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union, cast
 
-from aioredis.exceptions import ResponseError, WatchError
 from pydantic.utils import import_string
+from redis.asyncio import ResponseError, WatchError
 
 from arq.cron import CronJob
 from arq.jobs import Deserializer, JobResult, SerializationError, Serializer, deserialize_job_raw, serialize_result
@@ -391,12 +391,11 @@ class Worker:
                 score = await pipe.zscore(self.queue_name, job_id)
                 if ongoing_exists or not score:
                     # job already started elsewhere, or already finished and removed from queue
-                    await pipe.reset()  # type: ignore[no-untyped-call]
                     self.sem.release()
                     logger.debug('job %s already running elsewhere', job_id)
                     continue
 
-                pipe.multi()  # type: ignore[no-untyped-call]
+                pipe.multi()
                 pipe.psetex(in_progress_key, int(self.in_progress_timeout_s * 1000), b'1')
                 try:
                     await pipe.execute()

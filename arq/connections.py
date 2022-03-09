@@ -9,11 +9,10 @@ from typing import Any, Callable, Generator, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 from uuid import uuid4
 
-import aioredis
-from aioredis import ConnectionPool, Redis
-from aioredis.exceptions import WatchError
-from aioredis.sentinel import Sentinel
 from pydantic.validators import make_arbitrary_type_validator
+from redis import WatchError
+from redis.asyncio import ConnectionPool, Redis, RedisError
+from redis.asyncio.sentinel import Sentinel
 
 from .constants import default_queue_name, job_key_prefix, result_key_prefix
 from .jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
@@ -72,15 +71,15 @@ class RedisSettings:
 expires_extra_ms = 86_400_000
 
 
-class ArqRedis(Redis):
+class ArqRedis(Redis):  # type: ignore[misc]
     """
-    Thin subclass of ``aioredis.Redis`` which adds :func:`arq.connections.enqueue_job`.
+    Thin subclass of ``redis.asyncio.Redis`` which adds :func:`arq.connections.enqueue_job`.
 
     :param redis_settings: an instance of ``arq.connections.RedisSettings``.
     :param job_serializer: a function that serializes Python objects to bytes, defaults to pickle.dumps
     :param job_deserializer: a function that deserializes bytes into Python objects, defaults to pickle.loads
     :param default_queue_name: the default queue name to use, defaults to ``arq.queue``.
-    :param kwargs: keyword arguments directly passed to ``aioredis.Redis``.
+    :param kwargs: keyword arguments directly passed to ``redis.asyncio.Redis``.
     """
 
     def __init__(
@@ -136,7 +135,7 @@ class ArqRedis(Redis):
         async with self.pipeline(transaction=True) as pipe:
             await pipe.watch(job_key)
             if any(await asyncio.gather(pipe.exists(job_key), pipe.exists(result_key_prefix + job_id))):
-                await pipe.reset()  # type: ignore[no-untyped-call]
+                await pipe.reset()
                 return None
 
             enqueue_time_ms = timestamp_ms()
@@ -150,7 +149,7 @@ class ArqRedis(Redis):
             expires_ms = expires_ms or score - enqueue_time_ms + expires_extra_ms
 
             job = serialize_job(function, args, kwargs, _job_try, enqueue_time_ms, serializer=self.job_serializer)
-            pipe.multi()  # type: ignore[no-untyped-call]
+            pipe.multi()
             pipe.psetex(job_key, expires_ms, job)
             pipe.zadd(_queue_name, {job_id: score})
             try:
@@ -213,7 +212,7 @@ async def create_pool(
     if settings.sentinel:
 
         def pool_factory(*args: Any, **kwargs: Any) -> ArqRedis:
-            client = Sentinel(*args, sentinels=settings.host, ssl=settings.ssl, **kwargs)  # type: ignore
+            client = Sentinel(*args, sentinels=settings.host, ssl=settings.ssl, **kwargs)
             return client.master_for(settings.sentinel_master, redis_class=ArqRedis)
 
     else:
@@ -232,7 +231,7 @@ async def create_pool(
         pool.default_queue_name = default_queue_name
         await pool.ping()
 
-    except (ConnectionError, OSError, aioredis.RedisError, asyncio.TimeoutError) as e:
+    except (ConnectionError, OSError, RedisError, asyncio.TimeoutError) as e:
         if retry < settings.conn_retries:
             logger.warning(
                 'redis connection error %s:%s %s %s, %d retries remaining...',

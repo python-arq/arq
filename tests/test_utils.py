@@ -3,8 +3,8 @@ import re
 from datetime import timedelta
 
 import pytest
-from aioredis.exceptions import ConnectionError, ResponseError
 from pydantic import BaseModel, validator
+from redis.asyncio import ConnectionError, ResponseError
 
 import arq.typing
 import arq.utils

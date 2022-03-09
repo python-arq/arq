@@ -22,9 +22,6 @@ jobs:
 
     - run: pip install -r tests/requirements-linting.txt
     - run: pip install .
-    - run: |
-       pip uninstall -y aioredis
-       pip install https://github.com/aio-libs/aioredis-py/archive/master.zip
 
     - run: make lint
 
@@ -77,9 +74,6 @@ jobs:
 
     - run: pip install -r tests/requirements-testing.txt
     - run: pip install .[watch]
-    - run: |
-       pip uninstall -y aioredis
-       pip install https://github.com/aio-libs/aioredis-py/archive/master.zip
 
     - run: make test
 
