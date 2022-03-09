@@ -143,8 +143,7 @@ class ArqRedis(Redis):
         defer_by_ms = to_ms(_defer_by)
         expires_ms = to_ms(_expires)
 
-        async with self as conn:
-            pipe = conn.pipeline()
+        async with self.pipeline(transaction=True) as pipe:
             await pipe.watch(job_key)
             if any(await asyncio.gather(pipe.exists(job_key), pipe.exists(result_key_prefix + job_id))):
                 await pipe.reset()  # type: ignore[no-untyped-call]
@@ -275,13 +274,12 @@ async def create_pool(
 
 
 async def log_redis_info(redis: Redis, log_func: Callable[[str], Any]) -> None:
-    async with redis as r:
-        info_server, info_memory, info_clients, key_count = await asyncio.gather(
-            r.info(section='Server'),
-            r.info(section='Memory'),
-            r.info(section='Clients'),
-            r.dbsize(),
-        )
+    async with redis.pipeline(transaction=True) as pipe:
+        pipe.info(section='Server')
+        pipe.info(section='Memory')
+        pipe.info(section='Clients')
+        pipe.dbsize()
+        info_server, info_memory, info_clients, key_count = await pipe.execute()
 
     redis_version = info_server.get('redis_version', '?')
     mem_usage = info_memory.get('used_memory_human', '?')

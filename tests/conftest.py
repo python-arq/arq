@@ -23,8 +23,10 @@ async def arq_redis(loop):
         encoding='utf-8',
     )
     await redis_.flushall()
+
     yield redis_
-    await redis_.close()
+
+    await redis_.close(close_connection_pool=True)
 
 
 @pytest.fixture
@@ -38,7 +40,7 @@ async def arq_redis_msgpack(loop):
     )
     await redis_.flushall()
     yield redis_
-    await redis_.close()
+    await redis_.close(close_connection_pool=True)
 
 
 @pytest.fixture
@@ -69,7 +71,7 @@ async def fix_create_pool(loop):
 
     yield create_pool_
 
-    await asyncio.gather(*[p.close() for p in pools])
+    await asyncio.gather(*[p.close(close_connection_pool=True) for p in pools])
 
 
 @pytest.fixture(name='cancel_remaining_task')

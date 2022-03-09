@@ -3,7 +3,7 @@ import re
 from datetime import timedelta
 
 import pytest
-from aioredis.exceptions import ResponseError
+from aioredis.exceptions import ConnectionError, ResponseError
 from pydantic import BaseModel, validator
 
 import arq.typing
@@ -22,12 +22,12 @@ def test_settings_changed():
 
 async def test_redis_timeout(mocker, create_pool):
     mocker.spy(arq.utils.asyncio, 'sleep')
-    with pytest.raises(OSError):
+    with pytest.raises(ConnectionError):
         await create_pool(RedisSettings(port=0, conn_retry_delay=0))
     assert arq.utils.asyncio.sleep.call_count == 5
 
 
-async def test_redis_sentinel_failure(create_pool, cancel_remaining_task):
+async def test_redis_sentinel_failure(create_pool, cancel_remaining_task, mocker):
     settings = RedisSettings()
     settings.host = [('localhost', 6379), ('localhost', 6379)]
     settings.sentinel = True
@@ -40,11 +40,11 @@ async def test_redis_success_log(caplog, create_pool):
     settings = RedisSettings()
     pool = await create_pool(settings)
     assert 'redis connection successful' not in [r.message for r in caplog.records]
-    await pool.close()
+    await pool.close(close_connection_pool=True)
 
     pool = await create_pool(settings, retry=1)
     assert 'redis connection successful' in [r.message for r in caplog.records]
-    await pool.close()
+    await pool.close(close_connection_pool=True)
 
 
 async def test_redis_log(create_pool):

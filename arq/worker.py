@@ -358,12 +358,10 @@ class Worker:
         """
         Go through job_ids in the abort_jobs_ss sorted set and cancel those tasks.
         """
-        async with self.pool as conn:
-            with conn.encoder_context(decode_responses=True):
-                pipe = conn.pipeline()
-                pipe.zrange(abort_jobs_ss, start=0, end=-1)
-                pipe.zremrangebyscore(abort_jobs_ss, min=timestamp_ms() + abort_job_max_age, max=float('inf'))
-                abort_job_ids, _ = await pipe.execute()
+        async with self.pool.pipeline(transaction=True) as pipe:
+            pipe.zrange(abort_jobs_ss, start=0, end=-1)
+            pipe.zremrangebyscore(abort_jobs_ss, min=timestamp_ms() + abort_job_max_age, max=float('inf'))
+            abort_job_ids, _ = await pipe.execute()
 
         aborted: Set[str] = set()
         for job_id in abort_job_ids:
@@ -386,9 +384,7 @@ class Worker:
         for job_id in job_ids:
             await self.sem.acquire()
             in_progress_key = in_progress_key_prefix + job_id
-            async with self.pool as conn:
-                pipe = conn.pipeline()
-                await pipe.unwatch()  # type: ignore[no-untyped-call]
+            async with self.pool.pipeline(transaction=True) as pipe:
                 await pipe.watch(in_progress_key)
                 ongoing_exists = await pipe.exists(in_progress_key)
                 score = await pipe.zscore(self.queue_name, job_id)
@@ -414,9 +410,7 @@ class Worker:
 
     async def run_job(self, job_id: str, score: int) -> None:  # noqa: C901
         start_ms = timestamp_ms()
-        async with self.pool as conn:
-            pipe = conn.pipeline()
-            pipe.multi()  # type: ignore[no-untyped-call]
+        async with self.pool.pipeline(transaction=True) as pipe:
             pipe.get(job_key_prefix + job_id)
             pipe.incr(retry_key_prefix + job_id)
             pipe.expire(retry_key_prefix + job_id, 88400)
@@ -622,9 +616,7 @@ class Worker:
         incr_score: Optional[int],
         keep_in_progress: Optional[float],
     ) -> None:
-        async with self.pool as conn:
-            tr = conn.pipeline()
-            tr.multi()  # type: ignore[no-untyped-call]
+        async with self.pool.pipeline(transaction=True) as tr:
             delete_keys = []
             in_progress_key = in_progress_key_prefix + job_id
             if keep_in_progress is None:
@@ -646,9 +638,7 @@ class Worker:
             await tr.execute()
 
     async def finish_failed_job(self, job_id: str, result_data: Optional[bytes]) -> None:
-        async with self.pool as conn:
-            tr = conn.pipeline()
-            tr.multi()  # type: ignore[no-untyped-call]
+        async with self.pool.pipeline(transaction=True) as tr:
             tr.delete(
                 retry_key_prefix + job_id,
                 in_progress_key_prefix + job_id,
@@ -753,7 +743,7 @@ class Worker:
         await self.pool.delete(self.health_check_key)
         if self.on_shutdown:
             await self.on_shutdown(self.ctx)
-        await self.pool.close()  # type: ignore
+        await self.pool.close(close_connection_pool=True)
         self._pool = None
 
     def __repr__(self) -> str:
@@ -794,7 +784,7 @@ async def async_check_health(
     else:
         logger.info('Health check successful: %s', data)
         r = 0
-    await redis.close()  # type: ignore
+    await redis.close(close_connection_pool=True)
     return r
 
 
