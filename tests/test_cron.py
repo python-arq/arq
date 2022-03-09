@@ -161,3 +161,64 @@ async def test_cron_cancelled(worker, mocker):
     assert worker.jobs_complete == 1
     assert worker.jobs_retried == 1
     assert worker.jobs_failed == 0
+
+
+async def barfoo(ctx):
+    """In order to test cron job singleton, we must have two different functions when bursting"""
+    return 24
+
+
+async def test_job_custom_id(worker):
+    """
+    Test that two different functions with the same job_id, will only be executed once.
+    """
+    worker: Worker = worker(
+        cron_jobs=[
+            cron(barfoo, minute=10, run_at_startup=True, job_id='singleton_job'),
+            cron(foobar, minute=20, run_at_startup=True, job_id='singleton_job'),
+        ],
+        poll_delay=0.01,
+    )
+    await worker.main()
+
+    assert worker.jobs_complete == 1
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+
+
+async def test_job_same_function_different_id(worker):
+    """
+    Set a different ID on the same function job, which runs at startup and ensure both functions are run.
+    See next test for behaviour without setting job_id.
+    """
+    worker: Worker = worker(
+        cron_jobs=[
+            cron(foobar, minute=10, run_at_startup=True, job_id='custom_id'),
+            cron(foobar, minute=20, run_at_startup=True, job_id='custom_id2'),
+        ],
+        poll_delay=0.01,
+    )
+    await worker.main()
+
+    assert worker.jobs_complete == 2
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+
+
+async def test_run_at_startup_no_id_only_runs_once(worker):
+    """
+    Without a custom job ID, and `run_at_startup=True` on two jobs, it will only execute once, since the job_id
+    will be equal, and should only run once.
+    """
+    worker: Worker = worker(
+        cron_jobs=[
+            cron(foobar, minute=10, run_at_startup=True),
+            cron(foobar, minute=20, run_at_startup=True),
+        ],
+        poll_delay=0.01,
+    )
+    await worker.main()
+
+    assert worker.jobs_complete == 1
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0

@@ -679,7 +679,10 @@ class Worker:
             # We queue up the cron if the next execution time is in the next
             # delay * num_windows (by default 0.5 * 2 = 1 second).
             if cron_job.next_run < this_hb_cutoff:
-                job_id = f'{cron_job.name}:{to_unix_ms(cron_job.next_run)}' if cron_job.unique else None
+                if cron_job.job_id:
+                    job_id: Optional[str] = cron_job.job_id
+                else:
+                    job_id = f'{cron_job.name}:{to_unix_ms(cron_job.next_run)}' if cron_job.unique else None
                 job_futures.add(
                     self.pool.enqueue_job(
                         cron_job.name, _job_id=job_id, _queue_name=self.queue_name, _defer_until=cron_job.next_run
