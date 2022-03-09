@@ -12,7 +12,7 @@ from arq.worker import Worker
 @pytest.fixture(name='loop')
 def _fix_loop(event_loop):
     asyncio.set_event_loop(event_loop)
-    yield event_loop
+    return event_loop
 
 
 @pytest.fixture
@@ -22,6 +22,7 @@ async def arq_redis(loop):
         port=6379,
         encoding='utf-8',
     )
+
     await redis_.flushall()
 
     yield redis_

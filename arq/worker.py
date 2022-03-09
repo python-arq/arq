@@ -10,7 +10,7 @@ from time import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union, cast
 
 from pydantic.utils import import_string
-from redis.asyncio import ResponseError, WatchError
+from redis.exceptions import ResponseError, WatchError
 
 from arq.cron import CronJob
 from arq.jobs import Deserializer, JobResult, SerializationError, Serializer, deserialize_job_raw, serialize_result

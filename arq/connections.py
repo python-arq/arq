@@ -10,9 +10,9 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 from pydantic.validators import make_arbitrary_type_validator
-from redis import WatchError
-from redis.asyncio import ConnectionPool, Redis, RedisError
+from redis.asyncio import ConnectionPool, Redis
 from redis.asyncio.sentinel import Sentinel
+from redis.exceptions import RedisError, WatchError
 
 from .constants import default_queue_name, job_key_prefix, result_key_prefix
 from .jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job

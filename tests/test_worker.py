@@ -8,9 +8,8 @@ from unittest.mock import MagicMock
 
 import msgpack
 import pytest
-from redis.asyncio import Redis
 
-from arq.connections import ArqRedis
+from arq.connections import ArqRedis, RedisSettings
 from arq.constants import abort_jobs_ss, default_queue_name, health_check_key_suffix, job_key_prefix
 from arq.jobs import Job, JobStatus
 from arq.worker import (
@@ -415,18 +414,15 @@ async def test_log_health_check(arq_redis: ArqRedis, worker, caplog):
     assert 'recording health' in caplog.text
 
 
-async def test_remain_keys(arq_redis: ArqRedis, worker):
-    redis2 = Redis(host='localhost', port=6379, decode_responses=True)
-    try:
-        await arq_redis.enqueue_job('foobar', _job_id='testing')
-        assert sorted(await redis2.keys('*')) == ['arq:job:testing', 'arq:queue']
-        worker: Worker = worker(functions=[foobar])
-        await worker.main()
-        assert sorted(await redis2.keys('*')) == ['arq:queue:health-check', 'arq:result:testing']
-        await worker.close()
-        assert sorted(await redis2.keys('*')) == ['arq:result:testing']
-    finally:
-        await redis2.close(close_connection_pool=True)
+async def test_remain_keys(arq_redis: ArqRedis, worker, create_pool):
+    redis2 = await create_pool(RedisSettings())
+    await arq_redis.enqueue_job('foobar', _job_id='testing')
+    assert sorted(await redis2.keys('*')) == [b'arq:job:testing', b'arq:queue']
+    worker: Worker = worker(functions=[foobar])
+    await worker.main()
+    assert sorted(await redis2.keys('*')) == [b'arq:queue:health-check', b'arq:result:testing']
+    await worker.close()
+    assert sorted(await redis2.keys('*')) == [b'arq:result:testing']
 
 
 async def test_remain_keys_no_results(arq_redis: ArqRedis, worker):
