@@ -426,7 +426,7 @@ async def test_remain_keys(arq_redis: ArqRedis, worker):
         await worker.close()
         assert sorted(await redis2.keys('*')) == ['arq:result:testing']
     finally:
-        await redis2.close()
+        await redis2.close(close_connection_pool=True)
 
 
 async def test_remain_keys_no_results(arq_redis: ArqRedis, worker):
@@ -771,6 +771,7 @@ async def test_abort_job(arq_redis: ArqRedis, worker, caplog, loop):
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
     await asyncio.gather(wait_and_abort(job), worker.main())
+    await worker.main()
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 1
     assert worker.jobs_retried == 0

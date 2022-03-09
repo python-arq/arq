@@ -27,6 +27,7 @@ async def test_redis_timeout(mocker, create_pool):
     assert arq.utils.asyncio.sleep.call_count == 5
 
 
+@pytest.mark.skip(reason='this breaks many other tests as low level connections remain after failed connection')
 async def test_redis_sentinel_failure(create_pool, cancel_remaining_task, mocker):
     settings = RedisSettings()
     settings.host = [('localhost', 6379), ('localhost', 6379)]

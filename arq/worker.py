@@ -363,9 +363,10 @@ class Worker:
             abort_job_ids, _ = await pipe.execute()
 
         aborted: Set[str] = set()
-        for job_id in abort_job_ids:
+        for job_id_bytes in abort_job_ids:
+            job_id = job_id_bytes.decode()
             try:
-                task = self.job_tasks[job_id.decode()]
+                task = self.job_tasks[job_id]
             except KeyError:
                 pass
             else:

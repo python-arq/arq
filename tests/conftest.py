@@ -12,7 +12,7 @@ from arq.worker import Worker
 @pytest.fixture(name='loop')
 def _fix_loop(event_loop):
     asyncio.set_event_loop(event_loop)
-    return event_loop
+    yield event_loop
 
 
 @pytest.fixture
