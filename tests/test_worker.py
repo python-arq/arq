@@ -69,13 +69,12 @@ async def test_set_health_check_key(arq_redis: ArqRedis, worker):
     await arq_redis.enqueue_job('foobar', _job_id='testing')
     worker: Worker = worker(functions=[func(foobar, keep_result=0)], health_check_key='arq:test:health-check')
     await worker.main()
-    with arq_redis.encoder_context(decode_responses=True):
-        assert sorted(await arq_redis.keys('*')) == ['arq:test:health-check']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:test:health-check']
 
 
-async def test_handle_sig(caplog):
+async def test_handle_sig(caplog, arq_redis: ArqRedis):
     caplog.set_level(logging.INFO)
-    worker = Worker([foobar])
+    worker = Worker([foobar], redis_pool=arq_redis)
     worker.main_task = MagicMock()
     worker.tasks = {0: MagicMock(done=MagicMock(return_value=True)), 1: MagicMock(done=MagicMock(return_value=False))}
 
@@ -432,34 +431,28 @@ async def test_remain_keys(arq_redis: ArqRedis, worker):
 
 async def test_remain_keys_no_results(arq_redis: ArqRedis, worker):
     await arq_redis.enqueue_job('foobar', _job_id='testing')
-    with arq_redis.encoder_context(decode_responses=True):
-        assert sorted(await arq_redis.keys('*')) == ['arq:job:testing', 'arq:queue']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:job:testing', b'arq:queue']
     worker: Worker = worker(functions=[func(foobar, keep_result=0)])
     await worker.main()
-    with arq_redis.encoder_context(decode_responses=True):
-        assert sorted(await arq_redis.keys('*')) == ['arq:queue:health-check']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:queue:health-check']
 
 
 async def test_remain_keys_keep_results_forever_in_function(arq_redis: ArqRedis, worker):
     await arq_redis.enqueue_job('foobar', _job_id='testing')
-    with arq_redis.encoder_context(decode_responses=True):
-        assert sorted(await arq_redis.keys('*')) == ['arq:job:testing', 'arq:queue']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:job:testing', b'arq:queue']
     worker: Worker = worker(functions=[func(foobar, keep_result_forever=True)])
     await worker.main()
-    with arq_redis.encoder_context(decode_responses=True):
-        assert sorted(await arq_redis.keys('*')) == ['arq:queue:health-check', 'arq:result:testing']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:queue:health-check', b'arq:result:testing']
     ttl_result = await arq_redis.ttl('arq:result:testing')
     assert ttl_result == -1
 
 
 async def test_remain_keys_keep_results_forever(arq_redis: ArqRedis, worker):
     await arq_redis.enqueue_job('foobar', _job_id='testing')
-    with arq_redis.encoder_context(decode_responses=True):
-        assert sorted(await arq_redis.keys('*')) == ['arq:job:testing', 'arq:queue']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:job:testing', b'arq:queue']
     worker: Worker = worker(functions=[func(foobar)], keep_result_forever=True)
     await worker.main()
-    with arq_redis.encoder_context(decode_responses=True):
-        assert sorted(await arq_redis.keys('*')) == ['arq:queue:health-check', 'arq:result:testing']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:queue:health-check', b'arq:result:testing']
     ttl_result = await arq_redis.ttl('arq:result:testing')
     assert ttl_result == -1
 

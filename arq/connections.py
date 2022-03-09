@@ -170,12 +170,12 @@ class ArqRedis(Redis):
                 return None
         return Job(job_id, redis=self, _queue_name=_queue_name, _deserializer=self.job_deserializer)
 
-    async def _get_job_result(self, key: Union[str]) -> JobResult:
-        job_id = key[len(result_key_prefix) :]
+    async def _get_job_result(self, key: bytes) -> JobResult:
+        job_id = key[len(result_key_prefix) :].decode()
         job = Job(job_id, self, _deserializer=self.job_deserializer)
         r = await job.result_info()
         if r is None:
-            raise KeyError(f'job "{key}" not found')
+            raise KeyError(f'job "{key.decode()}" not found')
         r.job_id = job_id
         return r
 
@@ -183,13 +183,12 @@ class ArqRedis(Redis):
         """
         Get results for all jobs in redis.
         """
-        with self.encoder_context(decode_responses=True):
-            keys = await self.keys(result_key_prefix + '*')
+        keys = await self.keys(result_key_prefix + '*')
         results = await asyncio.gather(*[self._get_job_result(k) for k in keys])
         return sorted(results, key=attrgetter('enqueue_time'))
 
-    async def _get_job_def(self, job_id: str, score: int) -> JobDef:
-        v = await self.get(job_key_prefix + job_id)
+    async def _get_job_def(self, job_id: bytes, score: int) -> JobDef:
+        v = await self.get(job_key_prefix + job_id.decode())
         jd = deserialize_job(v, deserializer=self.job_deserializer)
         jd.score = score
         return jd
@@ -198,8 +197,7 @@ class ArqRedis(Redis):
         """
         Get information about queued, mostly useful when testing.
         """
-        with self.encoder_context(decode_responses=True):
-            jobs = await self.zrange(queue_name, withscores=True, start=0, end=-1)
+        jobs = await self.zrange(queue_name, withscores=True, start=0, end=-1)
         return await asyncio.gather(*[self._get_job_def(job_id, int(score)) for job_id, score in jobs])
 
 
