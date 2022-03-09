@@ -33,7 +33,7 @@ async def fails(ctx):
     raise TypeError('my type error')
 
 
-def test_no_jobs(arq_redis: ArqRedis, loop):
+def test_no_jobs(arq_redis: ArqRedis, loop, mocker):
     class Settings:
         functions = [func(foobar, name='foobar')]
         burst = True
@@ -41,7 +41,7 @@ def test_no_jobs(arq_redis: ArqRedis, loop):
         queue_read_limit = 10
 
     loop.run_until_complete(arq_redis.enqueue_job('foobar'))
-    asyncio.set_event_loop(loop)
+    mocker.patch('asyncio.get_event_loop', lambda: loop)
     worker = run_worker(Settings)
     assert worker.jobs_complete == 1
     assert str(worker) == '<Worker j_complete=1 j_failed=0 j_retried=0 j_ongoing=0>'
