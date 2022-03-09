@@ -754,7 +754,6 @@ async def test_multi_exec(arq_redis: ArqRedis, worker, caplog):
     # assert 'WatchVariableError' not in caplog.text
 
 
-@pytest.mark.skip(reason='current breaking')
 async def test_abort_job(arq_redis: ArqRedis, worker, caplog, loop):
     async def longfunc(ctx):
         await asyncio.sleep(3600)

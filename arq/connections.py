@@ -2,7 +2,6 @@ import asyncio
 import functools
 import logging
 import ssl
-from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
@@ -18,7 +17,6 @@ from pydantic.validators import make_arbitrary_type_validator
 
 from .constants import default_queue_name, job_key_prefix, result_key_prefix
 from .jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
-from .parser import ContextAwareDefaultParser, ContextAwareEncoder, encoder_options_var  # type: ignore
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('arq.connections')
@@ -99,14 +97,6 @@ class ArqRedis(Redis):
         if pool_or_conn:
             kwargs['connection_pool'] = pool_or_conn
         super().__init__(**kwargs)
-        self.connection_pool.connection_kwargs['parser_class'] = ContextAwareDefaultParser
-        self.connection_pool.connection_kwargs['encoder_class'] = ContextAwareEncoder
-
-    @contextmanager
-    def encoder_context(self, **options: Any) -> Generator['ArqRedis', None, None]:
-        token = encoder_options_var.set(options)
-        yield self
-        encoder_options_var.reset(token)
 
     async def enqueue_job(
         self,
