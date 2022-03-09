@@ -54,8 +54,7 @@ setup(
         arq=arq.cli:cli
     """,
     install_requires=[
-        # 'aioredis>=2.0.0,<3.0.0',
-        'https://github.com/aio-libs/aioredis-py/archive/master.zip',
+        'aioredis>=2.0.0,<3.0.0',
         'click>=6.7',
         'pydantic>=1',
         'dataclasses>=0.6;python_version == "3.6"',
