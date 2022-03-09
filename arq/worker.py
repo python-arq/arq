@@ -335,11 +335,10 @@ class Worker:
             count = min(burst_jobs_remaining, count)
 
         async with self.sem:  # don't bother with zrangebyscore until we have "space" to run the jobs
-            with self.pool.encoder_context(decode_responses=True):
-                now = timestamp_ms()
-                job_ids = await self.pool.zrangebyscore(
-                    self.queue_name, min=float('-inf'), start=self._queue_read_offset, num=count, max=now
-                )
+            now = timestamp_ms()
+            job_ids = await self.pool.zrangebyscore(
+                self.queue_name, min=float('-inf'), start=self._queue_read_offset, num=count, max=now
+            )
 
         await self.start_jobs(job_ids)
 
@@ -366,7 +365,7 @@ class Worker:
         aborted: Set[str] = set()
         for job_id in abort_job_ids:
             try:
-                task = self.job_tasks[job_id]
+                task = self.job_tasks[job_id.decode()]
             except KeyError:
                 pass
             else:
@@ -377,12 +376,13 @@ class Worker:
             self.aborting_tasks.update(aborted)
             await self.pool.zrem(abort_jobs_ss, *aborted)
 
-    async def start_jobs(self, job_ids: List[str]) -> None:
+    async def start_jobs(self, job_ids: List[bytes]) -> None:
         """
         For each job id, get the job definition, check it's not running and start it in a task
         """
-        for job_id in job_ids:
+        for job_id_b in job_ids:
             await self.sem.acquire()
+            job_id = job_id_b.decode()
             in_progress_key = in_progress_key_prefix + job_id
             async with self.pool.pipeline(transaction=True) as pipe:
                 await pipe.watch(in_progress_key)
@@ -695,8 +695,7 @@ class Worker:
             return
         self._last_health_check = now_ts
         pending_tasks = sum(not t.done() for t in self.tasks.values())
-        with self.pool.encoder_context(decode_responses=True):
-            queued = await self.pool.zcard(self.queue_name)
+        queued = await self.pool.zcard(self.queue_name)
         info = (
             f'{datetime.now():%b-%d %H:%M:%S} j_complete={self.jobs_complete} j_failed={self.jobs_failed} '
             f'j_retried={self.jobs_retried} j_ongoing={pending_tasks} queued={queued}'
