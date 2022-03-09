@@ -7,7 +7,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Dict, Optional, Tuple
 
-from aioredis import Redis
+from redis.asyncio import Redis
 
 from .constants import abort_jobs_ss, default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
 from .utils import ms_to_datetime, poll, timestamp_ms
@@ -43,6 +43,10 @@ class JobDef:
     job_try: int
     enqueue_time: datetime
     score: Optional[int]
+
+    def __post_init__(self) -> None:
+        if isinstance(self.score, float):
+            self.score = int(self.score)
 
 
 @dataclass
@@ -110,7 +114,7 @@ class Job:
         """
         info: Optional[JobDef] = await self.result_info()
         if not info:
-            v = await self._redis.get(job_key_prefix + self.job_id, encoding=None)
+            v = await self._redis.get(job_key_prefix + self.job_id)
             if v:
                 info = deserialize_job(v, deserializer=self._deserializer)
         if info:
@@ -122,7 +126,7 @@ class Job:
         Information about the job result if available, does not wait for the result. Does not raise an exception
         even if the job raised one.
         """
-        v = await self._redis.get(result_key_prefix + self.job_id, encoding=None)
+        v = await self._redis.get(result_key_prefix + self.job_id)
         if v:
             return deserialize_result(v, deserializer=self._deserializer)
         else:
@@ -151,7 +155,7 @@ class Job:
         :param poll_delay: how often to poll redis for the job result
         :return: True if the job aborted properly, False otherwise
         """
-        await self._redis.zadd(abort_jobs_ss, timestamp_ms(), self.job_id)
+        await self._redis.zadd(abort_jobs_ss, {self.job_id: timestamp_ms()})
         try:
             await self.result(timeout=timeout, poll_delay=poll_delay)
         except asyncio.CancelledError:
@@ -179,7 +183,7 @@ def serialize_job(
     enqueue_time_ms: int,
     *,
     serializer: Optional[Serializer] = None,
-) -> Optional[bytes]:
+) -> bytes:
     data = {'t': job_try, 'f': function_name, 'a': args, 'k': kwargs, 'et': enqueue_time_ms}
     if serializer is None:
         serializer = pickle.dumps

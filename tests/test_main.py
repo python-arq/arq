@@ -213,7 +213,7 @@ async def test_custom_try2(arq_redis: ArqRedis, worker):
     assert r == 4
 
 
-async def test_cant_pickle_arg(arq_redis: ArqRedis, worker):
+async def test_cant_pickle_arg(arq_redis: ArqRedis):
     class Foobar:
         def __getstate__(self):
             raise TypeError("this doesn't pickle")

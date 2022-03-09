@@ -164,7 +164,7 @@ async def test_deserialize_job_raw():
 
 async def test_get_job_result(arq_redis: ArqRedis):
     with pytest.raises(KeyError, match='job "foobar" not found'):
-        await arq_redis._get_job_result('foobar')
+        await arq_redis._get_job_result(b'foobar')
 
 
 async def test_result_pole_delay_dep(arq_redis: ArqRedis):
