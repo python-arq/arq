@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 from datetime import datetime, timedelta
@@ -5,6 +6,7 @@ from random import random
 
 import pytest
 
+import arq
 from arq import Worker
 from arq.constants import in_progress_key_prefix
 from arq.cron import cron, next_cron
@@ -142,3 +144,81 @@ async def test_repr():
 async def test_str_function():
     cj = cron('asyncio.sleep', hour=1, run_at_startup=True)
     assert str(cj).startswith('<CronJob name=cron:asyncio.sleep coroutine=<function sleep at')
+
+
+async def test_cron_cancelled(worker, mocker):
+    mocker.patch.object(arq.worker, 'keep_cronjob_progress', 0.1)
+
+    async def try_sleep(ctx):
+        if ctx['job_try'] == 1:
+            raise asyncio.CancelledError
+
+    worker: Worker = worker(
+        cron_jobs=[cron(try_sleep, microsecond=20, run_at_startup=True, max_tries=2)],
+        poll_delay=0.01,
+    )
+    await worker.main()
+    assert worker.jobs_complete == 1
+    assert worker.jobs_retried == 1
+    assert worker.jobs_failed == 0
+
+
+async def barfoo(ctx):
+    """In order to test cron job singleton, we must have two different functions when bursting"""
+    return 24
+
+
+async def test_job_custom_id(worker):
+    """
+    Test that two different functions with the same job_id, will only be executed once.
+    """
+    worker: Worker = worker(
+        cron_jobs=[
+            cron(barfoo, minute=10, run_at_startup=True, job_id='singleton_job'),
+            cron(foobar, minute=20, run_at_startup=True, job_id='singleton_job'),
+        ],
+        poll_delay=0.01,
+    )
+    await worker.main()
+
+    assert worker.jobs_complete == 1
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+
+
+async def test_job_same_function_different_id(worker):
+    """
+    Set a different ID on the same function job, which runs at startup and ensure both functions are run.
+    See next test for behaviour without setting job_id.
+    """
+    worker: Worker = worker(
+        cron_jobs=[
+            cron(foobar, minute=10, run_at_startup=True, job_id='custom_id'),
+            cron(foobar, minute=20, run_at_startup=True, job_id='custom_id2'),
+        ],
+        poll_delay=0.01,
+    )
+    await worker.main()
+
+    assert worker.jobs_complete == 2
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+
+
+async def test_run_at_startup_no_id_only_runs_once(worker):
+    """
+    Without a custom job ID, and `run_at_startup=True` on two jobs, it will only execute once, since the job_id
+    will be equal, and should only run once.
+    """
+    worker: Worker = worker(
+        cron_jobs=[
+            cron(foobar, minute=10, run_at_startup=True),
+            cron(foobar, minute=20, run_at_startup=True),
+        ],
+        poll_delay=0.01,
+    )
+    await worker.main()
+
+    assert worker.jobs_complete == 1
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0

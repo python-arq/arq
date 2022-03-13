@@ -1,54 +1,61 @@
 import asyncio
 import functools
 import os
+import sys
 
 import msgpack
 import pytest
-from aioredis import create_redis_pool
 from redislite import Redis
 
 from arq.connections import ArqRedis, create_pool
 from arq.worker import Worker
 
 
-@pytest.yield_fixture
+@pytest.fixture(name='loop')
+def _fix_loop(event_loop):
+    return event_loop
+
+
+@pytest.fixture
 async def arq_redis(loop):
-    redis_ = await create_redis_pool(
-        ('localhost', 6379), encoding='utf8', loop=loop, commands_factory=ArqRedis, minsize=5
+    redis_ = ArqRedis(
+        host='localhost',
+        port=6379,
+        encoding='utf-8',
     )
+
     await redis_.flushall()
+
     yield redis_
-    redis_.close()
-    await redis_.wait_closed()
+
+    await redis_.close(close_connection_pool=True)
 
 
-@pytest.yield_fixture
-async def arq_redis_msgpack(loop):
-    redis_ = await create_redis_pool(
-        ('localhost', 6379),
-        encoding='utf8',
-        loop=loop,
-        commands_factory=functools.partial(
-            ArqRedis, job_serializer=msgpack.packb, job_deserializer=functools.partial(msgpack.unpackb, raw=False)
-        ),
-    )
-    await redis_.flushall()
-    yield redis_
-    redis_.close()
-    await redis_.wait_closed()
-
-
-@pytest.yield_fixture
-def socket_address():
-    redis_db_path = '/tmp/redis.db'
-    if os.path.exists(redis_db_path):
-        os.unlink(redis_db_path)
-    rdb = Redis(redis_db_path)
+@pytest.fixture
+async def unix_socket_path(loop):
+    db_pth = '/tmp/redis_test.db'
+    rdb = Redis(db_pth)
+    if os.path.exists(db_pth):
+        os.remove(db_pth)
     yield rdb.socket_file
     rdb.close()
 
 
-@pytest.yield_fixture
+@pytest.fixture
+async def arq_redis_msgpack(loop):
+    redis_ = ArqRedis(
+        host='localhost',
+        port=6379,
+        encoding='utf-8',
+        job_serializer=msgpack.packb,
+        job_deserializer=functools.partial(msgpack.unpackb, raw=False),
+    )
+    await redis_.flushall()
+    yield redis_
+    await redis_.close(close_connection_pool=True)
+
+
+@pytest.fixture
 async def worker(arq_redis):
     worker_: Worker = None
 
@@ -76,7 +83,23 @@ async def fix_create_pool(loop):
 
     yield create_pool_
 
-    for p in pools:
-        p.close()
+    await asyncio.gather(*[p.close(close_connection_pool=True) for p in pools])
 
-    await asyncio.gather(*[p.wait_closed() for p in pools])
+
+@pytest.fixture(name='cancel_remaining_task')
+def fix_cancel_remaining_task(loop):
+    async def cancel_remaining_task():
+        tasks = asyncio.all_tasks(loop)
+        cancelled = []
+        for task in tasks:
+            # in repr works in 3.7 where get_coro() is not available
+            if 'cancel_remaining_task()' not in repr(task):
+                cancelled.append(task)
+                task.cancel()
+        if cancelled:
+            print(f'Cancelled {len(cancelled)} ongoing tasks', file=sys.stderr)
+            await asyncio.gather(*cancelled, return_exceptions=True)
+
+    yield
+
+    loop.run_until_complete(cancel_remaining_task())

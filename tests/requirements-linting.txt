@@ -1,8 +1,8 @@
-black==19.10b0
-flake8==3.7.9
-flake8-quotes==3
-isort==5.8.0
-mypy==0.812
-pycodestyle==2.5.0
-pyflakes==2.1.1
-twine==3.1.1
+black==21.12b0
+flake8==4.0.1
+flake8-quotes==3.3.1
+isort[colors]==5.10.1
+mypy==0.931
+pycodestyle==2.8.0
+pyflakes==2.4.0
+types_redis==4.1.17

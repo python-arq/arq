@@ -31,10 +31,10 @@ setup(
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3 :: Only',
-        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
         'Topic :: Internet',
         'Topic :: Software Development :: Libraries :: Python Modules',
         'Topic :: System :: Clustering',
@@ -55,7 +55,7 @@ setup(
         arq=arq.cli:cli
     """,
     install_requires=[
-        'aioredis>=1.1.0,<2.0.0',
+        'redis @ git+https://github.com/lazToum/redis-py.git',
         'click>=6.7',
         'pydantic>=1',
         'dataclasses>=0.6;python_version == "3.6"',

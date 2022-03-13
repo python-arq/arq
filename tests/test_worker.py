@@ -8,9 +8,8 @@ from unittest.mock import MagicMock
 
 import msgpack
 import pytest
-from aioredis import create_redis_pool
 
-from arq.connections import ArqRedis
+from arq.connections import ArqRedis, RedisSettings
 from arq.constants import abort_jobs_ss, default_queue_name, health_check_key_suffix, job_key_prefix
 from arq.jobs import Job, JobStatus
 from arq.worker import (
@@ -34,7 +33,7 @@ async def fails(ctx):
     raise TypeError('my type error')
 
 
-def test_no_jobs(arq_redis: ArqRedis, loop):
+def test_no_jobs(arq_redis: ArqRedis, loop, mocker):
     class Settings:
         functions = [func(foobar, name='foobar')]
         burst = True
@@ -42,7 +41,7 @@ def test_no_jobs(arq_redis: ArqRedis, loop):
         queue_read_limit = 10
 
     loop.run_until_complete(arq_redis.enqueue_job('foobar'))
-    asyncio.set_event_loop(loop)
+    mocker.patch('asyncio.get_event_loop', lambda: loop)
     worker = run_worker(Settings)
     assert worker.jobs_complete == 1
     assert str(worker) == '<Worker j_complete=1 j_failed=0 j_retried=0 j_ongoing=0>'
@@ -69,12 +68,12 @@ async def test_set_health_check_key(arq_redis: ArqRedis, worker):
     await arq_redis.enqueue_job('foobar', _job_id='testing')
     worker: Worker = worker(functions=[func(foobar, keep_result=0)], health_check_key='arq:test:health-check')
     await worker.main()
-    assert sorted(await arq_redis.keys('*')) == ['arq:test:health-check']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:test:health-check']
 
 
-async def test_handle_sig(caplog):
+async def test_handle_sig(caplog, arq_redis: ArqRedis):
     caplog.set_level(logging.INFO)
-    worker = Worker([foobar])
+    worker = Worker([foobar], redis_pool=arq_redis)
     worker.main_task = MagicMock()
     worker.tasks = {0: MagicMock(done=MagicMock(return_value=True)), 1: MagicMock(done=MagicMock(return_value=False))}
 
@@ -415,45 +414,41 @@ async def test_log_health_check(arq_redis: ArqRedis, worker, caplog):
     assert 'recording health' in caplog.text
 
 
-async def test_remain_keys(arq_redis: ArqRedis, worker):
-    redis2 = await create_redis_pool(('localhost', 6379), encoding='utf8')
-    try:
-        await arq_redis.enqueue_job('foobar', _job_id='testing')
-        assert sorted(await redis2.keys('*')) == ['arq:job:testing', 'arq:queue']
-        worker: Worker = worker(functions=[foobar])
-        await worker.main()
-        assert sorted(await redis2.keys('*')) == ['arq:queue:health-check', 'arq:result:testing']
-        await worker.close()
-        assert sorted(await redis2.keys('*')) == ['arq:result:testing']
-    finally:
-        redis2.close()
-        await redis2.wait_closed()
+async def test_remain_keys(arq_redis: ArqRedis, worker, create_pool):
+    redis2 = await create_pool(RedisSettings())
+    await arq_redis.enqueue_job('foobar', _job_id='testing')
+    assert sorted(await redis2.keys('*')) == [b'arq:job:testing', b'arq:queue']
+    worker: Worker = worker(functions=[foobar])
+    await worker.main()
+    assert sorted(await redis2.keys('*')) == [b'arq:queue:health-check', b'arq:result:testing']
+    await worker.close()
+    assert sorted(await redis2.keys('*')) == [b'arq:result:testing']
 
 
 async def test_remain_keys_no_results(arq_redis: ArqRedis, worker):
     await arq_redis.enqueue_job('foobar', _job_id='testing')
-    assert sorted(await arq_redis.keys('*')) == ['arq:job:testing', 'arq:queue']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:job:testing', b'arq:queue']
     worker: Worker = worker(functions=[func(foobar, keep_result=0)])
     await worker.main()
-    assert sorted(await arq_redis.keys('*')) == ['arq:queue:health-check']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:queue:health-check']
 
 
 async def test_remain_keys_keep_results_forever_in_function(arq_redis: ArqRedis, worker):
     await arq_redis.enqueue_job('foobar', _job_id='testing')
-    assert sorted(await arq_redis.keys('*')) == ['arq:job:testing', 'arq:queue']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:job:testing', b'arq:queue']
     worker: Worker = worker(functions=[func(foobar, keep_result_forever=True)])
     await worker.main()
-    assert sorted(await arq_redis.keys('*')) == ['arq:queue:health-check', 'arq:result:testing']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:queue:health-check', b'arq:result:testing']
     ttl_result = await arq_redis.ttl('arq:result:testing')
     assert ttl_result == -1
 
 
 async def test_remain_keys_keep_results_forever(arq_redis: ArqRedis, worker):
     await arq_redis.enqueue_job('foobar', _job_id='testing')
-    assert sorted(await arq_redis.keys('*')) == ['arq:job:testing', 'arq:queue']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:job:testing', b'arq:queue']
     worker: Worker = worker(functions=[func(foobar)], keep_result_forever=True)
     await worker.main()
-    assert sorted(await arq_redis.keys('*')) == ['arq:queue:health-check', 'arq:result:testing']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:queue:health-check', b'arq:result:testing']
     ttl_result = await arq_redis.ttl('arq:result:testing')
     assert ttl_result == -1
 
@@ -479,6 +474,16 @@ async def test_run_check_error2(arq_redis: ArqRedis, worker):
     with pytest.raises(FailedJobs, match='2 jobs failed:\n') as exc_info:
         await worker.run_check()
     assert len(exc_info.value.job_results) == 2
+
+
+async def test_keep_result_ms(arq_redis: ArqRedis, worker):
+    async def return_something(ctx):
+        return 1
+
+    await arq_redis.enqueue_job('return_something')
+    worker: Worker = worker(functions=[func(return_something, name='return_something')], keep_result=3600.15)
+    await worker.main()
+    assert (worker.jobs_complete, worker.jobs_failed, worker.jobs_retried) == (1, 0, 0)
 
 
 async def test_return_exception(arq_redis: ArqRedis, worker):
@@ -507,7 +512,7 @@ async def test_error_success(arq_redis: ArqRedis, worker):
 async def test_many_jobs_expire(arq_redis: ArqRedis, worker, caplog):
     caplog.set_level(logging.INFO)
     await arq_redis.enqueue_job('foobar')
-    await asyncio.gather(*[arq_redis.zadd(default_queue_name, 1, f'testing-{i}') for i in range(100)])
+    await asyncio.gather(*[arq_redis.zadd(default_queue_name, {f'testing-{i}': 1}) for i in range(100)])
     worker: Worker = worker(functions=[foobar])
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 0
@@ -727,16 +732,22 @@ async def test_non_burst(arq_redis: ArqRedis, worker, caplog, loop):
 
 
 async def test_multi_exec(arq_redis: ArqRedis, worker, caplog):
+    c = 0
+
     async def foo(ctx, v):
+        nonlocal c
+        c += 1
         return v + 1
 
     caplog.set_level(logging.DEBUG, logger='arq.worker')
     await arq_redis.enqueue_job('foo', 1, _job_id='testing')
     worker: Worker = worker(functions=[func(foo, name='foo')])
-    await asyncio.gather(*[worker.start_jobs(['testing']) for _ in range(5)])
+    await asyncio.gather(*[worker.start_jobs([b'testing']) for _ in range(5)])
     # debug(caplog.text)
-    assert 'multi-exec error, job testing already started elsewhere' in caplog.text
-    assert 'WatchVariableError' not in caplog.text
+    await worker.main()
+    assert c == 1
+    # assert 'multi-exec error, job testing already started elsewhere' in caplog.text
+    # assert 'WatchVariableError' not in caplog.text
 
 
 async def test_abort_job(arq_redis: ArqRedis, worker, caplog, loop):
@@ -748,7 +759,7 @@ async def test_abort_job(arq_redis: ArqRedis, worker, caplog, loop):
         assert await job.abort() is True
 
     caplog.set_level(logging.INFO)
-    await arq_redis.zadd(abort_jobs_ss, int(1e9), b'foobar')
+    await arq_redis.zadd(abort_jobs_ss, {b'foobar': int(1e9)})
     job = await arq_redis.enqueue_job('longfunc', _job_id='testing')
 
     worker: Worker = worker(functions=[func(longfunc, name='longfunc')], allow_abort_jobs=True, poll_delay=0.1)
@@ -756,6 +767,7 @@ async def test_abort_job(arq_redis: ArqRedis, worker, caplog, loop):
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
     await asyncio.gather(wait_and_abort(job), worker.main())
+    await worker.main()
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 1
     assert worker.jobs_retried == 0
@@ -835,3 +847,36 @@ async def test_job_timeout(arq_redis: ArqRedis, worker, caplog):
     assert worker.jobs_retried == 0
     log = re.sub(r'\d+.\d\ds', 'X.XXs', '\n'.join(r.message for r in caplog.records))
     assert 'X.XXs ! testing:longfunc failed, TimeoutError:' in log
+
+
+async def test_on_job(arq_redis: ArqRedis, worker):
+    result = {'called': 0}
+
+    async def on_start(ctx):
+        assert ctx['job_id'] == 'testing'
+        result['called'] += 1
+
+    async def on_end(ctx):
+        assert ctx['job_id'] == 'testing'
+        result['called'] += 1
+
+    async def test(ctx):
+        return
+
+    await arq_redis.enqueue_job('func', _job_id='testing')
+    worker: Worker = worker(
+        functions=[func(test, name='func')],
+        on_job_start=on_start,
+        on_job_end=on_end,
+        job_timeout=0.2,
+        poll_delay=0.1,
+    )
+    assert worker.jobs_complete == 0
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+    assert result['called'] == 0
+    await worker.main()
+    assert worker.jobs_complete == 1
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+    assert result['called'] == 2

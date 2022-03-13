@@ -3,6 +3,32 @@
 History
 -------
 
+v0.23a1 (2022-03-09)
+....................
+* Fix jobs timeout by @kiriusm2 in #248
+* Update ``index.rst`` by @Kludex in #266
+* Improve some docs wording by @johtso in #285
+* fix error when cron jobs were terminanted by @tobymao in #273
+* add ``on_job_start`` and ``on_job_end`` hooks by @tobymao in #274
+* Update argument docstring definition by @sondrelg in #278
+* fix tests and uprev test dependencies, #288
+* Add link to WorkerSettings in documentation by @JonasKs in #279
+* Allow setting ``job_id`` on cron jobs by @JonasKs in #293
+* Fix docs typo by @johtso in #296
+* support aioredis v2 by @Yolley in #259
+* support python 3.10, #298
+
+v0.22 (2021-09-02)
+..................
+* fix package importing in example, #261, thanks @cdpath
+* restrict ``aioredis`` to ``<2.0.0`` (soon we'll support ``aioredis>=2.0.0``), #258, thanks @PaxPrz
+* auto setting version on release, 759fe03
+
+v0.21 (2021-07-06)
+..................
+* CI improvements #243
+* fix ``log_redis_info`` #255
+
 v0.20 (2021-04-26)
 ..................
 

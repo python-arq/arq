@@ -2,7 +2,7 @@ import asyncio
 import pickle
 
 import pytest
-from pytest_toolbox.comparison import CloseToNow
+from dirty_equals import IsNow
 
 from arq import Worker, func
 from arq.connections import ArqRedis, RedisSettings, create_pool
@@ -49,11 +49,11 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker, queue_name=default_queue
         function='foobar',
         args=(1, 2),
         kwargs={'c': 3},
-        enqueue_time=CloseToNow(),
+        enqueue_time=IsNow(tz='utc'),
         success=True,
         result=42,
-        start_time=CloseToNow(),
-        finish_time=CloseToNow(),
+        start_time=IsNow(tz='utc'),
+        finish_time=IsNow(tz='utc'),
         score=None,
         queue_name=expected_queue_name,
     )
@@ -64,11 +64,11 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker, queue_name=default_queue
             args=(1, 2),
             kwargs={'c': 3},
             job_try=1,
-            enqueue_time=CloseToNow(),
+            enqueue_time=IsNow(tz='utc'),
             success=True,
             result=42,
-            start_time=CloseToNow(),
-            finish_time=CloseToNow(),
+            start_time=IsNow(tz='utc'),
+            finish_time=IsNow(tz='utc'),
             score=None,
             queue_name=expected_queue_name,
             job_id=j.job_id,
@@ -78,17 +78,6 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker, queue_name=default_queue
 
 async def test_enqueue_job_alt_queue(arq_redis: ArqRedis, worker):
     await test_enqueue_job(arq_redis, worker, queue_name='custom_queue')
-
-
-async def test_enqueue_job_with_unix_socket(worker, socket_address):
-    """Test initializing arq_redis using a unix socket connection, and the worker using it."""
-    settings = RedisSettings(socket_address=socket_address)
-    arq_redis = await create_pool(settings, default_queue_name='socket_queue')
-    await test_enqueue_job(
-        arq_redis,
-        lambda functions, **_: worker(functions=functions, arq_redis=arq_redis, queue_name=None),
-        queue_name=None,
-    )
 
 
 async def test_enqueue_job_nondefault_queue(worker):
@@ -175,7 +164,7 @@ async def test_deserialize_job_raw():
 
 async def test_get_job_result(arq_redis: ArqRedis):
     with pytest.raises(KeyError, match='job "foobar" not found'):
-        await arq_redis._get_job_result('foobar')
+        await arq_redis._get_job_result(b'foobar')
 
 
 async def test_result_pole_delay_dep(arq_redis: ArqRedis):

@@ -9,7 +9,7 @@ from time import time
 
 import msgpack
 import pytest
-from pytest_toolbox.comparison import AnyInt, CloseToNow
+from dirty_equals import IsInt, IsNow
 
 from arq.connections import ArqRedis
 from arq.constants import default_queue_name
@@ -130,7 +130,7 @@ async def test_job_info(arq_redis: ArqRedis):
     t_before = time()
     j = await arq_redis.enqueue_job('foobar', 123, a=456)
     info = await j.info()
-    assert info.enqueue_time == CloseToNow()
+    assert info.enqueue_time == IsNow(tz='utc')
     assert info.job_try is None
     assert info.function == 'foobar'
     assert info.args == (123,)
@@ -172,9 +172,10 @@ async def test_mung(arq_redis: ArqRedis, worker):
 
     tasks = []
     for i in range(50):
-        tasks.extend(
-            [arq_redis.enqueue_job('count', i, _job_id=f'v-{i}'), arq_redis.enqueue_job('count', i, _job_id=f'v-{i}')]
-        )
+        tasks += [
+            arq_redis.enqueue_job('count', i, _job_id=f'v-{i}'),
+            arq_redis.enqueue_job('count', i, _job_id=f'v-{i}'),
+        ]
     shuffle(tasks)
     await asyncio.gather(*tasks)
 
@@ -212,7 +213,7 @@ async def test_custom_try2(arq_redis: ArqRedis, worker):
     assert r == 4
 
 
-async def test_cant_pickle_arg(arq_redis: ArqRedis, worker):
+async def test_cant_pickle_arg(arq_redis: ArqRedis):
     class Foobar:
         def __getstate__(self):
             raise TypeError("this doesn't pickle")
@@ -249,24 +250,24 @@ async def test_get_jobs(arq_redis: ArqRedis):
             'args': (),
             'kwargs': {'a': 1, 'b': 2, 'c': 3},
             'job_try': None,
-            'enqueue_time': CloseToNow(),
-            'score': AnyInt(),
+            'enqueue_time': IsNow(tz='utc'),
+            'score': IsInt(),
         },
         {
             'function': 'second',
             'args': (4,),
             'kwargs': {'b': 5, 'c': 6},
             'job_try': None,
-            'enqueue_time': CloseToNow(),
-            'score': AnyInt(),
+            'enqueue_time': IsNow(tz='utc'),
+            'score': IsInt(),
         },
         {
             'function': 'third',
             'args': (7,),
             'kwargs': {'b': 8},
             'job_try': None,
-            'enqueue_time': CloseToNow(),
-            'score': AnyInt(),
+            'enqueue_time': IsNow(tz='utc'),
+            'score': IsInt(),
         },
     ]
     assert jobs[0].score < jobs[1].score < jobs[2].score

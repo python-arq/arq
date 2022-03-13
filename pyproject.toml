@@ -1,0 +1,60 @@
+[tool.pytest.ini_options]
+testpaths = 'tests'
+filterwarnings = ['error']
+asyncio_mode = 'auto'
+timeout = 10
+
+[tool.coverage.run]
+source = ['src']
+branch = true
+
+[tool.coverage.report]
+precision = 2
+exclude_lines = [
+    'pragma: no cover',
+    'raise NotImplementedError',
+    'raise NotImplemented',
+    'if TYPE_CHECKING:',
+    '@overload',
+]
+
+[tool.black]
+color = true
+line-length = 120
+target-version = ['py39']
+skip-string-normalization = true
+
+[tool.isort]
+line_length = 120
+known_third_party = 'foxglove'
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+combine_as_imports = true
+color_output = true
+
+[tool.mypy]
+show_error_codes = true
+follow_imports = 'silent'
+strict_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_any_generics = true
+check_untyped_defs = true
+no_implicit_reexport = true
+warn_unused_configs = true
+disallow_subclassing_any = true
+disallow_incomplete_defs = true
+disallow_untyped_decorators = true
+disallow_untyped_calls = true
+
+# for strict mypy: (this is the tricky one :-))
+disallow_untyped_defs = true
+
+# remaining arguments from `mypy --strict` which cause errors
+#no_implicit_optional = true
+#warn_return_any = true
+
+[[tool.mypy.overrides]]
+module = ['redis.asyncio.*',  'watchgod']
+ignore_missing_imports = true
