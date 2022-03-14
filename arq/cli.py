@@ -65,7 +65,7 @@ async def watch_reload(path: str, worker_settings: 'WorkerSettingsType') -> None
     try:
         worker.on_stop = worker_on_stop
         loop.create_task(worker.async_run())
-        async for _ in awatch(path, stop_event=stop_event):  # type: ignore
+        async for _ in awatch(path, stop_event=stop_event):
             print('\nfiles changed, reloading arq worker...')
             worker.handle_sig(Signals.SIGUSR1)
             await worker.close()
