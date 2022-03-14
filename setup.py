@@ -55,7 +55,7 @@ setup(
         arq=arq.cli:cli
     """,
     install_requires=[
-        'redis @ git+https://github.com/lazToum/redis-py.git',
+        'redis>=4.2.0rc3',
         'click>=6.7',
         'pydantic>=1',
         'dataclasses>=0.6;python_version == "3.6"',

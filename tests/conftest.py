@@ -34,9 +34,9 @@ async def arq_redis(loop):
 @pytest.fixture
 async def unix_socket_path(loop):
     db_pth = '/tmp/redis_test.db'
-    rdb = Redis(db_pth)
     if os.path.exists(db_pth):
         os.remove(db_pth)
+    rdb = Redis(db_pth)
     yield rdb.socket_file
     rdb.close()
 
