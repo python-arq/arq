@@ -34,6 +34,7 @@ setup(
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
         'Topic :: Internet',
         'Topic :: Software Development :: Libraries :: Python Modules',
         'Topic :: System :: Clustering',
@@ -54,7 +55,7 @@ setup(
         arq=arq.cli:cli
     """,
     install_requires=[
-        'aioredis>=1.1.0,<2.0.0',
+        'redis>=4.2.0rc2',
         'click>=6.7',
         'pydantic>=1',
         'dataclasses>=0.6;python_version == "3.6"',

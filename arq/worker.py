@@ -9,8 +9,8 @@ from signal import Signals
 from time import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union, cast
 
-from aioredis import MultiExecError
 from pydantic.utils import import_string
+from redis.exceptions import ResponseError, WatchError
 
 from arq.cron import CronJob
 from arq.jobs import Deserializer, JobResult, SerializationError, Serializer, deserialize_job_raw, serialize_result
@@ -337,7 +337,7 @@ class Worker:
         async with self.sem:  # don't bother with zrangebyscore until we have "space" to run the jobs
             now = timestamp_ms()
             job_ids = await self.pool.zrangebyscore(
-                self.queue_name, offset=self._queue_read_offset, count=count, max=now
+                self.queue_name, min=float('-inf'), start=self._queue_read_offset, num=count, max=now
             )
 
         await self.start_jobs(job_ids)
@@ -357,14 +357,14 @@ class Worker:
         """
         Go through job_ids in the abort_jobs_ss sorted set and cancel those tasks.
         """
-        with await self.pool as conn:
-            abort_job_ids, _ = await asyncio.gather(
-                conn.zrange(abort_jobs_ss),
-                conn.zremrangebyscore(abort_jobs_ss, min=timestamp_ms() + abort_job_max_age),
-            )
+        async with self.pool.pipeline(transaction=True) as pipe:
+            pipe.zrange(abort_jobs_ss, start=0, end=-1)
+            pipe.zremrangebyscore(abort_jobs_ss, min=timestamp_ms() + abort_job_max_age, max=float('inf'))
+            abort_job_ids, _ = await pipe.execute()
 
         aborted: Set[str] = set()
-        for job_id in abort_job_ids:
+        for job_id_bytes in abort_job_ids:
+            job_id = job_id_bytes.decode()
             try:
                 task = self.job_tasks[job_id]
             except KeyError:
@@ -377,36 +377,32 @@ class Worker:
             self.aborting_tasks.update(aborted)
             await self.pool.zrem(abort_jobs_ss, *aborted)
 
-    async def start_jobs(self, job_ids: List[str]) -> None:
+    async def start_jobs(self, job_ids: List[bytes]) -> None:
         """
         For each job id, get the job definition, check it's not running and start it in a task
         """
-        for job_id in job_ids:
+        for job_id_b in job_ids:
             await self.sem.acquire()
+            job_id = job_id_b.decode()
             in_progress_key = in_progress_key_prefix + job_id
-            with await self.pool as conn:
-                pipe = conn.pipeline()
-                pipe.unwatch()
-                pipe.watch(in_progress_key)
-                pipe.exists(in_progress_key)
-                pipe.zscore(self.queue_name, job_id)
-                _, _, ongoing_exists, score = await pipe.execute()
+            async with self.pool.pipeline(transaction=True) as pipe:
+                await pipe.watch(in_progress_key)
+                ongoing_exists = await pipe.exists(in_progress_key)
+                score = await pipe.zscore(self.queue_name, job_id)
                 if ongoing_exists or not score:
                     # job already started elsewhere, or already finished and removed from queue
                     self.sem.release()
                     logger.debug('job %s already running elsewhere', job_id)
                     continue
 
-                tr = conn.multi_exec()
-                tr.setex(in_progress_key, self.in_progress_timeout_s, b'1')
+                pipe.multi()
+                pipe.psetex(in_progress_key, int(self.in_progress_timeout_s * 1000), b'1')
                 try:
-                    await tr.execute()
-                except MultiExecError:
+                    await pipe.execute()
+                except (ResponseError, WatchError):
                     # job already started elsewhere since we got 'existing'
                     self.sem.release()
                     logger.debug('multi-exec error, job %s already started elsewhere', job_id)
-                    # https://github.com/samuelcolvin/arq/issues/131, avoid warnings in log
-                    await asyncio.gather(*tr._results, return_exceptions=True)
                 else:
                     t = self.loop.create_task(self.run_job(job_id, score))
                     t.add_done_callback(lambda _: self.sem.release())
@@ -414,16 +410,16 @@ class Worker:
 
     async def run_job(self, job_id: str, score: int) -> None:  # noqa: C901
         start_ms = timestamp_ms()
-        coros = (
-            self.pool.get(job_key_prefix + job_id, encoding=None),
-            self.pool.incr(retry_key_prefix + job_id),
-            self.pool.expire(retry_key_prefix + job_id, 88400),
-        )
-        if self.allow_abort_jobs:
-            abort_job, v, job_try, _ = await asyncio.gather(self.pool.zrem(abort_jobs_ss, job_id), *coros)
-        else:
-            v, job_try, _ = await asyncio.gather(*coros)
-            abort_job = False
+        async with self.pool.pipeline(transaction=True) as pipe:
+            pipe.get(job_key_prefix + job_id)
+            pipe.incr(retry_key_prefix + job_id)
+            pipe.expire(retry_key_prefix + job_id, 88400)
+            if self.allow_abort_jobs:
+                pipe.zrem(abort_jobs_ss, job_id)
+                v, job_try, _, abort_job = await pipe.execute()
+            else:
+                v, job_try, _ = await pipe.execute()
+                abort_job = False
 
         function_name, enqueue_time_ms = '<unknown>', 0
         args: Tuple[Any, ...] = ()
@@ -620,20 +616,18 @@ class Worker:
         incr_score: Optional[int],
         keep_in_progress: Optional[float],
     ) -> None:
-        with await self.pool as conn:
-            await conn.unwatch()
-            tr = conn.multi_exec()
+        async with self.pool.pipeline(transaction=True) as tr:
             delete_keys = []
             in_progress_key = in_progress_key_prefix + job_id
             if keep_in_progress is None:
                 delete_keys += [in_progress_key]
             else:
-                tr.expire(in_progress_key, keep_in_progress)
+                tr.pexpire(in_progress_key, to_ms(keep_in_progress))
 
             if finish:
                 if result_data:
-                    expire = 0 if keep_result_forever else result_timeout_s
-                    tr.set(result_key_prefix + job_id, result_data, expire=expire)
+                    expire = None if keep_result_forever else result_timeout_s
+                    tr.set(result_key_prefix + job_id, result_data, px=to_ms(expire))
                 delete_keys += [retry_key_prefix + job_id, job_key_prefix + job_id]
                 tr.zrem(abort_jobs_ss, job_id)
                 tr.zrem(self.queue_name, job_id)
@@ -644,9 +638,7 @@ class Worker:
             await tr.execute()
 
     async def finish_failed_job(self, job_id: str, result_data: Optional[bytes]) -> None:
-        with await self.pool as conn:
-            await conn.unwatch()
-            tr = conn.multi_exec()
+        async with self.pool.pipeline(transaction=True) as tr:
             tr.delete(
                 retry_key_prefix + job_id,
                 in_progress_key_prefix + job_id,
@@ -658,7 +650,7 @@ class Worker:
             keep_result = self.keep_result_forever or self.keep_result_s > 0
             if result_data is not None and keep_result:  # pragma: no branch
                 expire = 0 if self.keep_result_forever else self.keep_result_s
-                tr.set(result_key_prefix + job_id, result_data, expire=expire)
+                tr.set(result_key_prefix + job_id, result_data, px=to_ms(expire))
             await tr.execute()
 
     async def heart_beat(self) -> None:
@@ -711,7 +703,7 @@ class Worker:
             f'{datetime.now():%b-%d %H:%M:%S} j_complete={self.jobs_complete} j_failed={self.jobs_failed} '
             f'j_retried={self.jobs_retried} j_ongoing={pending_tasks} queued={queued}'
         )
-        await self.pool.setex(self.health_check_key, self.health_check_interval + 1, info.encode())
+        await self.pool.psetex(self.health_check_key, int((self.health_check_interval + 1) * 1000), info.encode())
         log_suffix = info[info.index('j_complete=') :]
         if self._last_health_check_log and log_suffix != self._last_health_check_log:
             logger.info('recording health: %s', info)
@@ -753,8 +745,7 @@ class Worker:
         await self.pool.delete(self.health_check_key)
         if self.on_shutdown:
             await self.on_shutdown(self.ctx)
-        self.pool.close()
-        await self.pool.wait_closed()
+        await self.pool.close(close_connection_pool=True)
         self._pool = None
 
     def __repr__(self) -> str:
@@ -795,8 +786,7 @@ async def async_check_health(
     else:
         logger.info('Health check successful: %s', data)
         r = 0
-    redis.close()
-    await redis.wait_closed()
+    await redis.close(close_connection_pool=True)
     return r
 
 
