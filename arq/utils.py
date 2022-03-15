@@ -1,18 +1,17 @@
 import asyncio
-import functools
 import logging
 import os
-
-try:
-    import pytz
-except ImportError:
-    pytz = None  # type: ignore
-
-from datetime import datetime, timedelta
+from functools import lru_cache
+from datetime import datetime, timedelta, timezone, tzinfo
 from time import time
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Optional, Sequence, Union, overload
 
 from .constants import timezone_keys
+
+try:
+    import pytz
+except ImportError:  # pragma: no cover
+    pytz = None  # type: ignore
 
 logger = logging.getLogger('arq.utils')
 
@@ -35,30 +34,30 @@ def to_unix_ms(dt: datetime) -> int:
     return as_int(dt.timestamp() * 1000)
 
 
+@lru_cache
+def get_tz() -> Optional[pytz.BaseTzInfo]:
+    if pytz:  # pragma: no branch
+        for timezone_key in timezone_keys:
+            tz_name = os.getenv(timezone_key)
+            if tz_name:
+                try:
+                    return pytz.timezone(tz_name)
+                except KeyError:
+                    logger.warning('unknown timezone: %r', tz_name)
+                    break
+
+    return None
+
+
 def ms_to_datetime(unix_ms: int) -> datetime:
     """
     convert milliseconds to datetime, use the timezone in os.environ
     """
-
-    @functools.lru_cache()
-    def get_tz() -> Union[pytz.BaseTzInfo, None]:
-        tz, tz_name = None, None
-        for timezone_key in timezone_keys:
-            tz_name = os.getenv(timezone_key)
-            if tz_name:
-                break
-
-        if tz_name and pytz:
-            try:
-                tz = pytz.timezone(tz_name)
-            except KeyError:
-                logger.warning('unknown timezone: %s', tz_name)
-                tz = pytz.utc
-        else:
-            tz = pytz.utc
-        return tz
-
-    return datetime.fromtimestamp(unix_ms / 1000, tz=get_tz())
+    dt = datetime.fromtimestamp(unix_ms / 1000, tz=timezone.utc)
+    tz = get_tz()
+    if tz:
+        dt = dt.astimezone(tz)
+    return dt
 
 
 @overload

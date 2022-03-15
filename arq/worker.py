@@ -158,7 +158,6 @@ class Worker:
     :param max_burst_jobs: the maximum number of jobs to process in burst mode (disabled with negative values)
     :param job_serializer: a function that serializes Python objects to bytes, defaults to pickle.dumps
     :param job_deserializer: a function that deserializes bytes into Python objects, defaults to pickle.loads
-    :param timezone: the timezone by ms_to_datetime to show the enqueue_time in context
     """
 
     def __init__(
