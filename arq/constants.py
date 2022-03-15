@@ -11,5 +11,5 @@ health_check_key_suffix = ':health-check'
 # this can be a long time since each cron job has an ID that is unique for the intended execution time
 keep_cronjob_progress = 60
 
-# used by `ms_to_datetime`
-timezone_keys = 'ARQ_TIMEZONE', 'arq_timezone', 'TIMEZONE', 'timezone'
+# used by `ms_to_datetime` to get the timezone
+timezone_env_vars = 'ARQ_TIMEZONE', 'arq_timezone', 'TIMEZONE', 'timezone'

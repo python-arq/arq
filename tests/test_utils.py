@@ -146,3 +146,12 @@ def test_ms_to_datetime_no_tz(env: SetEnv):
     env.set('ARQ_TIMEZONE', 'Europe/Berlin')
     dt = arq.utils.ms_to_datetime(1_647_345_420_000)
     assert dt.isoformat() == '2022-03-15T11:57:00+00:00'
+
+
+def test_ms_to_datetime_tz_invalid(env: SetEnv, caplog):
+    arq.utils.get_tz.cache_clear()
+    env.set('ARQ_TIMEZONE', 'foobar')
+    caplog.set_level(logging.WARNING)
+    dt = arq.utils.ms_to_datetime(1_647_345_420_000)
+    assert dt.isoformat() == '2022-03-15T11:57:00+00:00'
+    assert "unknown timezone: 'foobar'\n" in caplog.text

@@ -6,7 +6,7 @@ from functools import lru_cache
 from time import time
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Optional, Sequence, overload
 
-from .constants import timezone_keys
+from .constants import timezone_env_vars
 
 try:
     import pytz
@@ -37,14 +37,13 @@ def to_unix_ms(dt: datetime) -> int:
 @lru_cache()
 def get_tz() -> Optional[pytz.BaseTzInfo]:
     if pytz:  # pragma: no branch
-        for timezone_key in timezone_keys:
+        for timezone_key in timezone_env_vars:
             tz_name = os.getenv(timezone_key)
             if tz_name:
                 try:
                     return pytz.timezone(tz_name)
                 except KeyError:
                     logger.warning('unknown timezone: %r', tz_name)
-                    break
 
     return None
 
