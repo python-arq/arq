@@ -10,6 +10,8 @@ import arq.typing
 import arq.utils
 from arq.connections import RedisSettings, log_redis_info
 
+from .conftest import SetEnv
+
 
 def test_settings_changed():
     settings = RedisSettings(port=123)
@@ -119,3 +121,37 @@ def test_redis_settings_validation():
     s3 = Settings(redis_settings={'ssl': True})
     assert s3.redis_settings.host == 'localhost'
     assert s3.redis_settings.ssl is True
+
+
+def test_ms_to_datetime_tz(env: SetEnv):
+    arq.utils.get_tz.cache_clear()
+    env.set('ARQ_TIMEZONE', 'Asia/Shanghai')
+    env.set('TIMEZONE', 'Europe/Berlin')  # lower priority as per `timezone_keys`
+    dt = arq.utils.ms_to_datetime(1_647_345_420_000)  # 11.57 UTC
+    assert dt.isoformat() == '2022-03-15T19:57:00+08:00'
+    assert dt.tzinfo.zone == 'Asia/Shanghai'
+
+    # should have no effect due to caching
+    env.set('ARQ_TIMEZONE', 'Europe/Berlin')
+    dt = arq.utils.ms_to_datetime(1_647_345_420_000)
+    assert dt.isoformat() == '2022-03-15T19:57:00+08:00'
+
+
+def test_ms_to_datetime_no_tz(env: SetEnv):
+    arq.utils.get_tz.cache_clear()
+    dt = arq.utils.ms_to_datetime(1_647_345_420_000)  # 11.57 UTC
+    assert dt.isoformat() == '2022-03-15T11:57:00+00:00'
+
+    # should have no effect due to caching
+    env.set('ARQ_TIMEZONE', 'Europe/Berlin')
+    dt = arq.utils.ms_to_datetime(1_647_345_420_000)
+    assert dt.isoformat() == '2022-03-15T11:57:00+00:00'
+
+
+def test_ms_to_datetime_tz_invalid(env: SetEnv, caplog):
+    arq.utils.get_tz.cache_clear()
+    env.set('ARQ_TIMEZONE', 'foobar')
+    caplog.set_level(logging.WARNING)
+    dt = arq.utils.ms_to_datetime(1_647_345_420_000)
+    assert dt.isoformat() == '2022-03-15T11:57:00+00:00'
+    assert "unknown timezone: 'foobar'\n" in caplog.text

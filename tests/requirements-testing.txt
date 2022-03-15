@@ -8,3 +8,4 @@ pytest-mock==3.7.0
 pytest-sugar==0.9.4
 pytest-timeout==2.1.0
 twine==3.7.1
+pytz==2021.3

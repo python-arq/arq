@@ -1,8 +1,17 @@
 import asyncio
 import logging
+import os
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from time import time
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Optional, Sequence, overload
+
+from .constants import timezone_env_vars
+
+try:
+    import pytz
+except ImportError:  # pragma: no cover
+    pytz = None  # type: ignore
 
 logger = logging.getLogger('arq.utils')
 
@@ -25,8 +34,29 @@ def to_unix_ms(dt: datetime) -> int:
     return as_int(dt.timestamp() * 1000)
 
 
+@lru_cache()
+def get_tz() -> Optional[pytz.BaseTzInfo]:
+    if pytz:  # pragma: no branch
+        for timezone_key in timezone_env_vars:
+            tz_name = os.getenv(timezone_key)
+            if tz_name:
+                try:
+                    return pytz.timezone(tz_name)
+                except KeyError:
+                    logger.warning('unknown timezone: %r', tz_name)
+
+    return None
+
+
 def ms_to_datetime(unix_ms: int) -> datetime:
-    return datetime.fromtimestamp(unix_ms / 1000, tz=timezone.utc)
+    """
+    convert milliseconds to datetime, use the timezone in os.environ
+    """
+    dt = datetime.fromtimestamp(unix_ms / 1000, tz=timezone.utc)
+    tz = get_tz()
+    if tz:
+        dt = dt.astimezone(tz)
+    return dt
 
 
 @overload

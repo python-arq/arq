@@ -5,4 +5,5 @@ isort[colors]==5.10.1
 mypy==0.931
 pycodestyle==2.8.0
 pyflakes==2.4.0
+types-pytz==2021.3.5
 types_redis==4.1.17

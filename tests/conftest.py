@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import os
 import sys
 
 import msgpack
@@ -91,3 +92,25 @@ def fix_cancel_remaining_task(loop):
     yield
 
     loop.run_until_complete(cancel_remaining_task())
+
+
+class SetEnv:
+    def __init__(self):
+        self.envars = set()
+
+    def set(self, name, value):
+        self.envars.add(name)
+        os.environ[name] = value
+
+    def clear(self):
+        for n in self.envars:
+            os.environ.pop(n)
+
+
+@pytest.fixture
+def env():
+    setenv = SetEnv()
+
+    yield setenv
+
+    setenv.clear()
