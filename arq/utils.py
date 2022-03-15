@@ -1,10 +1,10 @@
 import asyncio
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
-from datetime import datetime, timedelta, timezone, tzinfo
 from time import time
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Optional, Sequence, Union, overload
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Optional, Sequence, overload
 
 from .constants import timezone_keys
 

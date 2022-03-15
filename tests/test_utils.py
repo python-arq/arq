@@ -1,5 +1,4 @@
 import logging
-import os
 import re
 from datetime import timedelta
 
