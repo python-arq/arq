@@ -42,6 +42,7 @@ class RedisSettings:
     host: Union[str, List[Tuple[str, int]]] = 'localhost'
     port: int = 6379
     database: int = 0
+    username: Optional[str] = None
     password: Optional[str] = None
     ssl: Union[bool, None, SSLContext] = None
     conn_timeout: int = 1
@@ -59,6 +60,7 @@ class RedisSettings:
             host=conf.hostname or 'localhost',
             port=conf.port or 6379,
             ssl=conf.scheme == 'rediss',
+            username=conf.username,
             password=conf.password,
             database=int((conf.path or '0').strip('/')),
         )
@@ -225,7 +227,9 @@ async def create_pool(
         )
 
     try:
-        pool = pool_factory(db=settings.database, password=settings.password, encoding='utf8')
+        pool = pool_factory(
+            db=settings.database, username=settings.username, password=settings.password, encoding='utf8'
+        )
         pool.job_serializer = job_serializer
         pool.job_deserializer = job_deserializer
         pool.default_queue_name = default_queue_name

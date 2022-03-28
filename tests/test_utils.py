@@ -17,7 +17,7 @@ def test_settings_changed():
     settings = RedisSettings(port=123)
     assert settings.port == 123
     assert (
-        "RedisSettings(host='localhost', port=123, database=0, password=None, ssl=None, conn_timeout=1, "
+        "RedisSettings(host='localhost', port=123, database=0, username=None, password=None, ssl=None, conn_timeout=1, "
         "conn_retries=5, conn_retry_delay=1, sentinel=False, sentinel_master='mymaster')"
     ) == str(settings)
 
@@ -106,7 +106,6 @@ def test_redis_settings_validation():
 
     s1 = Settings(redis_settings='redis://foobar:123/4')
     assert s1.redis_settings.host == 'foobar'
-    assert s1.redis_settings.host == 'foobar'
     assert s1.redis_settings.port == 123
     assert s1.redis_settings.database == 4
     assert s1.redis_settings.ssl is False
@@ -121,6 +120,11 @@ def test_redis_settings_validation():
     s3 = Settings(redis_settings={'ssl': True})
     assert s3.redis_settings.host == 'localhost'
     assert s3.redis_settings.ssl is True
+
+    s4 = Settings(redis_settings='redis://user:pass@foobar')
+    assert s4.redis_settings.host == 'foobar'
+    assert s4.redis_settings.username == 'user'
+    assert s4.redis_settings.password == 'pass'
 
 
 def test_ms_to_datetime_tz(env: SetEnv):
