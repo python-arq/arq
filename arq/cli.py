@@ -1,5 +1,4 @@
 import asyncio
-import importlib
 import logging.config
 import os
 import sys
@@ -40,11 +39,7 @@ def cli(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: 
     sys.path.append(os.getcwd())
     worker_settings_ = cast('WorkerSettingsType', import_string(worker_settings))
     if custom_log_dict:
-        try:
-            config_path, config_dict = custom_log_dict.rsplit('.', maxsplit=1)
-            log_config = getattr(importlib.import_module(config_path), config_dict)
-        except (TypeError, AttributeError):
-            log_config = default_log_config(verbose)
+        log_config = import_string(custom_log_dict)
     else:
         log_config = default_log_config(verbose)
     logging.config.dictConfig(log_config)
