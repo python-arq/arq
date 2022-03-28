@@ -1,4 +1,5 @@
 docutils==0.14
+Jinja2==3.0.3
 Pygments==2.7.4
 Sphinx==2.0.1
 sphinxcontrib-websupport==1.1.0
