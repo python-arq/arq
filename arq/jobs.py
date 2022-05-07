@@ -156,13 +156,23 @@ class Job:
         :param poll_delay: how often to poll redis for the job result
         :return: True if the job aborted properly, False otherwise
         """
-        await self._redis.zadd(abort_jobs_ss, {self.job_id: timestamp_ms()})
-        try:
-            await self.result(timeout=timeout, poll_delay=poll_delay)
-        except asyncio.CancelledError:
-            return True
+        job_info = await self.info()
+        if job_info.score > timestamp_ms():
+            async with self._redis.pipeline(transaction=True) as tr:
+                tr.zrem(self._queue_name, self.job_id)
+                tr.zadd(self._queue_name, {self.job_id: 1})
+                tr.zadd(abort_jobs_ss, {self.job_id: timestamp_ms()})
+                await tr.execute()
+            raise asyncio.TimeoutError
+            
         else:
-            return False
+            await self._redis.zadd(abort_jobs_ss, {self.job_id: timestamp_ms()})
+            try:
+                await self.result(timeout=timeout, poll_delay=poll_delay)
+            except asyncio.CancelledError:
+                return True
+            else:
+                return False
 
     def __repr__(self) -> str:
         return f'<arq job {self.job_id}>'
