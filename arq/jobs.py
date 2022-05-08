@@ -157,7 +157,7 @@ class Job:
         :return: True if the job aborted properly, False otherwise
         """
         job_info = await self.info()
-        if job_info.score > timestamp_ms():
+        if job_info and job_info.score and job_info.score > timestamp_ms():
             async with self._redis.pipeline(transaction=True) as tr:
                 tr.zrem(self._queue_name, self.job_id)
                 tr.zadd(self._queue_name, {self.job_id: 1})
