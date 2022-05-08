@@ -4,12 +4,12 @@ import logging
 import re
 import signal
 import sys
-from unittest.mock import MagicMock
-from freezegun import freeze_time
 from datetime import datetime
+from unittest.mock import MagicMock
 
 import msgpack
 import pytest
+from freezegun import freeze_time
 
 from arq.connections import ArqRedis, RedisSettings
 from arq.constants import abort_jobs_ss, default_queue_name, expires_extra_ms, health_check_key_suffix, job_key_prefix
