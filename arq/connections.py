@@ -226,42 +226,34 @@ async def create_pool(
             ssl=settings.ssl,
         )
 
-    try:
-        pool = pool_factory(
-            db=settings.database, username=settings.username, password=settings.password, encoding='utf8'
-        )
-        pool.job_serializer = job_serializer
-        pool.job_deserializer = job_deserializer
-        pool.default_queue_name = default_queue_name
-        await pool.ping()
-
-    except (ConnectionError, OSError, RedisError, asyncio.TimeoutError) as e:
-        if retry < settings.conn_retries:
-            logger.warning(
-                'redis connection error %s:%s %s %s, %d retries remaining...',
-                settings.host,
-                settings.port,
-                e.__class__.__name__,
-                e,
-                settings.conn_retries - retry,
+    while True:
+        try:
+            pool = pool_factory(
+                db=settings.database, username=settings.username, password=settings.password, encoding='utf8'
             )
-            await asyncio.sleep(settings.conn_retry_delay)
-        else:
-            raise
-    else:
-        if retry > 0:
-            logger.info('redis connection successful')
-        return pool
+            pool.job_serializer = job_serializer
+            pool.job_deserializer = job_deserializer
+            pool.default_queue_name = default_queue_name
+            await pool.ping()
 
-    # recursively attempt to create the pool outside the except block to avoid
-    # "During handling of the above exception..." madness
-    return await create_pool(
-        settings,
-        retry=retry + 1,
-        job_serializer=job_serializer,
-        job_deserializer=job_deserializer,
-        default_queue_name=default_queue_name,
-    )
+        except (ConnectionError, OSError, RedisError, asyncio.TimeoutError) as e:
+            if retry < settings.conn_retries:
+                logger.warning(
+                    'redis connection error %s:%s %s %s, %d retries remaining...',
+                    settings.host,
+                    settings.port,
+                    e.__class__.__name__,
+                    e,
+                    settings.conn_retries - retry,
+                )
+                await asyncio.sleep(settings.conn_retry_delay)
+                retry = retry + 1
+            else:
+                raise
+        else:
+            if retry > 0:
+                logger.info('redis connection successful')
+            return pool
 
 
 async def log_redis_info(redis: Redis, log_func: Callable[[str], Any]) -> None:

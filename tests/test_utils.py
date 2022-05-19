@@ -29,6 +29,14 @@ async def test_redis_timeout(mocker, create_pool):
     assert arq.utils.asyncio.sleep.call_count == 5
 
 
+async def test_redis_timeout_and_retry_many_times(mocker, create_pool):
+    mocker.spy(arq.utils.asyncio, 'sleep')
+    retry_count = 2000
+    with pytest.raises(ConnectionError):
+        await create_pool(RedisSettings(port=0, conn_retry_delay=0, conn_retries=retry_count))
+    assert arq.utils.asyncio.sleep.call_count == retry_count
+
+
 @pytest.mark.skip(reason='this breaks many other tests as low level connections remain after failed connection')
 async def test_redis_sentinel_failure(create_pool, cancel_remaining_task, mocker):
     settings = RedisSettings()
