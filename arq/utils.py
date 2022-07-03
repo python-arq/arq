@@ -35,7 +35,7 @@ def to_unix_ms(dt: datetime) -> int:
 
 
 @lru_cache()
-def get_tz() -> Optional[pytz.BaseTzInfo if pytz else None]:
+def get_tz() -> Optional["pytz.BaseTzInfo"]:
     if pytz:  # pragma: no branch
         for timezone_key in timezone_env_vars:
             tz_name = os.getenv(timezone_key)
