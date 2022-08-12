@@ -9,7 +9,7 @@ def sync_task(t):
 async def the_task(ctx, t):
     blocking = functools.partial(sync_task, t)
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(ctx['pool'], blocking)
+    return await loop.run_in_executor(ctx['pool'], blocking)
 
 async def startup(ctx):
     ctx['pool'] = futures.ProcessPoolExecutor()
