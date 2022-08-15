@@ -17,8 +17,10 @@ def test_settings_changed():
     settings = RedisSettings(port=123)
     assert settings.port == 123
     assert (
-        "RedisSettings(host='localhost', port=123, database=0, username=None, password=None, ssl=None, conn_timeout=1, "
-        "conn_retries=5, conn_retry_delay=1, sentinel=False, sentinel_master='mymaster')"
+        "RedisSettings(host='localhost', port=123, database=0, username=None, password=None, ssl=False, "
+        "ssl_keyfile=None, ssl_certfile=None, ssl_cert_reqs='required', ssl_ca_certs=None, "
+        "ssl_ca_data=None, ssl_check_hostname=False, conn_timeout=1, conn_retries=5, conn_retry_delay=1, "
+        "sentinel=False, sentinel_master='mymaster')"
     ) == str(settings)
 
 
@@ -114,7 +116,7 @@ def test_redis_settings_validation():
     assert s2.redis_settings.host == 'testing.com'
     assert s2.redis_settings.port == 6379
 
-    with pytest.raises(ValueError, match='instance of SSLContext expected'):
+    with pytest.raises(ValueError, match='1 validation error for Settings'):
         Settings(redis_settings={'ssl': 123})
 
     s3 = Settings(redis_settings={'ssl': True})
