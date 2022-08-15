@@ -1,3 +1,4 @@
+click<8.1.0
 black==21.12b0
 flake8==4.0.1
 flake8-quotes==3.3.1
