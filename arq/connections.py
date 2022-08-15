@@ -32,7 +32,7 @@ class RedisSettings:
     database: int = 0
     username: Optional[str] = None
     password: Optional[str] = None
-    ssl: bool = (False,)
+    ssl: bool = False
     ssl_keyfile: Optional[str] = None
     ssl_certfile: Optional[str] = None
     ssl_cert_reqs: str = 'required'
