@@ -1,15 +1,13 @@
 import asyncio
 import functools
 import logging
-import ssl
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
-from typing import Any, Callable, Generator, List, Optional, Tuple, Union
+from typing import Any, Callable, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 from uuid import uuid4
 
-from pydantic.validators import make_arbitrary_type_validator
 from redis.asyncio import ConnectionPool, Redis
 from redis.asyncio.sentinel import Sentinel
 from redis.exceptions import RedisError, WatchError
@@ -19,16 +17,6 @@ from .jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('arq.connections')
-
-
-class SSLContext(ssl.SSLContext):
-    """
-    Required to avoid problems with
-    """
-
-    @classmethod
-    def __get_validators__(cls) -> Generator[Callable[..., Any], None, None]:
-        yield make_arbitrary_type_validator(ssl.SSLContext)
 
 
 @dataclass
@@ -44,7 +32,13 @@ class RedisSettings:
     database: int = 0
     username: Optional[str] = None
     password: Optional[str] = None
-    ssl: Union[bool, None, SSLContext] = None
+    ssl: bool = False
+    ssl_keyfile: Optional[str] = None
+    ssl_certfile: Optional[str] = None
+    ssl_cert_reqs: str = 'required'
+    ssl_ca_certs: Optional[str] = None
+    ssl_ca_data: Optional[str] = None
+    ssl_check_hostname: bool = False
     conn_timeout: int = 1
     conn_retries: int = 5
     conn_retry_delay: int = 1
@@ -215,7 +209,12 @@ async def create_pool(
     if settings.sentinel:
 
         def pool_factory(*args: Any, **kwargs: Any) -> ArqRedis:
-            client = Sentinel(*args, sentinels=settings.host, ssl=settings.ssl, **kwargs)
+            client = Sentinel(
+                *args,
+                sentinels=settings.host,
+                ssl=settings.ssl,
+                **kwargs,
+            )
             return client.master_for(settings.sentinel_master, redis_class=ArqRedis)
 
     else:
@@ -225,6 +224,12 @@ async def create_pool(
             port=settings.port,
             socket_connect_timeout=settings.conn_timeout,
             ssl=settings.ssl,
+            ssl_keyfile=settings.ssl_keyfile,
+            ssl_certfile=settings.ssl_certfile,
+            ssl_cert_reqs=settings.ssl_cert_reqs,
+            ssl_ca_certs=settings.ssl_ca_certs,
+            ssl_ca_data=settings.ssl_ca_data,
+            ssl_check_hostname=settings.ssl_check_hostname,
         )
 
     try:
