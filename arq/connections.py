@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
-from typing import Any, Callable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -67,7 +67,13 @@ class RedisSettings:
 expires_extra_ms = 86_400_000
 
 
-class ArqRedis(Redis):  # type: ignore[misc]
+if TYPE_CHECKING:
+    BaseRedis = Redis[bytes]
+else:
+    BaseRedis = Redis
+
+
+class ArqRedis(BaseRedis):
     """
     Thin subclass of ``redis.asyncio.Redis`` which adds :func:`arq.connections.enqueue_job`.
 
@@ -147,8 +153,8 @@ class ArqRedis(Redis):  # type: ignore[misc]
 
             job = serialize_job(function, args, kwargs, _job_try, enqueue_time_ms, serializer=self.job_serializer)
             pipe.multi()
-            pipe.psetex(job_key, expires_ms, job)
-            pipe.zadd(_queue_name, {job_id: score})
+            pipe.psetex(job_key, expires_ms, job)  # type: ignore[no-untyped-call]
+            pipe.zadd(_queue_name, {job_id: score})  # type: ignore[unused-coroutine]
             try:
                 await pipe.execute()
             except WatchError:
@@ -174,7 +180,9 @@ class ArqRedis(Redis):  # type: ignore[misc]
         return sorted(results, key=attrgetter('enqueue_time'))
 
     async def _get_job_def(self, job_id: bytes, score: int) -> JobDef:
-        v = await self.get(job_key_prefix + job_id.decode())
+        key = job_key_prefix + job_id.decode()
+        v = await self.get(key)
+        assert v is not None, f'job "{key}" not found'
         jd = deserialize_job(v, deserializer=self.job_deserializer)
         jd.score = score
         return jd
@@ -209,7 +217,7 @@ async def create_pool(
     if settings.sentinel:
 
         def pool_factory(*args: Any, **kwargs: Any) -> ArqRedis:
-            client = Sentinel(
+            client = Sentinel(  # type: ignore[misc]
                 *args,
                 sentinels=settings.host,
                 ssl=settings.ssl,
@@ -262,12 +270,12 @@ async def create_pool(
             return pool
 
 
-async def log_redis_info(redis: Redis, log_func: Callable[[str], Any]) -> None:
+async def log_redis_info(redis: 'Redis[bytes]', log_func: Callable[[str], Any]) -> None:
     async with redis.pipeline(transaction=True) as pipe:
-        pipe.info(section='Server')
-        pipe.info(section='Memory')
-        pipe.info(section='Clients')
-        pipe.dbsize()
+        pipe.info(section='Server')  # type: ignore[unused-coroutine]
+        pipe.info(section='Memory')  # type: ignore[unused-coroutine]
+        pipe.info(section='Clients')  # type: ignore[unused-coroutine]
+        pipe.dbsize()  # type: ignore[unused-coroutine]
         info_server, info_memory, info_clients, key_count = await pipe.execute()
 
     redis_version = info_server.get('redis_version', '?')

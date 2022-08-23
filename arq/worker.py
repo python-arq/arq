@@ -358,8 +358,10 @@ class Worker:
         Go through job_ids in the abort_jobs_ss sorted set and cancel those tasks.
         """
         async with self.pool.pipeline(transaction=True) as pipe:
-            pipe.zrange(abort_jobs_ss, start=0, end=-1)
-            pipe.zremrangebyscore(abort_jobs_ss, min=timestamp_ms() + abort_job_max_age, max=float('inf'))
+            pipe.zrange(abort_jobs_ss, start=0, end=-1)  # type: ignore[unused-coroutine]
+            pipe.zremrangebyscore(  # type: ignore[unused-coroutine]
+                abort_jobs_ss, min=timestamp_ms() + abort_job_max_age, max=float('inf')
+            )
             abort_job_ids, _ = await pipe.execute()
 
         aborted: Set[str] = set()
@@ -396,7 +398,9 @@ class Worker:
                     continue
 
                 pipe.multi()
-                pipe.psetex(in_progress_key, int(self.in_progress_timeout_s * 1000), b'1')
+                pipe.psetex(  # type: ignore[no-untyped-call]
+                    in_progress_key, int(self.in_progress_timeout_s * 1000), b'1'
+                )
                 try:
                     await pipe.execute()
                 except (ResponseError, WatchError):
@@ -404,18 +408,18 @@ class Worker:
                     self.sem.release()
                     logger.debug('multi-exec error, job %s already started elsewhere', job_id)
                 else:
-                    t = self.loop.create_task(self.run_job(job_id, score))
+                    t = self.loop.create_task(self.run_job(job_id, int(score)))
                     t.add_done_callback(lambda _: self.sem.release())
                     self.tasks[job_id] = t
 
     async def run_job(self, job_id: str, score: int) -> None:  # noqa: C901
         start_ms = timestamp_ms()
         async with self.pool.pipeline(transaction=True) as pipe:
-            pipe.get(job_key_prefix + job_id)
-            pipe.incr(retry_key_prefix + job_id)
-            pipe.expire(retry_key_prefix + job_id, 88400)
+            pipe.get(job_key_prefix + job_id)  # type: ignore[unused-coroutine]
+            pipe.incr(retry_key_prefix + job_id)  # type: ignore[unused-coroutine]
+            pipe.expire(retry_key_prefix + job_id, 88400)  # type: ignore[unused-coroutine]
             if self.allow_abort_jobs:
-                pipe.zrem(abort_jobs_ss, job_id)
+                pipe.zrem(abort_jobs_ss, job_id)  # type: ignore[unused-coroutine]
                 v, job_try, _, abort_job = await pipe.execute()
             else:
                 v, job_try, _ = await pipe.execute()
@@ -622,35 +626,35 @@ class Worker:
             if keep_in_progress is None:
                 delete_keys += [in_progress_key]
             else:
-                tr.pexpire(in_progress_key, to_ms(keep_in_progress))
+                tr.pexpire(in_progress_key, to_ms(keep_in_progress))  # type: ignore[unused-coroutine]
 
             if finish:
                 if result_data:
                     expire = None if keep_result_forever else result_timeout_s
-                    tr.set(result_key_prefix + job_id, result_data, px=to_ms(expire))
+                    tr.set(result_key_prefix + job_id, result_data, px=to_ms(expire))  # type: ignore[unused-coroutine]
                 delete_keys += [retry_key_prefix + job_id, job_key_prefix + job_id]
-                tr.zrem(abort_jobs_ss, job_id)
-                tr.zrem(self.queue_name, job_id)
+                tr.zrem(abort_jobs_ss, job_id)  # type: ignore[unused-coroutine]
+                tr.zrem(self.queue_name, job_id)  # type: ignore[unused-coroutine]
             elif incr_score:
-                tr.zincrby(self.queue_name, incr_score, job_id)
+                tr.zincrby(self.queue_name, incr_score, job_id)  # type: ignore[unused-coroutine]
             if delete_keys:
-                tr.delete(*delete_keys)
+                tr.delete(*delete_keys)  # type: ignore[unused-coroutine]
             await tr.execute()
 
     async def finish_failed_job(self, job_id: str, result_data: Optional[bytes]) -> None:
         async with self.pool.pipeline(transaction=True) as tr:
-            tr.delete(
+            tr.delete(  # type: ignore[unused-coroutine]
                 retry_key_prefix + job_id,
                 in_progress_key_prefix + job_id,
                 job_key_prefix + job_id,
             )
-            tr.zrem(abort_jobs_ss, job_id)
-            tr.zrem(self.queue_name, job_id)
+            tr.zrem(abort_jobs_ss, job_id)  # type: ignore[unused-coroutine]
+            tr.zrem(self.queue_name, job_id)  # type: ignore[unused-coroutine]
             # result_data would only be None if serializing the result fails
             keep_result = self.keep_result_forever or self.keep_result_s > 0
             if result_data is not None and keep_result:  # pragma: no branch
                 expire = 0 if self.keep_result_forever else self.keep_result_s
-                tr.set(result_key_prefix + job_id, result_data, px=to_ms(expire))
+                tr.set(result_key_prefix + job_id, result_data, px=to_ms(expire))  # type: ignore[unused-coroutine]
             await tr.execute()
 
     async def heart_beat(self) -> None:
@@ -703,7 +707,9 @@ class Worker:
             f'{datetime.now():%b-%d %H:%M:%S} j_complete={self.jobs_complete} j_failed={self.jobs_failed} '
             f'j_retried={self.jobs_retried} j_ongoing={pending_tasks} queued={queued}'
         )
-        await self.pool.psetex(self.health_check_key, int((self.health_check_interval + 1) * 1000), info.encode())
+        await self.pool.psetex(  # type: ignore[no-untyped-call]
+            self.health_check_key, int((self.health_check_interval + 1) * 1000), info.encode()
+        )
         log_suffix = info[info.index('j_complete=') :]
         if self._last_health_check_log and log_suffix != self._last_health_check_log:
             logger.info('recording health: %s', info)

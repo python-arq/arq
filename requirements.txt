@@ -1,3 +1,0 @@
--r docs/requirements.txt
--r tests/requirements-linting.txt
--r tests/requirements-testing.txt

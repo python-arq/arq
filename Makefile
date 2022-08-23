@@ -5,7 +5,7 @@ black = black arq tests
 .PHONY: install
 install:
 	pip install -U pip setuptools
-	pip install -r requirements.txt
+	pip install -r requirements/all.txt
 	pip install -e .[watch]
 
 .PHONY: format

@@ -56,13 +56,12 @@ setup(
         arq=arq.cli:cli
     """,
     install_requires=[
-        'redis>=4.2.0rc2',
-        'click>=6.7',
-        'pydantic>=1',
-        'dataclasses>=0.6;python_version == "3.6"',
-        'typing-extensions>=3.7;python_version < "3.8"'
+        'redis[hiredis]>=4.2.0,<4.3.0',
+        'click>=8.0,<9.0',
+        'pydantic>=1.9.2,<2',
+        'typing-extensions>=4.1.0,<5.0.0',
     ],
     extras_require={
-        'watch': ['watchgod>=0.4'],
+        'watch': ['watchgod>=0.8,<0.9'],
     }
 )
