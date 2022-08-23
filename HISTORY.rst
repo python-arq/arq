@@ -3,6 +3,11 @@
 History
 -------
 
+v0.23 (2022-08-23)
+..................
+
+No changes from **v0.23a1**.
+
 v0.23a1 (2022-03-09)
 ....................
 * Fix jobs timeout by @kiriusm2 in #248
