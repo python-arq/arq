@@ -174,3 +174,18 @@ def test_ms_to_datetime_tz_invalid(env: SetEnv, caplog):
     dt = arq.utils.ms_to_datetime(1_647_345_420_000)
     assert dt.isoformat() == '2022-03-15T11:57:00+00:00'
     assert "unknown timezone: 'foobar'\n" in caplog.text
+
+
+def test_import_string_valid():
+    sqrt = arq.utils.import_string('math.sqrt')
+    assert sqrt(4) == 2
+
+
+def test_import_string_invalid_short():
+    with pytest.raises(ImportError, match='"foobar" doesn\'t look like a module path'):
+        arq.utils.import_string('foobar')
+
+
+def test_import_string_invalid_missing():
+    with pytest.raises(ImportError, match='Module "math" does not define a "foobar" attribute'):
+        arq.utils.import_string('math.foobar')
