@@ -56,9 +56,9 @@ def cli(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: 
 
 async def watch_reload(path: str, worker_settings: 'WorkerSettingsType') -> None:
     try:
-        from watchgod import awatch
+        from watchfiles import awatch
     except ImportError as e:  # pragma: no cover
-        raise ImportError('watchgod not installed, use `pip install watchgod`') from e
+        raise ImportError('watchfiles not installed, use `pip install watchfiles`') from e
 
     loop = asyncio.get_event_loop()
     stop_event = asyncio.Event()

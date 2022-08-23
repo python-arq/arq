@@ -105,7 +105,7 @@ You can also watch for changes and reload the worker when the source changes::
 
     arq demo.WorkerSettings --watch path/to/src
 
-This requires watchgod_ to be installed (``pip install watchgod``).
+This requires watchfiles_ to be installed (``pip install watchfiles``).
 
 For details on the *arq* CLI::
 
@@ -268,5 +268,5 @@ Reference
 .. |license| image:: https://img.shields.io/pypi/l/arq.svg
    :target: https://github.com/samuelcolvin/arq
 .. _asyncio: https://docs.python.org/3/library/asyncio.html
-.. _watchgod: https://pypi.org/project/watchgod/
+.. _watchfiles: https://pypi.org/project/watchfiles/
 .. _rq: http://python-rq.org/

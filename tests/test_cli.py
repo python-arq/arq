@@ -40,9 +40,8 @@ async def mock_awatch():
     yield [1]
 
 
-@pytest.mark.filterwarnings('ignore::DeprecationWarning')
 def test_run_watch(mocker, cancel_remaining_task):
-    mocker.patch('watchgod.awatch', return_value=mock_awatch())
+    mocker.patch('watchfiles.awatch', return_value=mock_awatch())
     runner = CliRunner()
     result = runner.invoke(cli, ['tests.test_cli.WorkerSettings', '--watch', 'tests'])
     assert result.exit_code == 0

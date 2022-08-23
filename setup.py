@@ -62,6 +62,6 @@ setup(
         'typing-extensions>=4.1.0,<5.0.0',
     ],
     extras_require={
-        'watch': ['watchgod>=0.8,<0.9'],
+        'watch': ['watchfiles<=1'],
     }
 )
