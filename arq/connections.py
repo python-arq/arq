@@ -120,7 +120,8 @@ class ArqRedis(Redis):  # type: ignore[misc]
         :param _queue_name: queue of the job, can be used to create job in different queue
         :param _defer_until: datetime at which to run the job
         :param _defer_by: duration to wait before running the job
-        :param _expires: if the job still hasn't started after this duration, do not run it
+        :param _expires: do not start or retry a job after this duration;
+            defaults to 24 hours plus deferring time, if any
         :param _job_try: useful when re-enqueueing jobs within a job
         :param kwargs: any keyword arguments to pass to the function
         :return: :class:`arq.jobs.Job` instance or ``None`` if a job with this ID already exists
