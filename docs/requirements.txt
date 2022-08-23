@@ -1,6 +1,6 @@
 docutils==0.14
-jinja2==2.11.3
-markupsafe==1.1.1
+Jinja2==3.0.3
 Pygments==2.7.4
+markupsafe==1.1.1
 Sphinx==2.0.1
 sphinxcontrib-websupport==1.1.0
