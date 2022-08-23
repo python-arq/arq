@@ -21,8 +21,7 @@ jobs:
       with:
         python-version: 3.9
 
-    - run: pip install -r tests/requirements-linting.txt
-    - run: pip install .
+    - run: pip install -r tests/requirements-linting.txt requirements-setup.txt
 
     - run: make lint
 
@@ -39,7 +38,7 @@ jobs:
       with:
         python-version: 3.9
 
-    - run: pip install -r docs/requirements.txt
+    - run: pip install -r docs/requirements.txt requirements-setup.txt
     - run: pip install .
 
     - run: make docs
@@ -73,7 +72,7 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - run: pip install -r tests/requirements-testing.txt
+    - run: pip install -r tests/requirements-testing.txt requirements-setup.txt
     - run: pip install .[watch]
 
     - run: make test
