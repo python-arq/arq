@@ -6,10 +6,10 @@ from signal import Signals
 from typing import TYPE_CHECKING, cast
 
 import click
-from pydantic.utils import import_string
 
 from .logs import default_log_config
 from .version import VERSION
+from .utils import import_string
 from .worker import check_health, create_worker, run_worker
 
 if TYPE_CHECKING:
