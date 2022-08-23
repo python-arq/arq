@@ -42,7 +42,7 @@ setup(
         'Topic :: System :: Monitoring',
         'Topic :: System :: Systems Administration',
     ],
-    python_requires='>=3.6',
+    python_requires='>=3.7',
     author='Samuel Colvin',
     author_email='s@muelcolvin.com',
     url='https://github.com/samuelcolvin/arq',
