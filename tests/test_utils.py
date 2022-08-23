@@ -116,7 +116,7 @@ def test_redis_settings_validation():
     assert s2.redis_settings.host == 'testing.com'
     assert s2.redis_settings.port == 6379
 
-    with pytest.raises(ValueError, match='1 validation error for Settings'):
+    with pytest.raises(ValueError, match='1 validation error for Settings\nredis_settings -> ssl'):
         Settings(redis_settings={'ssl': 123})
 
     s3 = Settings(redis_settings={'ssl': True})
