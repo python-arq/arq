@@ -1,24 +1,23 @@
 import asyncio
-from aiohttp import ClientSession
+from httpx import AsyncClient
 from arq import create_pool, Retry
 from arq.connections import RedisSettings
 
 async def download_content(ctx, url):
-    session: ClientSession = ctx['session']
-    async with session.get(url) as response:
-        if response.status != 200:
-            # retry the job with increasing back-off
-            # delays will be 5s, 10s, 15s, 20s
-            # after max_tries (default 5) the job will permanently fail
-            raise Retry(defer=ctx['job_try'] * 5)
-        content = await response.text()
-    return len(content)
+    session: AsyncClient = ctx['session']
+    response = await session.get(url)
+    if response.status_code != 200:
+        # retry the job with increasing back-off
+        # delays will be 5s, 10s, 15s, 20s
+        # after max_tries (default 5) the job will permanently fail
+        raise Retry(defer=ctx['job_try'] * 5)
+    return len(response.text)
 
 async def startup(ctx):
-    ctx['session'] = ClientSession()
+    ctx['session'] = AsyncClient()
 
 async def shutdown(ctx):
-    await ctx['session'].close()
+    await ctx['session'].aclose()
 
 async def main():
     redis = await create_pool(RedisSettings())
