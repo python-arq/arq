@@ -73,7 +73,6 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - run: pip install -r requirements/testing.txt -r requirements/setup.txt
-    - run: pip install .[watch]
 
     - run: make test
 
