@@ -39,7 +39,6 @@ jobs:
         python-version: 3.9
 
     - run: pip install -r requirements/docs.txt -r requirements/setup.txt
-    - run: pip install .
 
     - run: make docs
 
@@ -73,7 +72,6 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - run: pip install -r requirements/testing.txt -r requirements/setup.txt
-    - run: pip install .[watch]
 
     - run: make test
 
