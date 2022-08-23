@@ -9,7 +9,6 @@ from signal import Signals
 from time import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union, cast
 
-from pydantic.utils import import_string
 from redis.exceptions import ResponseError, WatchError
 
 from arq.cron import CronJob
@@ -27,7 +26,17 @@ from .constants import (
     result_key_prefix,
     retry_key_prefix,
 )
-from .utils import args_to_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms, truncate
+from .utils import (
+    args_to_string,
+    import_string,
+    ms_to_datetime,
+    poll,
+    timestamp_ms,
+    to_ms,
+    to_seconds,
+    to_unix_ms,
+    truncate,
+)
 
 if TYPE_CHECKING:
     from .typing import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType  # noqa F401

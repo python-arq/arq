@@ -4,10 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional, Union
 
-from pydantic.utils import import_string
-
 from .typing import WEEKDAYS, OptionType, SecondsTimedelta, WeekdayOptionType, WorkerCoroutine
-from .utils import to_seconds
+from .utils import import_string, to_seconds
 
 
 @dataclass

@@ -1,7 +1,7 @@
-black==22.6.0
-flake8==5.0.4
-flake8-quotes==3.3.1
-isort[colors]==5.10.1
-mypy==0.971
-types-pytz==2022.2.1.0
-types_redis==4.2.8
+black>=22,<23
+flake8>=5,<6
+flake8-quotes>=3,<4
+isort[colors]>=5,<6
+mypy<1
+types-pytz
+types_redis>=4.2,<4.3
