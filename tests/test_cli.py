@@ -1,6 +1,7 @@
 import pytest
 from click.testing import CliRunner
 
+from arq import logs
 from arq.cli import cli
 
 
@@ -46,3 +47,32 @@ def test_run_watch(mocker, cancel_remaining_task):
     result = runner.invoke(cli, ['tests.test_cli.WorkerSettings', '--watch', 'tests'])
     assert result.exit_code == 0
     assert '1 files changes, reloading arq worker...'
+
+
+custom_log_dict = {
+    'version': 1,
+    'handlers': {'custom': {'level': 'ERROR', 'class': 'logging.StreamHandler', 'formatter': 'custom'}},
+    'formatters': {'custom': {'format': '%(asctime)s: %(message)s', 'datefmt': '%H:%M:%S'}},
+    'loggers': {'arq': {'handlers': ['custom'], 'level': 'ERROR'}},
+}
+
+
+@pytest.mark.parametrize(
+    'cli_argument,log_dict_to_use',
+    [
+        (None, logs.default_log_config(verbose=False)),
+        ('--custom-log-dict=tests.test_cli.custom_log_dict', custom_log_dict),
+    ],
+)
+def test_custom_log_dict(mocker, loop, cli_argument, log_dict_to_use):
+    mocker.patch('asyncio.get_event_loop', lambda: loop)
+    mock_dictconfig = mocker.MagicMock()
+    mocker.patch('logging.config.dictConfig', mock_dictconfig)
+    arq_arguments = ['tests.test_cli.WorkerSettings']
+    if cli_argument is not None:
+        arq_arguments.append(cli_argument)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, arq_arguments)
+    assert result.exit_code == 0
+    mock_dictconfig.assert_called_with(log_dict_to_use)
