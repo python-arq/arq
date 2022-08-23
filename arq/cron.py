@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Union
 
 from .typing import WEEKDAYS, OptionType, SecondsTimedelta, WeekdayOptionType, WorkerCoroutine
-from .utils import to_seconds, import_string
+from .utils import import_string, to_seconds
 
 
 @dataclass
