@@ -21,7 +21,7 @@ lint:
 
 .PHONY: test
 test:
-	pytest --cov=arq
+	coverage run -m pytest
 
 .PHONY: testcov
 testcov: test

@@ -1,4 +1,18 @@
-from .connections import ArqRedis, create_pool  # noqa F401
-from .cron import cron  # noqa F401
-from .version import VERSION  # noqa F401
-from .worker import Retry, Worker, check_health, func, run_worker  # noqa F401
+from .connections import ArqRedis, create_pool
+from .cron import cron
+from .version import VERSION
+from .worker import Retry, Worker, check_health, func, run_worker
+
+__version__ = VERSION
+
+__all__ = (
+    'ArqRedis',
+    'create_pool',
+    'cron',
+    'VERSION',
+    'Retry',
+    'Worker',
+    'check_health',
+    'func',
+    'run_worker',
+)
