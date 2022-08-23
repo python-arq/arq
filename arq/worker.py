@@ -359,7 +359,9 @@ class Worker:
         """
         async with self.pool.pipeline(transaction=True) as pipe:
             pipe.zrange(abort_jobs_ss, start=0, end=-1)  # type: ignore[unused-coroutine]
-            pipe.zremrangebyscore(abort_jobs_ss, min=timestamp_ms() + abort_job_max_age, max=float('inf')) # type: ignore[unused-coroutine]
+            pipe.zremrangebyscore(  # type: ignore[unused-coroutine]
+                abort_jobs_ss, min=timestamp_ms() + abort_job_max_age, max=float('inf')
+            )
             abort_job_ids, _ = await pipe.execute()
 
         aborted: Set[str] = set()
@@ -396,7 +398,9 @@ class Worker:
                     continue
 
                 pipe.multi()
-                pipe.psetex(in_progress_key, int(self.in_progress_timeout_s * 1000), b'1')  # type: ignore[no-untyped-call]
+                pipe.psetex(  # type: ignore[no-untyped-call]
+                    in_progress_key, int(self.in_progress_timeout_s * 1000), b'1'
+                )
                 try:
                     await pipe.execute()
                 except (ResponseError, WatchError):
@@ -703,7 +707,9 @@ class Worker:
             f'{datetime.now():%b-%d %H:%M:%S} j_complete={self.jobs_complete} j_failed={self.jobs_failed} '
             f'j_retried={self.jobs_retried} j_ongoing={pending_tasks} queued={queued}'
         )
-        await self.pool.psetex(self.health_check_key, int((self.health_check_interval + 1) * 1000), info.encode())  # type: ignore[no-untyped-call]
+        await self.pool.psetex(  # type: ignore[no-untyped-call]
+            self.health_check_key, int((self.health_check_interval + 1) * 1000), info.encode()
+        )
         log_suffix = info[info.index('j_complete=') :]
         if self._last_health_check_log and log_suffix != self._last_health_check_log:
             logger.info('recording health: %s', info)
