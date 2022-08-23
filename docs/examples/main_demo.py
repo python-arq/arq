@@ -1,20 +1,19 @@
 import asyncio
-from aiohttp import ClientSession
+from httpx import AsyncClient
 from arq import create_pool
 from arq.connections import RedisSettings
 
 async def download_content(ctx, url):
-    session: ClientSession = ctx['session']
-    async with session.get(url) as response:
-        content = await response.text()
-        print(f'{url}: {content:.80}...')
-    return len(content)
+    session: AsyncClient = ctx['session']
+    response = await session.get(url)
+    print(f'{url}: {response.text:.80}...')
+    return len(response.text)
 
 async def startup(ctx):
-    ctx['session'] = ClientSession()
+    ctx['session'] = AsyncClient()
 
 async def shutdown(ctx):
-    await ctx['session'].close()
+    await ctx['session'].aclose()
 
 async def main():
     redis = await create_pool(RedisSettings())
