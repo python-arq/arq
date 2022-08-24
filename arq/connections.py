@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Union
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 from redis.asyncio import ConnectionPool, Redis
@@ -29,6 +29,7 @@ class RedisSettings:
 
     host: Union[str, List[Tuple[str, int]]] = 'localhost'
     port: int = 6379
+    unix_socket_path: Optional[str] = None
     database: int = 0
     username: Optional[str] = None
     password: Optional[str] = None
@@ -49,14 +50,21 @@ class RedisSettings:
     @classmethod
     def from_dsn(cls, dsn: str) -> 'RedisSettings':
         conf = urlparse(dsn)
-        assert conf.scheme in {'redis', 'rediss'}, 'invalid DSN scheme'
+        assert conf.scheme in {'redis', 'rediss', 'unix'}, 'invalid DSN scheme'
+        query_db = parse_qs(conf.query).get('db')
+        if query_db:
+            # e.g. redis://localhost:6379?db=1
+            database = int(query_db[0])
+        else:
+            database = int(conf.path.lstrip('/')) if conf.path else 0
         return RedisSettings(
             host=conf.hostname or 'localhost',
             port=conf.port or 6379,
             ssl=conf.scheme == 'rediss',
             username=conf.username,
             password=conf.password,
-            database=int((conf.path or '0').strip('/')),
+            database=database,
+            unix_socket_path=conf.path if conf.scheme == 'unix' else None,
         )
 
     def __repr__(self) -> str:
@@ -230,6 +238,7 @@ async def create_pool(
             ArqRedis,
             host=settings.host,
             port=settings.port,
+            unix_socket_path=settings.unix_socket_path,
             socket_connect_timeout=settings.conn_timeout,
             ssl=settings.ssl,
             ssl_keyfile=settings.ssl_keyfile,

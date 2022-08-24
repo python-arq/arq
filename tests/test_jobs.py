@@ -76,6 +76,17 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker, queue_name=default_queue
     ]
 
 
+async def test_enqueue_job_with_unix_socket(worker, unix_socket_path):
+    """Test initializing arq_redis using a unix socket connection, and the worker using it."""
+    settings = RedisSettings(unix_socket_path=unix_socket_path)
+    arq_redis = await create_pool(settings, default_queue_name='socket_queue')
+    await test_enqueue_job(
+        arq_redis,
+        lambda functions, **_: worker(functions=functions, arq_redis=arq_redis, queue_name=None),
+        queue_name=None,
+    )
+
+
 async def test_enqueue_job_alt_queue(arq_redis: ArqRedis, worker):
     await test_enqueue_job(arq_redis, worker, queue_name='custom_queue')
 

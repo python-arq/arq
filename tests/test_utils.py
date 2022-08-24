@@ -18,8 +18,8 @@ def test_settings_changed():
     settings = RedisSettings(port=123)
     assert settings.port == 123
     assert (
-        "RedisSettings(host='localhost', port=123, database=0, username=None, password=None, ssl=False, "
-        "ssl_keyfile=None, ssl_certfile=None, ssl_cert_reqs='required', ssl_ca_certs=None, "
+        "RedisSettings(host='localhost', port=123, unix_socket_path=None, database=0, username=None, password=None, "
+        "ssl=False, ssl_keyfile=None, ssl_certfile=None, ssl_cert_reqs='required', ssl_ca_certs=None, "
         'ssl_ca_data=None, ssl_check_hostname=False, conn_timeout=1, conn_retries=5, conn_retry_delay=1, '
         "sentinel=False, sentinel_master='mymaster')"
     ) == str(settings)
@@ -140,6 +140,14 @@ def test_redis_settings_validation():
     assert s4.redis_settings.host == 'foobar'
     assert s4.redis_settings.username == 'user'
     assert s4.redis_settings.password == 'pass'
+
+    s5 = Settings(redis_settings={'unix_socket_path': '/tmp/redis.sock'})
+    assert s5.redis_settings.unix_socket_path == '/tmp/redis.sock'
+    assert s5.redis_settings.database == 0
+
+    s6 = Settings(redis_settings='unix:///tmp/redis.socket?db=6')
+    assert s6.redis_settings.unix_socket_path == '/tmp/redis.socket'
+    assert s6.redis_settings.database == 6
 
 
 def test_ms_to_datetime_tz(env: SetEnv):
