@@ -8,4 +8,5 @@ pytest-mock>=3,<4
 pytest-sugar>=0.9,<1
 pytest-timeout>=2,<3
 pytz
-redislite==6.2.805324
+redislite
+redis[hiredis]==4.2.2

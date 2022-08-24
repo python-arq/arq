@@ -14,6 +14,8 @@ deprecated==1.2.13
     # via redis
 dirty-equals==0.4
     # via -r requirements/testing.in
+hiredis==2.0.0
+    # via redis
 iniconfig==1.1.1
     # via pytest
 msgpack==1.0.4
@@ -52,8 +54,10 @@ pytz==2022.2.1
     # via
     #   -r requirements/testing.in
     #   dirty-equals
-redis==4.3.4
-    # via redislite
+redis[hiredis]==4.2.2
+    # via
+    #   -r requirements/testing.in
+    #   redislite
 redislite==6.2.805324
     # via -r requirements/testing.in
 termcolor==1.1.0
