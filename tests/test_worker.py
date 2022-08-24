@@ -10,7 +10,7 @@ import msgpack
 import pytest
 
 from arq.connections import ArqRedis, RedisSettings
-from arq.constants import abort_jobs_ss, default_queue_name, health_check_key_suffix, job_key_prefix
+from arq.constants import abort_jobs_ss, default_queue_name, expires_extra_ms, health_check_key_suffix, job_key_prefix
 from arq.jobs import Job, JobStatus
 from arq.worker import (
     FailedJobs,
@@ -306,6 +306,26 @@ async def test_job_expired_run_check(arq_redis: ArqRedis, worker, caplog):
     assert exc_info.value.count == 1
     assert len(exc_info.value.job_results) == 1
     assert exc_info.value.job_results[0].result == JobExecutionFailed('job expired')
+
+
+@pytest.mark.parametrize(
+    'extra_job_expiry,wait_time',
+    [
+        (None, expires_extra_ms),
+        (1_000_000, 1_000_000),
+        (10_000_000, 10_000_000),
+        (999_999_999, 999_999_999),
+    ],
+)
+async def test_default_job_expiry(arq_redis: ArqRedis, worker, caplog, extra_job_expiry, wait_time):
+    """Test that jobs have a default expiry time based on the expires_extra_ms property in
+    ArqRedis."""
+    caplog.set_level(logging.INFO)
+    if extra_job_expiry is not None:
+        arq_redis.expires_extra_ms = extra_job_expiry
+    await arq_redis.enqueue_job('foobar', _job_id='testing')
+    time_to_live_ms = await arq_redis.pttl(job_key_prefix + 'testing')
+    assert time_to_live_ms == pytest.approx(wait_time)
 
 
 async def test_job_old(arq_redis: ArqRedis, worker, caplog):
