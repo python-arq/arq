@@ -12,4 +12,3 @@
 12:42:50:  21.78s → c3dd4acc171541b9ac10b1d791750cde:the_task() try=2 delayed=21.78s
 12:42:55:   5.00s ← c3dd4acc171541b9ac10b1d791750cde:the_task ●
 ^C12:42:57: shutdown on SIGINT ◆ 1 jobs complete ◆ 0 failed ◆ 0 retries ◆ 0 ongoing to cancel
-

@@ -21,11 +21,9 @@ jobs:
       with:
         python-version: 3.9
 
-    - run: pip install -r requirements/linting.txt -r requirements/setup.txt
+    - run: pip install -r requirements/linting.txt -r requirements/setup.txt pre-commit
 
-    - run: make lint
-
-    - run: make mypy
+    - run: pre-commit run -a
 
   docs:
     runs-on: ubuntu-latest
