@@ -5,6 +5,7 @@ import sys
 
 import msgpack
 import pytest
+from redislite import Redis
 
 from arq.connections import ArqRedis, create_pool
 from arq.worker import Worker
@@ -28,6 +29,16 @@ async def arq_redis(loop):
     yield redis_
 
     await redis_.close(close_connection_pool=True)
+
+
+@pytest.fixture
+async def unix_socket_path(loop):
+    db_pth = '/tmp/redis_test.db'
+    if os.path.exists(db_pth):
+        os.remove(db_pth)
+    rdb = Redis(db_pth)
+    yield rdb.socket_file
+    rdb.close()
 
 
 @pytest.fixture
