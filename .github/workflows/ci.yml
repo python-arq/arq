@@ -42,7 +42,7 @@ jobs:
     - run: make docs
 
   test:
-    name: test py${{ matrix.python }} on ${{ matrix.os }}
+    name: test py${{ matrix.python }} with redis:${{ matrix.redis }} on ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -52,8 +52,10 @@ jobs:
         include:
           - python: '3.10'
             redis: '6'
+            os: 'ubuntu'
           - python: '3.10'
             redis: '7'
+            os: 'ubuntu'
 
     env:
       PYTHON: ${{ matrix.python }}
