@@ -19,7 +19,7 @@ jobs:
     - name: set up python
       uses: actions/setup-python@v4
       with:
-        python-version: 3.9
+        python-version: '3.10'
 
     - run: pip install -r requirements/linting.txt -r requirements/setup.txt pre-commit
 
@@ -34,7 +34,7 @@ jobs:
     - name: set up python
       uses: actions/setup-python@v4
       with:
-        python-version: 3.9
+        python-version: '3.10'
 
     - run: pip install -r requirements/docs.txt -r requirements/setup.txt
     - run: pip install .
@@ -42,22 +42,28 @@ jobs:
     - run: make docs
 
   test:
-    name: test py${{ matrix.python-version }} on ${{ matrix.os }}
+    name: test py${{ matrix.python }} on ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu]
-        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11-dev']
+        python: ['3.7', '3.8', '3.9', '3.10', '3.11-dev']
+        redis: ['5']
+        include:
+          - python: '3.10'
+            redis: '6'
+          - python: '3.10'
+            redis: '7'
 
     env:
-      PYTHON: ${{ matrix.python-version }}
+      PYTHON: ${{ matrix.python }}
       OS: ${{ matrix.os }}
 
     runs-on: ${{ format('{0}-latest', matrix.os) }}
 
     services:
       redis:
-        image: redis:5
+        image: redis:${{ matrix.redis }}
         ports:
         - 6379:6379
         options: --entrypoint redis-server
@@ -68,7 +74,7 @@ jobs:
     - name: set up python
       uses: actions/setup-python@v4
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: ${{ matrix.python }}
 
     - run: pip install -r requirements/testing.txt -r requirements/setup.txt
 
@@ -93,7 +99,7 @@ jobs:
       - name: set up python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.8'
+          python-version: '3.10'
 
       - name: install
         run: |
