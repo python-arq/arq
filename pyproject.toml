@@ -64,6 +64,7 @@ timeout = 10
 [tool.coverage.run]
 source = ['arq']
 branch = true
+omit = ['arq/__main__.py']
 
 [tool.coverage.report]
 precision = 2
