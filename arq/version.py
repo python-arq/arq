@@ -1,5 +1,2 @@
-__all__ = ['VERSION']
-
-# version is set automatically in CI before release,
-# see https://gist.github.com/samuelcolvin/da2f521da5d2195fbfd65da3b8f58589
-VERSION = '0.0.dev0'
+# Version here is used for the package version via the `[tool.hatch.version]` section of `pyproject.toml`.
+VERSION = '0.24.0'

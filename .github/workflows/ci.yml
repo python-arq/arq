@@ -21,7 +21,7 @@ jobs:
       with:
         python-version: '3.10'
 
-    - run: pip install -r requirements/linting.txt -r requirements/setup.txt pre-commit
+    - run: pip install -r requirements/linting.txt -r requirements/pyproject.txt pre-commit
 
     - run: pre-commit run -a
 
@@ -36,7 +36,7 @@ jobs:
       with:
         python-version: '3.10'
 
-    - run: pip install -r requirements/docs.txt -r requirements/setup.txt
+    - run: pip install -r requirements/docs.txt -r requirements/pyproject.txt
     - run: pip install .
 
     - run: make docs
@@ -78,7 +78,7 @@ jobs:
       with:
         python-version: ${{ matrix.python }}
 
-    - run: pip install -r requirements/testing.txt -r requirements/setup.txt
+    - run: pip install -r requirements/testing.txt -r requirements/pyproject.txt
 
     - run: make test
 
@@ -104,15 +104,16 @@ jobs:
           python-version: '3.10'
 
       - name: install
-        run: |
-          make install
-          pip install -U wheel twine
+        run: pip install -U twine build packaging
 
-      - name: set version
-        run: VERSION_PATH='arq/version.py' python <(curl -Ls https://git.io/JT3rm)
+      - name: check version
+        id: check-version
+        run: python <(curl -Ls https://gist.githubusercontent.com/samuelcolvin/4e1ad439c5489e8d6478cdee3eb952ef/raw/check_version.py)
+        env:
+          VERSION_PATH: 'arq/version.py'
 
       - name: build
-        run: python setup.py sdist bdist_wheel
+        run: python -m build
 
       - run: twine check dist/*
 
@@ -123,6 +124,7 @@ jobs:
           TWINE_PASSWORD: ${{ secrets.pypi_token }}
 
       - name: publish docs
+        if: '!fromJSON(steps.check-version.outputs.IS_PRERELEASE)'
         run: make publish-docs
         env:
           NETLIFY: ${{ secrets.netlify_token }}
