@@ -282,7 +282,7 @@ async def create_pool(
 
 
 async def log_redis_info(redis: 'Redis[bytes]', log_func: Callable[[str], Any]) -> None:
-    async with redis.pipeline(transaction=True) as pipe:
+    async with redis.pipeline(transaction=False) as pipe:
         pipe.info(section='Server')  # type: ignore[unused-coroutine]
         pipe.info(section='Memory')  # type: ignore[unused-coroutine]
         pipe.info(section='Clients')  # type: ignore[unused-coroutine]
