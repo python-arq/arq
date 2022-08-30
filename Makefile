@@ -4,7 +4,7 @@ black = black arq tests
 
 .PHONY: install
 install:
-	pip install -U pip setuptools pre-commit
+	pip install -U pip pre-commit
 	pip install -r requirements/all.txt
 	pip install -e .[watch]
 	pre-commit install
@@ -51,7 +51,6 @@ clean:
 	rm -f .coverage.*
 	rm -rf build
 	make -C docs clean
-	python setup.py clean
 
 .PHONY: docs
 docs:

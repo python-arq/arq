@@ -1,3 +1,60 @@
+[build-system]
+requires = ['hatchling']
+build-backend = 'hatchling.build'
+
+[tool.hatch.version]
+path = 'arq/version.py'
+
+[project]
+name = 'arq'
+description = 'Job queues in python with asyncio and redis'
+authors = [{name = 'Samuel Colvin', email = 's@muelcolvin.com'}]
+license = {file = 'LICENSE'}
+readme = 'README.md'
+classifiers = [
+    'Development Status :: 5 - Production/Stable',
+    'Environment :: Console',
+    'Framework :: AsyncIO',
+    'Intended Audience :: Developers',
+    'Intended Audience :: Information Technology',
+    'Intended Audience :: System Administrators',
+    'License :: OSI Approved :: MIT License',
+    'Operating System :: Unix',
+    'Operating System :: POSIX :: Linux',
+    'Programming Language :: Python',
+    'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3 :: Only',
+    'Programming Language :: Python :: 3.7',
+    'Programming Language :: Python :: 3.8',
+    'Programming Language :: Python :: 3.9',
+    'Programming Language :: Python :: 3.10',
+    'Programming Language :: Python :: 3.11',
+    'Topic :: Internet',
+    'Topic :: Software Development :: Libraries :: Python Modules',
+    'Topic :: System :: Clustering',
+    'Topic :: System :: Distributed Computing',
+    'Topic :: System :: Monitoring',
+    'Topic :: System :: Systems Administration',
+]
+requires-python = '>=3.7'
+dependencies = [
+    'redis[hiredis]>=4.2.0',
+    'click>=8.0',
+    'typing-extensions>=4.1.0',
+]
+optional-dependencies = {watch = ['watchfiles>=0.16'] }
+dynamic = ['version']
+
+[project.scripts]
+arq = 'arq.cli:cli'
+
+[project.urls]
+Homepage = 'https://github.com/samuelcolvin/arq'
+Documentation = 'https://arq-docs.helpmanual.io'
+Funding = 'https://github.com/sponsors/samuelcolvin'
+Source = 'https://github.com/samuelcolvin/arq'
+Changelog = 'https://github.com/samuelcolvin/arq/releases'
+
 [tool.pytest.ini_options]
 testpaths = 'tests'
 filterwarnings = ['error']
@@ -7,6 +64,7 @@ timeout = 10
 [tool.coverage.run]
 source = ['arq']
 branch = true
+omit = ['arq/__main__.py']
 
 [tool.coverage.report]
 precision = 2
