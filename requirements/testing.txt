@@ -52,8 +52,9 @@ pytz==2022.2.1
     # via
     #   -r requirements/testing.in
     #   dirty-equals
-redis==4.2.2
-    # via redislite
+# manually removed to avoid conflict with redis version from pyproject.toml
+# redis==4.2.2
+#     # via redislite
 redislite==6.2.805324
     # via -r requirements/testing.in
 termcolor==1.1.0
