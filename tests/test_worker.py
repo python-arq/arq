@@ -4,12 +4,11 @@ import logging
 import re
 import signal
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
 import msgpack
 import pytest
-from freezegun import freeze_time
 
 from arq.connections import ArqRedis, RedisSettings
 from arq.constants import abort_jobs_ss, default_queue_name, expires_extra_ms, health_check_key_suffix, job_key_prefix
@@ -832,15 +831,14 @@ async def test_abort_deferred_job_before(arq_redis: ArqRedis, worker, caplog, lo
 
     caplog.set_level(logging.INFO)
 
-    job = await arq_redis.enqueue_job('longfunc', _job_id='testing', _defer_until=datetime(2022, 2, 3, 8, 0))
+    job = await arq_redis.enqueue_job('longfunc', _job_id='testing', _defer_until=datetime.utcnow() + timedelta(days=1))
 
     worker: Worker = worker(functions=[func(longfunc, name='longfunc')], allow_abort_jobs=True, poll_delay=0.1)
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
 
-    with pytest.raises(asyncio.TimeoutError):
-        await job.abort(timeout=0)
+    await job.abort(timeout=0)
     await worker.main()
 
     assert worker.jobs_complete == 0

@@ -163,7 +163,7 @@ class Job:
                 tr.zadd(self._queue_name, {self.job_id: 1})
                 tr.zadd(abort_jobs_ss, {self.job_id: timestamp_ms()})
                 await tr.execute()
-            raise asyncio.TimeoutError
+
         else:
             await self._redis.zadd(abort_jobs_ss, {self.job_id: timestamp_ms()})
             try:
