@@ -4,8 +4,9 @@ import logging
 import re
 import signal
 import sys
-from datetime import datetime, timedelta
 from unittest.mock import MagicMock
+from freezegun import freeze_time
+from datetime import datetime, timedelta
 
 import msgpack
 import pytest
@@ -838,7 +839,8 @@ async def test_abort_deferred_job_before(arq_redis: ArqRedis, worker, caplog, lo
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
 
-    await job.abort(timeout=0)
+    with pytest.raises(asyncio.TimeoutError):
+        await job.abort(timeout=0)
     await worker.main()
 
     assert worker.jobs_complete == 0
