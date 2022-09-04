@@ -161,8 +161,9 @@ class Job:
             async with self._redis.pipeline(transaction=True) as tr:
                 tr.zrem(self._queue_name, self.job_id)  # type: ignore[unused-coroutine]
                 tr.zadd(self._queue_name, {self.job_id: 1})  # type: ignore[unused-coroutine]
-                tr.zadd(abort_jobs_ss, {self.job_id: timestamp_ms()})  # type: ignore[unused-coroutine]
                 await tr.execute()
+
+        await self._redis.zadd(abort_jobs_ss, {self.job_id: timestamp_ms()})
 
         try:
             await self.result(timeout=timeout, poll_delay=poll_delay)
