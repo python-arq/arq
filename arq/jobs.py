@@ -69,7 +69,7 @@ class Job:
     def __init__(
         self,
         job_id: str,
-        redis: Redis[bytes],
+        redis: Redis,
         _queue_name: str = default_queue_name,
         _deserializer: Optional[Deserializer] = None,
     ):
