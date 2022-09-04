@@ -4,8 +4,8 @@ import logging
 import re
 import signal
 import sys
-from unittest.mock import MagicMock
 from datetime import datetime, timedelta
+from unittest.mock import MagicMock
 
 import msgpack
 import pytest
