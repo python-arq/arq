@@ -5,7 +5,6 @@ import re
 import signal
 import sys
 from unittest.mock import MagicMock
-from freezegun import freeze_time
 from datetime import datetime, timedelta
 
 import msgpack
