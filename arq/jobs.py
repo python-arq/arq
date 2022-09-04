@@ -69,7 +69,7 @@ class Job:
     def __init__(
         self,
         job_id: str,
-        redis: Redis,
+        redis: Redis[bytes],
         _queue_name: str = default_queue_name,
         _deserializer: Optional[Deserializer] = None,
     ):
@@ -118,7 +118,8 @@ class Job:
             if v:
                 info = deserialize_job(v, deserializer=self._deserializer)
         if info:
-            info.score = await self._redis.zscore(self._queue_name, self.job_id)
+            s = await self._redis.zscore(self._queue_name, self.job_id)
+            info.score = None if s is None else int(s)
         return info
 
     async def result_info(self) -> Optional[JobResult]:
@@ -160,7 +161,7 @@ class Job:
             async with self._redis.pipeline(transaction=True) as tr:
                 tr.zrem(self._queue_name, self.job_id)  # type: ignore[unused-coroutine]
                 tr.zadd(self._queue_name, {self.job_id: 1})  # type: ignore[unused-coroutine]
-                tr.zadd(abort_jobs_ss, {self.job_id: timestamp_ms()}) # type: ignore[unused-coroutine]
+                tr.zadd(abort_jobs_ss, {self.job_id: timestamp_ms()})  # type: ignore[unused-coroutine]
                 await tr.execute()
 
         try:
