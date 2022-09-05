@@ -45,7 +45,7 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: docs
-        path: site
+        path: docs/_build/
 
   test:
     name: test py${{ matrix.python }} with redis:${{ matrix.redis }} on ${{ matrix.os }}
@@ -108,7 +108,7 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: docs
-          path: site
+          path: docs/_build/
 
       - name: set up python
         uses: actions/setup-python@v4
