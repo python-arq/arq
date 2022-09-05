@@ -3,6 +3,26 @@
 History
 -------
 
+v0.24 (2022-09-05)
+..................
+
+* Allow customisation of timezone in logs, #281
+* Add the ``username`` option to ``RedisSettings``, #299
+* Change primary branch name to ``main``, 40c8803
+* Add ``--custom-log-dict`` CLI option, #294
+* Fix error in case of pytz not being installed, #318
+* Support and test python 3.11, #327
+* Improve docs for parameter ``_expires`` in ``enqueue_job``, #313
+* Fix redis ssl support, #323
+* Fix recursion while waiting for redis connection, #311
+* switch from watchgod to watchfiles, #332
+* Simplify dependencies, drop pydantic as a dependency., #334
+* Allow use of ``unix_socket_path`` in ``RedisSettings``, #336
+* Allow user to configure a default job expiry-extra length, #303
+* Remove transaction around ``info`` command to support Redis 6.2.3, #338
+* Switch from ``setup.py`` to ``pyproject.toml``, #341
+* Support ``abort`` for deferred jobs, #307
+
 v0.23 (2022-08-23)
 ..................
 
