@@ -41,6 +41,12 @@ jobs:
 
     - run: make docs
 
+    - name: Store docs site
+      uses: actions/upload-artifact@v3
+      with:
+        name: docs
+        path: site
+
   test:
     name: test py${{ matrix.python }} with redis:${{ matrix.redis }} on ${{ matrix.os }}
     strategy:
@@ -97,6 +103,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
+
+      - name: get docs
+        uses: actions/download-artifact@v3
+        with:
+          name: docs
+          path: site
 
       - name: set up python
         uses: actions/setup-python@v4
