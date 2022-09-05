@@ -158,8 +158,8 @@ async def test_cron_cancelled(worker, mocker):
         poll_delay=0.01,
     )
     await worker.main()
-    assert worker.jobs_complete == 1
-    assert worker.jobs_retried == 1
+    assert worker.jobs_complete in (1, 2)
+    assert worker.jobs_retried == worker.jobs_complete
     assert worker.jobs_failed == 0
 
 
