@@ -4,6 +4,7 @@ import logging
 import re
 import signal
 import sys
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
 import msgpack
@@ -813,6 +814,34 @@ async def test_abort_job_before(arq_redis: ArqRedis, worker, caplog, loop):
     with pytest.raises(asyncio.TimeoutError):
         await job.abort(timeout=0)
     await worker.main()
+    assert worker.jobs_complete == 0
+    assert worker.jobs_failed == 1
+    assert worker.jobs_retried == 0
+    log = re.sub(r'\d+.\d\ds', 'X.XXs', '\n'.join(r.message for r in caplog.records))
+    assert 'X.XXs ⊘ testing:longfunc aborted before start' in log
+    await worker.main()
+    assert worker.aborting_tasks == set()
+    assert worker.job_tasks == {}
+    assert worker.tasks == {}
+
+
+async def test_abort_deferred_job_before(arq_redis: ArqRedis, worker, caplog, loop):
+    async def longfunc(ctx):
+        await asyncio.sleep(3600)
+
+    caplog.set_level(logging.INFO)
+
+    job = await arq_redis.enqueue_job('longfunc', _job_id='testing', _defer_until=datetime.utcnow() + timedelta(days=1))
+
+    worker: Worker = worker(functions=[func(longfunc, name='longfunc')], allow_abort_jobs=True, poll_delay=0.1)
+    assert worker.jobs_complete == 0
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+
+    with pytest.raises(asyncio.TimeoutError):
+        await job.abort(timeout=0)
+    await worker.main()
+
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 1
     assert worker.jobs_retried == 0
