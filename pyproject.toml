@@ -9,7 +9,7 @@ path = 'arq/version.py'
 name = 'arq'
 description = 'Job queues in python with asyncio and redis'
 authors = [{name = 'Samuel Colvin', email = 's@muelcolvin.com'}]
-license = {file = 'LICENSE'}
+license = { text = 'MIT' }
 readme = 'README.md'
 classifiers = [
     'Development Status :: 5 - Production/Stable',
