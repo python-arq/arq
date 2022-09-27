@@ -102,7 +102,7 @@ async def test_job_successful(worker, caplog, arq_redis, poll_delay):
     assert worker.jobs_retried == 0
 
     log = re.sub(r'(\d+).\d\ds', r'\1.XXs', '\n'.join(r.message for r in caplog.records))
-    assert '  0.XXs → cron:foobar()\n  0.XXs ← cron:foobar ● 42' in log
+    assert '  0.XXs → cron:foobar()\n  0.XXs ← cron:foobar' in log
 
     # Assert the in-progress key still exists.
     keys = await arq_redis.keys(in_progress_key_prefix + '*')
@@ -121,7 +121,7 @@ async def test_job_successful_on_specific_queue(worker, caplog):
     assert worker.jobs_retried == 0
 
     log = re.sub(r'(\d+).\d\ds', r'\1.XXs', '\n'.join(r.message for r in caplog.records))
-    assert '  0.XXs → cron:foobar()\n  0.XXs ← cron:foobar ● 42' in log
+    assert '  0.XXs → cron:foobar()\n  0.XXs ← cron:foobar' in log
 
 
 async def test_not_run(worker, caplog):

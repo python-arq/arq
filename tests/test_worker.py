@@ -123,7 +123,7 @@ async def test_job_successful(arq_redis: ArqRedis, worker, caplog):
     assert worker.jobs_retried == 0
 
     log = re.sub(r'\d+.\d\ds', 'X.XXs', '\n'.join(r.message for r in caplog.records))
-    assert 'X.XXs → testing:foobar()\n  X.XXs ← testing:foobar ● 42' in log
+    assert 'X.XXs → testing:foobar()\n  X.XXs ← testing:foobar' in log
 
 
 async def test_job_retry(arq_redis: ArqRedis, worker, caplog):
@@ -142,7 +142,7 @@ async def test_job_retry(arq_redis: ArqRedis, worker, caplog):
     log = re.sub(r'(\d+).\d\ds', r'\1.XXs', '\n'.join(r.message for r in caplog.records))
     assert '0.XXs ↻ testing:retry retrying job in 0.XXs\n' in log
     assert '0.XXs → testing:retry() try=2\n' in log
-    assert '0.XXs ← testing:retry ●' in log
+    assert '0.XXs ← testing:retry' in log
 
 
 async def test_job_retry_dont_retry(arq_redis: ArqRedis, worker, caplog):
@@ -342,7 +342,7 @@ async def test_job_old(arq_redis: ArqRedis, worker, caplog):
     assert worker.jobs_retried == 0
 
     log = re.sub(r'(\d+).\d\ds', r'\1.XXs', '\n'.join(r.message for r in caplog.records))
-    assert log.endswith('  0.XXs → testing:foobar() delayed=2.XXs\n' '  0.XXs ← testing:foobar ● 42')
+    assert log.endswith('  0.XXs → testing:foobar() delayed=2.XXs\n' '  0.XXs ← testing:foobar')
 
 
 async def test_retry_repr():
@@ -749,7 +749,7 @@ async def test_non_burst(arq_redis: ArqRedis, worker, caplog, loop):
     assert worker.jobs_complete == 1
     assert worker.jobs_retried == 0
     assert worker.jobs_failed == 0
-    assert '← testing:foo ● 2' in caplog.text
+    assert '← testing:foo' in caplog.text
 
 
 async def test_multi_exec(arq_redis: ArqRedis, worker, caplog):
@@ -873,7 +873,7 @@ async def test_not_abort_job(arq_redis: ArqRedis, worker, caplog, loop):
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
     log = re.sub(r'\d+.\d\ds', 'X.XXs', '\n'.join(r.message for r in caplog.records))
-    assert 'X.XXs → testing:shortfunc()\n  X.XXs ← testing:shortfunc ●' in log
+    assert 'X.XXs → testing:shortfunc()\n  X.XXs ← testing:shortfunc' in log
     await worker.main()
     assert worker.aborting_tasks == set()
     assert worker.tasks == {}

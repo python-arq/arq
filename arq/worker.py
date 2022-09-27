@@ -36,7 +36,6 @@ from .utils import (
     to_ms,
     to_seconds,
     to_unix_ms,
-    truncate,
 )
 
 if TYPE_CHECKING:
@@ -552,8 +551,6 @@ class Worker:
                 if callable(exc_extra):
                     exc_extra = exc_extra()
                 raise
-            else:
-                result_str = '' if result is None else truncate(repr(result))
             finally:
                 del self.job_tasks[job_id]
 
@@ -585,7 +582,7 @@ class Worker:
         else:
             success = True
             finished_ms = timestamp_ms()
-            logger.info('%6.2fs ← %s ● %s', (finished_ms - start_ms) / 1000, ref, result_str)
+            logger.info('%6.2fs ← %s', (finished_ms - start_ms) / 1000, ref)
             finish = True
             self.jobs_complete += 1
 
