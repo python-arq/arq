@@ -170,6 +170,8 @@ class Worker:
     :param job_deserializer: a function that deserializes bytes into Python objects, defaults to pickle.loads
     :param expires_extra_ms: the default length of time from when a job is expected to start
      after which the job expires, defaults to 1 day in ms.
+    :param log_results: when set to true (default) results for successful jobs
+      will be logged
     """
 
     def __init__(
