@@ -267,6 +267,7 @@ class Worker:
         self.job_serializer = job_serializer
         self.job_deserializer = job_deserializer
         self.expires_extra_ms = expires_extra_ms
+        self.log_results = log_results
 
     def run(self) -> None:
         """
@@ -554,7 +555,7 @@ class Worker:
                     exc_extra = exc_extra()
                 raise
             else:
-                result_str = '' if result is None else truncate(repr(result))
+                result_str = '' if result is None or not self.log_results else truncate(repr(result))
             finally:
                 del self.job_tasks[job_id]
 

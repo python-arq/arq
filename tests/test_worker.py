@@ -126,6 +126,17 @@ async def test_job_successful(arq_redis: ArqRedis, worker, caplog):
     assert 'X.XXs → testing:foobar()\n  X.XXs ← testing:foobar ● 42' in log
 
 
+async def test_job_successful_no_result_logging(arq_redis: ArqRedis, worker, caplog):
+    caplog.set_level(logging.INFO)
+    await arq_redis.enqueue_job('foobar', _job_id='testing')
+    worker: Worker = worker(functions=[foobar], log_results=False)
+    await worker.main()
+
+    log = re.sub(r'\d+.\d\ds', 'X.XXs', '\n'.join(r.message for r in caplog.records))
+    assert log.endswith('X.XXs → testing:foobar()\n  X.XXs ← testing:foobar ● ')
+    assert '42' not in log
+
+
 async def test_job_retry(arq_redis: ArqRedis, worker, caplog):
     async def retry(ctx):
         if ctx['job_try'] <= 2:
