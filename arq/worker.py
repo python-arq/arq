@@ -27,16 +27,7 @@ from .constants import (
     result_key_prefix,
     retry_key_prefix,
 )
-from .utils import (
-    args_to_string,
-    import_string,
-    ms_to_datetime,
-    poll,
-    timestamp_ms,
-    to_ms,
-    to_seconds,
-    to_unix_ms,
-)
+from .utils import args_to_string, import_string, ms_to_datetime, poll, timestamp_ms, to_ms, to_seconds, to_unix_ms
 
 if TYPE_CHECKING:
     from .typing import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType  # noqa F401
