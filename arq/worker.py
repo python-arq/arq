@@ -202,6 +202,7 @@ class Worker:
         job_serializer: Optional[Serializer] = None,
         job_deserializer: Optional[Deserializer] = None,
         expires_extra_ms: int = expires_extra_ms,
+        log_results: bool = True,
     ):
         self.functions: Dict[str, Union[Function, CronJob]] = {f.name: f for f in map(func, functions)}
         if queue_name is None:
