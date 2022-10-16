@@ -51,6 +51,12 @@ def test_next_cron(previous, expected, kwargs):
     print(f'{diff.total_seconds() * 1000:0.3f}ms')
 
 
+def test_next_cron_preserves_tzinfo():
+    previous = datetime.fromisoformat('2016-06-01T12:10:10+02:00')
+    assert previous.tzinfo is not None
+    assert next_cron(previous, second=20).tzinfo is previous.tzinfo
+
+
 def test_next_cron_invalid():
     with pytest.raises(ValueError):
         next_cron(datetime(2001, 1, 1, 0, 0, 0), weekday='monday')
