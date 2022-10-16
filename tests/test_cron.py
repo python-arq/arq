@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from random import random
 
 import pytest
+from pytest_mock import MockerFixture
 
 import arq
 from arq import Worker
@@ -114,6 +115,16 @@ async def test_job_successful(worker, caplog, arq_redis, poll_delay):
     keys = await arq_redis.keys(in_progress_key_prefix + '*')
     assert len(keys) == 1
     assert await arq_redis.pttl(keys[0]) > 0.0
+
+
+async def test_calculate_next_is_called_with_aware_datetime(worker, mocker: MockerFixture):
+    worker: Worker = worker(cron_jobs=[cron(foobar, hour=1)])
+    spy_run_cron = mocker.spy(worker, worker.run_cron.__name__)
+
+    await worker.main()
+
+    assert spy_run_cron.call_args.args[0].tzinfo is not None
+    assert worker.cron_jobs[0].next_run.tzinfo is not None
 
 
 async def test_job_successful_on_specific_queue(worker, caplog):

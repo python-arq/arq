@@ -679,7 +679,7 @@ class Worker:
             await tr.execute()
 
     async def heart_beat(self) -> None:
-        now = datetime.now()
+        now = datetime.now(tz=self.timezone)
         await self.record_health()
 
         cron_window_size = max(self.poll_delay_s, 0.5)  # Clamp the cron delay to 0.5
