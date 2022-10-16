@@ -123,7 +123,7 @@ async def test_calculate_next_is_called_with_aware_datetime(worker, mocker: Mock
 
     await worker.main()
 
-    assert spy_run_cron.call_args.args[0].tzinfo is not None
+    assert spy_run_cron.call_args[0][0].tzinfo is not None
     assert worker.cron_jobs[0].next_run.tzinfo is not None
 
 
