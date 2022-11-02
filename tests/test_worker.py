@@ -932,7 +932,7 @@ async def test_on_job(arq_redis: ArqRedis, worker):
         functions=[func(test, name='func')],
         on_job_start=on_start,
         on_job_end=on_end,
-        on_job_end=after_end,
+        after_job_end=after_end,
         job_timeout=0.2,
         poll_delay=0.1,
     )
