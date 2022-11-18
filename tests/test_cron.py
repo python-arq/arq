@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from random import random
 
 import pytest
+from pytest_mock import MockerFixture
 
 import arq
 from arq import Worker
@@ -49,6 +50,12 @@ def test_next_cron(previous, expected, kwargs):
     assert next_cron(previous, **kwargs) == expected
     diff = datetime.now() - start
     print(f'{diff.total_seconds() * 1000:0.3f}ms')
+
+
+def test_next_cron_preserves_tzinfo():
+    previous = datetime.fromisoformat('2016-06-01T12:10:10+02:00')
+    assert previous.tzinfo is not None
+    assert next_cron(previous, second=20).tzinfo is previous.tzinfo
 
 
 def test_next_cron_invalid():
@@ -108,6 +115,16 @@ async def test_job_successful(worker, caplog, arq_redis, poll_delay):
     keys = await arq_redis.keys(in_progress_key_prefix + '*')
     assert len(keys) == 1
     assert await arq_redis.pttl(keys[0]) > 0.0
+
+
+async def test_calculate_next_is_called_with_aware_datetime(worker, mocker: MockerFixture):
+    worker: Worker = worker(cron_jobs=[cron(foobar, hour=1)])
+    spy_run_cron = mocker.spy(worker, worker.run_cron.__name__)
+
+    await worker.main()
+
+    assert spy_run_cron.call_args[0][0].tzinfo is not None
+    assert worker.cron_jobs[0].next_run.tzinfo is not None
 
 
 async def test_job_successful_on_specific_queue(worker, caplog):

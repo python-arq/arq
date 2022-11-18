@@ -940,3 +940,9 @@ async def test_on_job(arq_redis: ArqRedis, worker):
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
     assert result['called'] == 2
+
+
+async def test_worker_timezone_defaults_to_system_timezone(worker):
+    worker = worker(functions=[func(foobar)])
+    assert worker.timezone is not None
+    assert worker.timezone == datetime.now().astimezone().tzinfo
