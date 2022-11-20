@@ -18,6 +18,10 @@ Serializer = Callable[[Dict[str, Any]], bytes]
 Deserializer = Callable[[bytes], Dict[str, Any]]
 
 
+class ResultNotFound(Exception):
+    pass
+
+
 class JobStatus(str, Enum):
     """
     Enum of job statuses.
@@ -96,15 +100,21 @@ class Job:
             poll_delay = pole_delay
 
         async for delay in poll(poll_delay):
-            info = await self.result_info()
-            if info:
-                result = info.result
+            async with self._redis.pipeline(transaction=True):
+                v = await self._redis.get(result_key_prefix + self.job_id)
+                s = await self._redis.zscore(self._queue_name, self.job_id)
+
+            if v:
+                info = deserialize_result(v, deserializer=self._deserializer)
                 if info.success:
-                    return result
-                elif isinstance(result, (Exception, asyncio.CancelledError)):
-                    raise result
+                    return info.result
+                elif isinstance(info.result, (Exception, asyncio.CancelledError)):
+                    raise info.result
                 else:
-                    raise SerializationError(result)
+                    raise SerializationError(info.result)
+            elif s is None:
+                raise ResultNotFound()
+
             if timeout is not None and delay > timeout:
                 raise asyncio.TimeoutError()
 
