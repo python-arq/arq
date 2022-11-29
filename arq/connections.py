@@ -145,7 +145,7 @@ class ArqRedis(BaseRedis):
 
         async with self.pipeline(transaction=True) as pipe:
             await pipe.watch(job_key)
-            if any(await asyncio.gather(pipe.exists(job_key), pipe.exists(result_key_prefix + job_id))):
+            if await pipe.exists(job_key, result_key_prefix + job_id):
                 await pipe.reset()
                 return None
 
