@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import inspect
 import logging
 import signal
@@ -153,6 +154,9 @@ class Worker:
     :param after_job_end: coroutine function to run after job has ended and results have been recorded
     :param handle_signals: default true, register signal handlers,
       set to false when running inside other async framework
+    :param wait_for_job_completion_on_signal_seconds: time to wait before cancelling tasks after a signal.
+      Useful together with `terminationGracePeriodSeconds` in kubernetes,
+      when you want to make the pod complete jobs before shutting down
     :param max_jobs: maximum number of jobs to run at a time
     :param job_timeout: default job timeout (max run time)
     :param keep_result: default duration to keep job results for
@@ -192,7 +196,7 @@ class Worker:
         on_job_end: Optional['StartupShutdown'] = None,
         after_job_end: Optional['StartupShutdown'] = None,
         handle_signals: bool = True,
-        use_k8s_signal_handler: bool = False,
+        wait_for_job_completion_on_signal_seconds: int = 0,
         max_jobs: int = 10,
         job_timeout: 'SecondsTimedelta' = 300,
         keep_result: 'SecondsTimedelta' = 3600,
@@ -264,12 +268,10 @@ class Worker:
         self._last_health_check: float = 0
         self._last_health_check_log: Optional[str] = None
         self._handle_signals = handle_signals
+        self._wait_for_job_completion_on_signal_seconds = wait_for_job_completion_on_signal_seconds
         if self._handle_signals:
-            if use_k8s_signal_handler:
-                self._add_signal_handler(signal.SIGTERM, self.handle_k8s_sigterm)
-            else:
-                self._add_signal_handler(signal.SIGINT, self.handle_sig)
-                self._add_signal_handler(signal.SIGTERM, self.handle_sig)
+            self._add_signal_handler(signal.SIGINT, self.handle_sig)
+            self._add_signal_handler(signal.SIGTERM, self.handle_sig)
         self.on_stop: Optional[Callable[[Signals], None]] = None
         # whether or not to retry jobs on Retry and CancelledError
         self.retry_jobs = retry_jobs
@@ -762,8 +764,30 @@ class Worker:
     def _jobs_started(self) -> int:
         return self.jobs_complete + self.jobs_retried + self.jobs_failed + len(self.tasks)
 
+    async def _wait_for_tasks_to_complete(self) -> None:
+        while self.tasks:
+            await asyncio.sleep(0.1)
+
     def handle_sig(self, signum: Signals) -> None:
         sig = Signals(signum)
+        if self._wait_for_job_completion_on_signal_seconds:
+            logger.info('Setting allow_pick_jobs to `False`')
+            self.allow_pick_jobs = False
+            logger.info(
+                'shutdown on %s ◆ %d jobs complete ◆ %d failed ◆ %d retries ◆ %d ongoing waiting for completion',
+                sig.name,
+                self.jobs_complete,
+                self.jobs_failed,
+                self.jobs_retried,
+                len(self.tasks),
+            )
+            with contextlib.suppress(TimeoutError):
+                self.loop.create_task(
+                    asyncio.wait_for(
+                        self._wait_for_tasks_to_complete(),
+                        self._wait_for_job_completion_on_signal_seconds,
+                    )
+                )
         logger.info(
             'shutdown on %s ◆ %d jobs complete ◆ %d failed ◆ %d retries ◆ %d ongoing to cancel',
             sig.name,
@@ -777,44 +801,6 @@ class Worker:
                 t.cancel()
         self.main_task and self.main_task.cancel()
         self.on_stop and self.on_stop(sig)
-
-    async def _wait_for_tasks_to_complete(self) -> None:
-        while self.tasks:
-            await asyncio.sleep(1)
-
-    async def _kill_tasks_k8s(self, signum: Signals) -> None:
-        """
-        Wait for tasks to complete, and then behave as the default signal handler
-        """
-        logger.info('Waiting for tasks timeout to finish')
-        await self._wait_for_tasks_to_complete()
-        logger.info('All tasks completed')
-        sig = Signals(signum)
-        self.main_task and self.main_task.cancel()
-        self.on_stop and self.on_stop(sig)
-
-    def handle_k8s_sigterm(self, signum: Signals) -> None:
-        """
-        This signal handler will not cancel any running jobs, but instead just stop picking tasks.
-        You should configure `terminationGracePeriodSeconds` to a few seconds more than the `Worker.job_timeout`
-        setting.
-        Please note that this does not catch SIGKILL, so any administrator draining nodes can still kill your nodes.
-        This strategy comes with the trade off that you do not process any new tasks in this time period, and rollover
-        will not happen until currently running tasks has been completed.
-        Strongly advised to keep job_timeout short if you use this handler!
-        """
-        sig = Signals(signum)
-        logger.info('Setting allow_pick_jobs to `False`')
-        self.allow_pick_jobs = False
-        logger.info(
-            'shutdown on %s ◆ %d jobs complete ◆ %d failed ◆ %d retries ◆ %d currently ongoing',
-            sig.name,
-            self.jobs_complete,
-            self.jobs_failed,
-            self.jobs_retried,
-            len(self.tasks),
-        )
-        self.loop.create_task(self._kill_tasks_k8s(signum=sig))
 
     async def close(self) -> None:
         if not self._handle_signals:
