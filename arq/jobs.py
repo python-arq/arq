@@ -137,15 +137,20 @@ class Job:
         """
         Status of the job.
         """
-        if await self._redis.exists(result_key_prefix + self.job_id):
+        async with self._redis.pipeline(transaction=True) as tr:
+            tr.exists(result_key_prefix + self.job_id)  # type: ignore[unused-coroutine]
+            tr.exists(in_progress_key_prefix + self.job_id)  # type: ignore[unused-coroutine]
+            tr.zscore(self._queue_name, self.job_id)  # type: ignore[unused-coroutine]
+            is_complete, is_in_progress, score = await tr.execute()
+
+        if is_complete:
             return JobStatus.complete
-        elif await self._redis.exists(in_progress_key_prefix + self.job_id):
+        elif is_in_progress:
             return JobStatus.in_progress
-        else:
-            score = await self._redis.zscore(self._queue_name, self.job_id)
-            if not score:
-                return JobStatus.not_found
+        elif score:
             return JobStatus.deferred if score > timestamp_ms() else JobStatus.queued
+        else:
+            return JobStatus.not_found
 
     async def abort(self, *, timeout: Optional[float] = None, poll_delay: float = 0.5) -> bool:
         """
