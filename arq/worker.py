@@ -150,6 +150,7 @@ class Worker:
     :param on_shutdown: coroutine function to run at shutdown
     :param on_job_start: coroutine function to run on job start
     :param on_job_end: coroutine function to run on job end
+    :param after_job_end: coroutine function to run after job has ended and results have been recorded
     :param handle_signals: default true, register signal handlers,
       set to false when running inside other async framework
     :param max_jobs: maximum number of jobs to run at a time
@@ -189,6 +190,7 @@ class Worker:
         on_shutdown: Optional['StartupShutdown'] = None,
         on_job_start: Optional['StartupShutdown'] = None,
         on_job_end: Optional['StartupShutdown'] = None,
+        after_job_end: Optional['StartupShutdown'] = None,
         handle_signals: bool = True,
         max_jobs: int = 10,
         job_timeout: 'SecondsTimedelta' = 300,
@@ -227,6 +229,7 @@ class Worker:
         self.on_shutdown = on_shutdown
         self.on_job_start = on_job_start
         self.on_job_end = on_job_end
+        self.after_job_end = after_job_end
         self.sem = asyncio.BoundedSemaphore(max_jobs)
         self.job_timeout_s = to_seconds(job_timeout)
         self.keep_result_s = to_seconds(keep_result)
@@ -634,6 +637,9 @@ class Worker:
                 keep_in_progress,
             )
         )
+
+        if self.after_job_end:
+            await self.after_job_end(ctx)
 
     async def finish_job(
         self,

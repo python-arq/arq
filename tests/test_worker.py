@@ -920,6 +920,10 @@ async def test_on_job(arq_redis: ArqRedis, worker):
         assert ctx['job_id'] == 'testing'
         result['called'] += 1
 
+    async def after_end(ctx):
+        assert ctx['job_id'] == 'testing'
+        result['called'] += 2
+
     async def test(ctx):
         return
 
@@ -928,6 +932,7 @@ async def test_on_job(arq_redis: ArqRedis, worker):
         functions=[func(test, name='func')],
         on_job_start=on_start,
         on_job_end=on_end,
+        after_job_end=after_end,
         job_timeout=0.2,
         poll_delay=0.1,
     )
@@ -939,7 +944,7 @@ async def test_on_job(arq_redis: ArqRedis, worker):
     assert worker.jobs_complete == 1
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
-    assert result['called'] == 2
+    assert result['called'] == 4
 
 
 async def test_worker_timezone_defaults_to_system_timezone(worker):
