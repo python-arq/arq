@@ -18,7 +18,7 @@ Serializer = Callable[[Dict[str, Any]], bytes]
 Deserializer = Callable[[bytes], Dict[str, Any]]
 
 
-class ResultNotFound(Exception):
+class ResultNotFound(RuntimeError):
     pass
 
 
