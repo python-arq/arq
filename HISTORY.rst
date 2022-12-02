@@ -3,6 +3,18 @@
 History
 -------
 
+v0.25 (2022-12-02)
+..................
+
+* Allow to opt-out from logging results by @iamlikeme in #352
+* Add timezone support for cron jobs by @iamlikeme in #354
+* connections: fix pipeline usage for exists command by @utkarshgupta137 in #366
+* Fix race condition causing incorrect status not found by @iamlikeme in #362
+* Adds ``after_job_end`` hook by @AngellusMortis in #355
+* Raise ``ResultNotFound`` when ``Job.result()`` finds no job and no result by @iamlikeme in #364
+* use ``3.11`` for testing #367
+* Signal handler to wait for task completion before shutting down by @JonasKs in #345
+
 v0.24 (2022-09-05)
 ..................
 
