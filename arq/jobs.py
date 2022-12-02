@@ -113,7 +113,10 @@ class Job:
                 else:
                     raise SerializationError(info.result)
             elif s is None:
-                raise ResultNotFound()
+                raise ResultNotFound(
+                    'Not waiting for job result because the job is not in queue. '
+                    'Is the worker function configured to keep result?'
+                )
 
             if timeout is not None and delay > timeout:
                 raise asyncio.TimeoutError()
