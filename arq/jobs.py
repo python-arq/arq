@@ -184,6 +184,9 @@ class Job:
             await self.result(timeout=timeout, poll_delay=poll_delay)
         except asyncio.CancelledError:
             return True
+        except ResultNotFound:
+            # We do not know if the job was cancelled or not
+            return False
         else:
             return False
 
