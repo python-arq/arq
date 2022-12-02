@@ -110,6 +110,34 @@ async def test_handle_no_sig(caplog):
     assert worker.tasks[1].cancel.call_count == 1
 
 
+async def test_worker_signal_completes_job_before_shutting_down(caplog, arq_redis: ArqRedis, worker):
+    caplog.set_level(logging.INFO)
+
+    async def sleep_job(ctx, time):
+        await asyncio.sleep(time)
+
+    await arq_redis.enqueue_job('sleep_job', 0.2, _job_id='short_sleep')  # should be cancelled
+    await arq_redis.enqueue_job('sleep_job', 5, _job_id='long_sleep')  # should be cancelled
+    worker = worker(
+        functions=[func(sleep_job, name='sleep_job', max_tries=1)],
+        job_completion_wait=0.4,
+        job_timeout=10,
+    )
+    assert worker.jobs_complete == 0
+    asyncio.create_task(worker.main())
+    await asyncio.sleep(0.1)
+    worker.handle_sig_wait_for_completion(signal.SIGINT)
+    assert worker.allow_pick_jobs is False
+    await asyncio.sleep(0.5)
+    logs = [rec.message for rec in caplog.records]
+    assert 'shutdown on SIGINT ◆ 0 jobs complete ◆ 0 failed ◆ 0 retries ◆ 2 to be completed' in logs
+    assert 'shutdown on SIGINT, wait complete ◆ 1 jobs complete ◆ 0 failed ◆ 0 retries ◆ 1 ongoing to cancel' in logs
+    assert 'long_sleep:sleep_job cancelled, will be run again' in logs[-1]
+    assert worker.jobs_complete == 1
+    assert worker.jobs_retried == 1
+    assert worker.jobs_failed == 0
+
+
 async def test_job_successful(arq_redis: ArqRedis, worker, caplog):
     caplog.set_level(logging.INFO)
     await arq_redis.enqueue_job('foobar', _job_id='testing')
