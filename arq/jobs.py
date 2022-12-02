@@ -89,7 +89,7 @@ class Job:
         Get the result of the job or, if the job raised an exception, reraise it.
 
         This function waits for the result if it's not yet available and the job is
-        present in the queue. Otherwise ResultNotFound is raised.
+        present in the queue. Otherwise ``ResultNotFound`` is raised.
 
         :param timeout: maximum time to wait for the job result before raising ``TimeoutError``, will wait forever
         :param poll_delay: how often to poll redis for the job result
