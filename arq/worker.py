@@ -155,7 +155,7 @@ class Worker:
     :param handle_signals: default true, register signal handlers,
       set to false when running inside other async framework
     :param job_completion_wait: time to wait before cancelling tasks after a signal.
-      Useful together with `terminationGracePeriodSeconds` in kubernetes,
+      Useful together with ``terminationGracePeriodSeconds`` in kubernetes,
       when you want to make the pod complete jobs before shutting down.
       The worker will not pick new tasks while waiting for shut down.
     :param max_jobs: maximum number of jobs to run at a time
