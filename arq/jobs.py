@@ -86,8 +86,10 @@ class Job:
         self, timeout: Optional[float] = None, *, poll_delay: float = 0.5, pole_delay: float = None
     ) -> Any:
         """
-        Get the result of the job, including waiting if it's not yet available. If the job raised an exception,
-        it will be raised here.
+        Get the result of the job or, if the job raised an exception, reraise it.
+
+        This function waits for the result if it's not yet available and the job is
+        present in the queue. Otherwise ResultNotFound is raised.
 
         :param timeout: maximum time to wait for the job result before raising ``TimeoutError``, will wait forever
         :param poll_delay: how often to poll redis for the job result
