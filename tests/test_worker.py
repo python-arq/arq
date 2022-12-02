@@ -810,6 +810,11 @@ async def test_abort_job(arq_redis: ArqRedis, worker, caplog, loop):
     assert worker.job_tasks == {}
 
 
+async def test_abort_job_which_is_not_in_queue(arq_redis: ArqRedis):
+    job = Job(job_id='testing', redis=arq_redis)
+    assert await job.abort() is False
+
+
 async def test_abort_job_before(arq_redis: ArqRedis, worker, caplog, loop):
     async def longfunc(ctx):
         await asyncio.sleep(3600)

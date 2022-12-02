@@ -7,7 +7,15 @@ from dirty_equals import IsNow
 from arq import Worker, func
 from arq.connections import ArqRedis, RedisSettings, create_pool
 from arq.constants import default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
-from arq.jobs import DeserializationError, Job, JobResult, JobStatus, deserialize_job_raw, serialize_result
+from arq.jobs import (
+    DeserializationError,
+    Job,
+    JobResult,
+    JobStatus,
+    ResultNotFound,
+    deserialize_job_raw,
+    serialize_result,
+)
 
 
 async def test_job_in_progress(arq_redis: ArqRedis):
@@ -25,9 +33,34 @@ async def test_unknown(arq_redis: ArqRedis):
 
 
 async def test_result_timeout(arq_redis: ArqRedis):
-    j = Job('foobar', arq_redis)
+    j = await arq_redis.enqueue_job('foobar')
     with pytest.raises(asyncio.TimeoutError):
         await j.result(0.1, poll_delay=0)
+
+
+async def test_result_not_found(arq_redis: ArqRedis):
+    j = Job('foobar', arq_redis)
+    with pytest.raises(ResultNotFound):
+        await j.result()
+
+
+async def test_result_when_job_does_not_keep_result(arq_redis: ArqRedis, worker):
+    async def foobar(ctx):
+        pass
+
+    worker: Worker = worker(functions=[func(foobar, name='foobar', keep_result=0)])
+    j = await arq_redis.enqueue_job('foobar')
+
+    result_call = asyncio.Task(j.result())
+
+    _, pending = await asyncio.wait([result_call], timeout=0.1)
+    assert pending == {result_call}
+
+    await worker.main()
+
+    with pytest.raises(ResultNotFound):
+        # Job has completed and did not store any result
+        await asyncio.wait_for(result_call, timeout=5)
 
 
 async def test_enqueue_job(arq_redis: ArqRedis, worker, queue_name=default_queue_name):
