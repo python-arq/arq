@@ -382,14 +382,14 @@ class Worker:
 
             await self.start_jobs(job_ids)
 
-            if self.allow_abort_jobs:
-                await self._cancel_aborted_jobs()
+        if self.allow_abort_jobs:
+            await self._cancel_aborted_jobs()
 
-            for job_id, t in list(self.tasks.items()):
-                if t.done():
-                    del self.tasks[job_id]
-                    # required to make sure errors in run_job get propagated
-                    t.result()
+        for job_id, t in list(self.tasks.items()):
+            if t.done():
+                del self.tasks[job_id]
+                # required to make sure errors in run_job get propagated
+                t.result()
 
         await self.heart_beat()
 
