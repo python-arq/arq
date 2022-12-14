@@ -195,10 +195,12 @@ class ArqRedis(BaseRedis):
         jd.score = score
         return jd
 
-    async def queued_jobs(self, *, queue_name: str = default_queue_name) -> List[JobDef]:
+    async def queued_jobs(self, *, queue_name: Optional[str] = None) -> List[JobDef]:
         """
         Get information about queued, mostly useful when testing.
         """
+        if queue_name is None:
+            queue_name = self.default_queue_name
         jobs = await self.zrange(queue_name, withscores=True, start=0, end=-1)
         return await asyncio.gather(*[self._get_job_def(job_id, int(score)) for job_id, score in jobs])
 
