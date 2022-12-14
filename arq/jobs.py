@@ -102,9 +102,10 @@ class Job:
             poll_delay = pole_delay
 
         async for delay in poll(poll_delay):
-            async with self._redis.pipeline(transaction=True):
-                v = await self._redis.get(result_key_prefix + self.job_id)
-                s = await self._redis.zscore(self._queue_name, self.job_id)
+            async with self._redis.pipeline(transaction=True) as tr:
+                tr.get(result_key_prefix + self.job_id)  # type: ignore[unused-coroutine]
+                tr.zscore(self._queue_name, self.job_id)  # type: ignore[unused-coroutine]
+                v, s = await tr.execute()
 
             if v:
                 info = deserialize_result(v, deserializer=self._deserializer)
