@@ -9,7 +9,6 @@ from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 from redis.asyncio import ConnectionPool, Redis
-from redis.asyncio.retry import Retry
 from redis.asyncio.sentinel import Sentinel
 from redis.exceptions import RedisError, WatchError
 
@@ -50,7 +49,7 @@ class RedisSettings:
 
     retry_on_timeout: bool = False
     retry_on_error: Optional[List[Any]] = None
-    retry: Optional[Retry] = None
+    retry: Optional[Any] = None
 
     @classmethod
     def from_dsn(cls, dsn: str) -> 'RedisSettings':
