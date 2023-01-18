@@ -112,6 +112,9 @@ def test_redis_settings_validation():
     class Settings(BaseModel):
         redis_settings: RedisSettings
 
+        class Config:
+            arbitrary_types_allowed = True
+
         @validator('redis_settings', always=True, pre=True)
         def parse_redis_settings(cls, v):
             if isinstance(v, str):
