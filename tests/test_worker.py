@@ -5,7 +5,7 @@ import re
 import signal
 import sys
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import msgpack
 import pytest
@@ -1008,7 +1008,8 @@ async def test_worker_retry(mocker, worker_retry, exception_thrown):
         await worker._poll_iteration()
 
         # patch db read_response
-        mocker.patch.object(worker.pool.connection_pool.connection_class, 'read_response', side_effect=exception_thrown)
+        p = patch.object(worker.pool.connection_pool.connection_class, 'read_response', side_effect=exception_thrown)
+        p.start()
 
         # spy method handling call_with_retry failure
         spy = mocker.spy(worker.pool, '_disconnect_raise')
@@ -1021,12 +1022,8 @@ async def test_worker_retry(mocker, worker_retry, exception_thrown):
         assert spy.call_count == 4  # retries setting + 1
         assert spy.spy_exception is None
     finally:
-        # cleanup patch for post test flushall
-        mocker.patch.object(
-            worker.pool.connection_pool.connection_class,
-            'read_response',
-            return_value=redis.asyncio.connection.Connection.read_response,
-        )
+        # stop patch to allow worker cleanup
+        p.stop()
 
 
 @pytest.mark.parametrize(
@@ -1043,7 +1040,9 @@ async def test_worker_crash(mocker, worker, exception_thrown):
         await worker.main()
         await worker._poll_iteration()
 
-        mocker.patch.object(worker.pool.connection_pool.connection_class, 'read_response', side_effect=exception_thrown)
+        # patch db read_response
+        p = patch.object(worker.pool.connection_pool.connection_class, 'read_response', side_effect=exception_thrown)
+        p.start()
 
         spy = mocker.spy(worker.pool, '_disconnect_raise')
 
@@ -1053,8 +1052,4 @@ async def test_worker_crash(mocker, worker, exception_thrown):
         assert spy.call_count == 1
         assert spy.spy_exception == exception_thrown
     finally:
-        mocker.patch.object(
-            worker.pool.connection_pool.connection_class,
-            'read_response',
-            return_value=redis.asyncio.connection.Connection.read_response,
-        )
+        p.stop()
