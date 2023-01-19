@@ -1044,12 +1044,16 @@ async def test_worker_crash(mocker, worker, exception_thrown):
         p = patch.object(worker.pool.connection_pool.connection_class, 'read_response', side_effect=exception_thrown)
         p.start()
 
+        # spy method handling call_with_retry failure
         spy = mocker.spy(worker.pool, '_disconnect_raise')
 
+        # assert exception thrown
         with pytest.raises(type(exception_thrown)):
             await worker._poll_iteration()
 
+        # assert no retry counts and exception thrown during '_disconnect_raise'
         assert spy.call_count == 1
         assert spy.spy_exception == exception_thrown
     finally:
+        # stop patch to allow worker cleanup
         p.stop()
