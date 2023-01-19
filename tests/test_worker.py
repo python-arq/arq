@@ -1000,6 +1000,7 @@ async def test_worker_timezone_defaults_to_system_timezone(worker):
 )
 async def test_worker_retry(mocker, worker_retry, exception_thrown):
     # Testing redis exceptions, with retry settings specified
+    p = None
     try:
         worker = worker_retry(functions=[func(foobar)])
 
@@ -1023,7 +1024,8 @@ async def test_worker_retry(mocker, worker_retry, exception_thrown):
         assert spy.spy_exception is None
     finally:
         # stop patch to allow worker cleanup
-        p.stop()
+        if p is not None:
+            p.stop()
 
 
 @pytest.mark.parametrize(
@@ -1035,8 +1037,11 @@ async def test_worker_retry(mocker, worker_retry, exception_thrown):
 )
 async def test_worker_crash(mocker, worker, exception_thrown):
     # Testing redis exceptions, no retry settings specified
+    p = None
     try:
         worker = worker(functions=[func(foobar)])
+
+        # baseline
         await worker.main()
         await worker._poll_iteration()
 
@@ -1056,4 +1061,5 @@ async def test_worker_crash(mocker, worker, exception_thrown):
         assert spy.spy_exception == exception_thrown
     finally:
         # stop patch to allow worker cleanup
-        p.stop()
+        if p is not None:
+            p.stop()
