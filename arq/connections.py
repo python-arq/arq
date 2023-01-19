@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Union
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
-import redis.retry
 from redis.asyncio import ConnectionPool, Redis
+from redis.asyncio.retry import Retry
 from redis.asyncio.sentinel import Sentinel
 from redis.exceptions import RedisError, WatchError
 
@@ -50,7 +50,7 @@ class RedisSettings:
 
     retry_on_timeout: bool = False
     retry_on_error: Optional[List[Any]] = None
-    retry: Optional[redis.retry.Retry] = None
+    retry: Optional[Retry] = None
 
     @classmethod
     def from_dsn(cls, dsn: str) -> 'RedisSettings':
