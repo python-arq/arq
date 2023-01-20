@@ -1000,20 +1000,21 @@ async def test_worker_timezone_defaults_to_system_timezone(worker):
 )
 async def test_worker_retry(mocker, worker_retry, exception_thrown):
     # Testing redis exceptions, with retry settings specified
-    p = None
+    worker = worker_retry(functions=[func(foobar)])
+
+    # patch db read_response to mimic connection exceptions
+    p = patch.object(worker.pool.connection_pool.connection_class, 'read_response', side_effect=exception_thrown)
+
+    # baseline
+    await worker.main()
+    await worker._poll_iteration()
+
+    # spy method handling call_with_retry failure
+    spy = mocker.spy(worker.pool, '_disconnect_raise')
+
     try:
-        worker = worker_retry(functions=[func(foobar)])
-
-        # baseline
-        await worker.main()
-        await worker._poll_iteration()
-
-        # patch db read_response
-        p = patch.object(worker.pool.connection_pool.connection_class, 'read_response', side_effect=exception_thrown)
+        # start patch
         p.start()
-
-        # spy method handling call_with_retry failure
-        spy = mocker.spy(worker.pool, '_disconnect_raise')
 
         # assert exception thrown
         with pytest.raises(type(exception_thrown)):
@@ -1022,10 +1023,10 @@ async def test_worker_retry(mocker, worker_retry, exception_thrown):
         # assert retry counts and no exception thrown during '_disconnect_raise'
         assert spy.call_count == 4  # retries setting + 1
         assert spy.spy_exception is None
+
     finally:
         # stop patch to allow worker cleanup
-        if p is not None:
-            p.stop()
+        p.stop()
 
 
 @pytest.mark.parametrize(
@@ -1037,20 +1038,21 @@ async def test_worker_retry(mocker, worker_retry, exception_thrown):
 )
 async def test_worker_crash(mocker, worker, exception_thrown):
     # Testing redis exceptions, no retry settings specified
-    p = None
+    worker = worker(functions=[func(foobar)])
+
+    # patch db read_response to mimic connection exceptions
+    p = patch.object(worker.pool.connection_pool.connection_class, 'read_response', side_effect=exception_thrown)
+
+    # baseline
+    await worker.main()
+    await worker._poll_iteration()
+
+    # spy method handling call_with_retry failure
+    spy = mocker.spy(worker.pool, '_disconnect_raise')
+
     try:
-        worker = worker(functions=[func(foobar)])
-
-        # baseline
-        await worker.main()
-        await worker._poll_iteration()
-
-        # patch db read_response
-        p = patch.object(worker.pool.connection_pool.connection_class, 'read_response', side_effect=exception_thrown)
+        # start patch
         p.start()
-
-        # spy method handling call_with_retry failure
-        spy = mocker.spy(worker.pool, '_disconnect_raise')
 
         # assert exception thrown
         with pytest.raises(type(exception_thrown)):
@@ -1059,7 +1061,7 @@ async def test_worker_crash(mocker, worker, exception_thrown):
         # assert no retry counts and exception thrown during '_disconnect_raise'
         assert spy.call_count == 1
         assert spy.spy_exception == exception_thrown
+
     finally:
         # stop patch to allow worker cleanup
-        if p is not None:
-            p.stop()
+        p.stop()
