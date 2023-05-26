@@ -93,7 +93,6 @@ color_output = true
 
 [tool.mypy]
 strict = true
-show_error_codes = true
 
 # remaining arguments from `mypy --strict` which cause errors
 warn_return_any = false
