@@ -92,23 +92,8 @@ combine_as_imports = true
 color_output = true
 
 [tool.mypy]
+strict = true
 show_error_codes = true
-follow_imports = 'silent'
-strict_optional = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-disallow_any_generics = true
-check_untyped_defs = true
-no_implicit_reexport = true
-warn_unused_configs = true
-disallow_subclassing_any = true
-disallow_incomplete_defs = true
-disallow_untyped_decorators = true
-disallow_untyped_calls = true
-no_implicit_optional = true
-
-# for strict mypy: (this is the tricky one :-))
-disallow_untyped_defs = true
 
 # remaining arguments from `mypy --strict` which cause errors
-#warn_return_any = true
+warn_return_any = false
