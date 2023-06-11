@@ -984,6 +984,36 @@ async def test_on_job(arq_redis: ArqRedis, worker):
     assert result['called'] == 4
 
 
+async def test_job_cancel_on_max_jobs(arq_redis: ArqRedis, worker, caplog):
+    async def longfunc(ctx):
+        await asyncio.sleep(3600)
+
+    async def wait_and_abort(job, delay=0.1):
+        await asyncio.sleep(delay)
+        assert await job.abort() is True
+
+    caplog.set_level(logging.INFO)
+    await arq_redis.zadd(abort_jobs_ss, {b'foobar': int(1e9)})
+    job = await arq_redis.enqueue_job('longfunc', _job_id='testing')
+
+    worker: Worker = worker(
+        functions=[func(longfunc, name='longfunc')], allow_abort_jobs=True, poll_delay=0.1, max_jobs=1
+    )
+    assert worker.jobs_complete == 0
+    assert worker.jobs_failed == 0
+    assert worker.jobs_retried == 0
+    await asyncio.gather(wait_and_abort(job), worker.main())
+    await worker.main()
+    assert worker.jobs_complete == 0
+    assert worker.jobs_failed == 1
+    assert worker.jobs_retried == 0
+    log = re.sub(r'\d+.\d\ds', 'X.XXs', '\n'.join(r.message for r in caplog.records))
+    assert 'X.XXs → testing:longfunc()\n  X.XXs ⊘ testing:longfunc aborted' in log
+    assert worker.aborting_tasks == set()
+    assert worker.tasks == {}
+    assert worker.job_tasks == {}
+
+
 async def test_worker_timezone_defaults_to_system_timezone(worker):
     worker = worker(functions=[func(foobar)])
     assert worker.timezone is not None
