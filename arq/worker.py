@@ -624,6 +624,7 @@ class Worker:
         )
         result_timeout_s = self.keep_result_s if function.keep_result_s is None else function.keep_result_s
         result_data = None
+        job_result = None
         if result is not no_result and (keep_result_forever or result_timeout_s > 0):
             job_result, result_data = _create_result(
                 function_name,
@@ -687,9 +688,10 @@ class Worker:
                 tr.delete(*delete_keys)  # type: ignore[unused-coroutine]
             await tr.execute()
 
-    async def _after_job_end(self, ctx: Dict[Any, Any], job_result: JobResult) -> None:
+    async def _after_job_end(self, ctx: Dict[Any, Any], job_result: Optional[JobResult]) -> None:
         if self.after_job_end:
-            ctx['job_result'] = job_result
+            if job_result:
+                ctx['job_result'] = job_result
             await self.after_job_end(ctx)
 
     async def finish_failed_job(self, job_id: str, result_data: Optional[bytes]) -> None:
