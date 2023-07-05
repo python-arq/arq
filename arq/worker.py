@@ -545,7 +545,6 @@ class Worker:
         if job_try > max_tries:
             t = (timestamp_ms() - enqueue_time_ms) / 1000
             logger.warning('%6.2fs ! %s max retries %d exceeded', t, ref, max_tries)
-            self.jobs_failed += 1
             return await job_failed(JobExecutionFailed(f'max {max_tries} retries exceeded'), ref=ref)
 
         result = no_result
