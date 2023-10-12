@@ -11,7 +11,7 @@ from uuid import uuid4
 from redis.asyncio import ConnectionPool, Redis
 from redis.asyncio.sentinel import Sentinel
 from redis.exceptions import RedisError, WatchError
-
+from redis.asyncio.cluster import RedisCluster
 from .constants import default_queue_name, expires_extra_ms, job_key_prefix, result_key_prefix
 from .jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
 from .utils import timestamp_ms, to_ms, to_unix_ms
@@ -43,7 +43,7 @@ class RedisSettings:
     conn_timeout: int = 1
     conn_retries: int = 5
     conn_retry_delay: int = 1
-
+    cluster_mode: bool = False
     sentinel: bool = False
     sentinel_master: str = 'mymaster'
 
@@ -74,7 +74,7 @@ class RedisSettings:
 if TYPE_CHECKING:
     BaseRedis = Redis[bytes]
 else:
-    BaseRedis = Redis
+    BaseRedis = RedisCluster
 
 
 class ArqRedis(BaseRedis):
