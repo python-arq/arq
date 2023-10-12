@@ -72,7 +72,7 @@ class RedisSettings:
 
 
 if TYPE_CHECKING:
-    BaseRedis = Redis[bytes]
+    BaseRedis = RedisCluster[bytes]
 else:
     BaseRedis = RedisCluster
 
@@ -255,12 +255,13 @@ async def create_pool(
     while True:
         try:
             pool = pool_factory(
-                db=settings.database, username=settings.username, password=settings.password, encoding='utf8'
+                db=settings.database, password=settings.password, encoding='utf8'
             )
             pool.job_serializer = job_serializer
             pool.job_deserializer = job_deserializer
             pool.default_queue_name = default_queue_name
             pool.expires_extra_ms = expires_extra_ms
+            await pool.initialize()
             await pool.ping()
 
         except (ConnectionError, OSError, RedisError, asyncio.TimeoutError) as e:
