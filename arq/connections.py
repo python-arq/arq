@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Union
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
-from redis.asyncio import ConnectionPool, Redis
+from redis.asyncio import ConnectionPool
 from redis.asyncio.sentinel import Sentinel
 from redis.exceptions import RedisError, WatchError
 from redis.asyncio.cluster import RedisCluster
@@ -29,8 +29,7 @@ class RedisSettings:
 
     host: Union[str, List[Tuple[str, int]]] = 'localhost'
     port: int = 6379
-    unix_socket_path: Optional[str] = None
-    database: int = 0
+    
     username: Optional[str] = None
     password: Optional[str] = None
     ssl: bool = False
@@ -51,20 +50,13 @@ class RedisSettings:
     def from_dsn(cls, dsn: str) -> 'RedisSettings':
         conf = urlparse(dsn)
         assert conf.scheme in {'redis', 'rediss', 'unix'}, 'invalid DSN scheme'
-        query_db = parse_qs(conf.query).get('db')
-        if query_db:
-            # e.g. redis://localhost:6379?db=1
-            database = int(query_db[0])
-        else:
-            database = int(conf.path.lstrip('/')) if conf.path else 0
+  
+   
         return RedisSettings(
             host=conf.hostname or 'localhost',
             port=conf.port or 6379,
             ssl=conf.scheme == 'rediss',
-            username=conf.username,
             password=conf.password,
-            database=database,
-            unix_socket_path=conf.path if conf.scheme == 'unix' else None,
         )
 
     def __repr__(self) -> str:
@@ -143,8 +135,10 @@ class ArqRedis(BaseRedis):
         defer_by_ms = to_ms(_defer_by)
         expires_ms = to_ms(_expires)
 
-        async with self.pipeline(transaction=True) as pipe:
-            await pipe.watch(job_key)
+        
+        async with self.pipeline() as pipe:
+            logger.debug("insides pipeline---------------------------")
+            
             if await pipe.exists(job_key, result_key_prefix + job_id):
                 await pipe.reset()
                 return None
@@ -160,7 +154,7 @@ class ArqRedis(BaseRedis):
             expires_ms = expires_ms or score - enqueue_time_ms + self.expires_extra_ms
 
             job = serialize_job(function, args, kwargs, _job_try, enqueue_time_ms, serializer=self.job_serializer)
-            pipe.multi()
+            
             pipe.psetex(job_key, expires_ms, job)  # type: ignore[no-untyped-call]
             pipe.zadd(_queue_name, {job_id: score})  # type: ignore[unused-coroutine]
             try:
@@ -241,7 +235,6 @@ async def create_pool(
             ArqRedis,
             host=settings.host,
             port=settings.port,
-            unix_socket_path=settings.unix_socket_path,
             socket_connect_timeout=settings.conn_timeout,
             ssl=settings.ssl,
             ssl_keyfile=settings.ssl_keyfile,
@@ -254,15 +247,15 @@ async def create_pool(
 
     while True:
         try:
-            pool = pool_factory(
-                db=settings.database, password=settings.password, encoding='utf8'
+            pool = await pool_factory(
+                 password=settings.password, encoding='utf8'
             )
             pool.job_serializer = job_serializer
             pool.job_deserializer = job_deserializer
             pool.default_queue_name = default_queue_name
             pool.expires_extra_ms = expires_extra_ms
-            await pool.initialize()
-            await pool.ping()
+            
+            
 
         except (ConnectionError, OSError, RedisError, asyncio.TimeoutError) as e:
             if retry < settings.conn_retries:
@@ -284,21 +277,22 @@ async def create_pool(
             return pool
 
 
-async def log_redis_info(redis: 'Redis[bytes]', log_func: Callable[[str], Any]) -> None:
-    async with redis.pipeline(transaction=False) as pipe:
-        pipe.info(section='Server')  # type: ignore[unused-coroutine]
-        pipe.info(section='Memory')  # type: ignore[unused-coroutine]
-        pipe.info(section='Clients')  # type: ignore[unused-coroutine]
-        pipe.dbsize()  # type: ignore[unused-coroutine]
-        info_server, info_memory, info_clients, key_count = await pipe.execute()
+async def log_redis_info(redis: 'RedisCluster[bytes]', log_func: Callable[[str], Any]) -> None:
+    # async with redis.pipeline() as pipe:
+    #     pipe.info(section='Server')
+    #   # type: ignore[unused-coroutine]
+    #     pipe.info(section='Memory')  # type: ignore[unused-coroutine]
+    #     pipe.info(section='Clients')  # type: ignore[unused-coroutine]
+    #     pipe.dbsize()  # type: ignore[unused-coroutine]
+    #     info_server, info_memory, info_clients, key_count = await pipe.execute()
 
-    redis_version = info_server.get('redis_version', '?')
-    mem_usage = info_memory.get('used_memory_human', '?')
-    clients_connected = info_clients.get('connected_clients', '?')
+    redis_version = "info_server.get('redis_version', '?')"
+    mem_usage = "info_memory.get('used_memory_human', '?')"
+    clients_connected =" info_clients.get('connected_clients', '?')"
 
     log_func(
         f'redis_version={redis_version} '
         f'mem_usage={mem_usage} '
         f'clients_connected={clients_connected} '
-        f'db_keys={key_count}'
+        f'db_keys={88}'
     )

@@ -5,7 +5,7 @@ import sys
 
 import msgpack
 import pytest
-from redislite import Redis
+
 
 from arq.connections import ArqRedis, create_pool
 from arq.worker import Worker
@@ -18,38 +18,32 @@ def _fix_loop(event_loop):
 
 @pytest.fixture
 async def arq_redis(loop):
-    redis_ = ArqRedis(
-        host='localhost',
-        port=6379,
-        encoding='utf-8',
+    redis_ =  ArqRedis(
+        host="tf-rep-group-1.48tzwx.clustercfg.use2.cache.amazonaws.com", 
+        port="6379",
+        decode_responses=True,
     )
-
-    await redis_.flushall()
 
     yield redis_
 
-    await redis_.close(close_connection_pool=True)
+    await redis_.close()
 
 
-@pytest.fixture
-async def unix_socket_path(loop, tmp_path):
-    rdb = Redis(str(tmp_path / 'redis_test.db'))
-    yield rdb.socket_file
-    rdb.close()
 
 
 @pytest.fixture
 async def arq_redis_msgpack(loop):
-    redis_ = ArqRedis(
-        host='localhost',
-        port=6379,
+    redis_ = await ArqRedis(
+        host="tf-rep-group-1.48tzwx.clustercfg.use2.cache.amazonaws.com", 
+        port="6379",
+        decode_responses=True,
         encoding='utf-8',
         job_serializer=msgpack.packb,
         job_deserializer=functools.partial(msgpack.unpackb, raw=False),
     )
-    await redis_.flushall()
+
     yield redis_
-    await redis_.close(close_connection_pool=True)
+    await redis_.close()
 
 
 @pytest.fixture
@@ -80,7 +74,7 @@ async def fix_create_pool(loop):
 
     yield create_pool_
 
-    await asyncio.gather(*[p.close(close_connection_pool=True) for p in pools])
+    await asyncio.gather(*[await p.close() for p in pools])
 
 
 @pytest.fixture(name='cancel_remaining_task')

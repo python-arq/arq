@@ -397,7 +397,7 @@ class Worker:
         """
         Go through job_ids in the abort_jobs_ss sorted set and cancel those tasks.
         """
-        async with self.pool.pipeline(transaction=True) as pipe:
+        async with self.pool.pipeline() as pipe:
             pipe.zrange(abort_jobs_ss, start=0, end=-1)  # type: ignore[unused-coroutine]
             pipe.zremrangebyscore(  # type: ignore[unused-coroutine]
                 abort_jobs_ss, min=timestamp_ms() + abort_job_max_age, max=float('inf')
@@ -427,7 +427,7 @@ class Worker:
             await self.sem.acquire()
             job_id = job_id_b.decode()
             in_progress_key = in_progress_key_prefix + job_id
-            async with self.pool.pipeline(transaction=True) as pipe:
+            async with self.pool.pipeline() as pipe:
                 await pipe.watch(in_progress_key)
                 ongoing_exists = await pipe.exists(in_progress_key)
                 score = await pipe.zscore(self.queue_name, job_id)
@@ -454,7 +454,7 @@ class Worker:
 
     async def run_job(self, job_id: str, score: int) -> None:  # noqa: C901
         start_ms = timestamp_ms()
-        async with self.pool.pipeline(transaction=True) as pipe:
+        async with self.pool.pipeline() as pipe:
             pipe.get(job_key_prefix + job_id)  # type: ignore[unused-coroutine]
             pipe.incr(retry_key_prefix + job_id)  # type: ignore[unused-coroutine]
             pipe.expire(retry_key_prefix + job_id, 88400)  # type: ignore[unused-coroutine]
@@ -663,7 +663,7 @@ class Worker:
         incr_score: Optional[int],
         keep_in_progress: Optional[float],
     ) -> None:
-        async with self.pool.pipeline(transaction=True) as tr:
+        async with self.pool.pipeline() as tr:
             delete_keys = []
             in_progress_key = in_progress_key_prefix + job_id
             if keep_in_progress is None:
@@ -685,7 +685,7 @@ class Worker:
             await tr.execute()
 
     async def finish_failed_job(self, job_id: str, result_data: Optional[bytes]) -> None:
-        async with self.pool.pipeline(transaction=True) as tr:
+        async with self.pool.pipeline() as tr:
             tr.delete(  # type: ignore[unused-coroutine]
                 retry_key_prefix + job_id,
                 in_progress_key_prefix + job_id,
@@ -843,7 +843,7 @@ class Worker:
         await self.pool.delete(self.health_check_key)
         if self.on_shutdown:
             await self.on_shutdown(self.ctx)
-        await self.pool.close(close_connection_pool=True)
+        await self.pool.close()
         self._pool = None
 
     def __repr__(self) -> str:
@@ -884,7 +884,7 @@ async def async_check_health(
     else:
         logger.info('Health check successful: %s', data)
         r = 0
-    await redis.close(close_connection_pool=True)
+    await redis.close()
     return r
 
 

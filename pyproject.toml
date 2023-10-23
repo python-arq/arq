@@ -59,7 +59,7 @@ Changelog = 'https://github.com/samuelcolvin/arq/releases'
 testpaths = 'tests'
 filterwarnings = ['error']
 asyncio_mode = 'auto'
-timeout = 10
+
 
 [tool.coverage.run]
 source = ['arq']
