@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from .typing import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType  # noqa F401
 
 logger = logging.getLogger('arq.worker')
+logging.basicConfig(level=logging.DEBUG)
 no_result = object()
 
 
@@ -358,6 +359,7 @@ class Worker:
                     await asyncio.gather(*self.tasks.values())
                     return None
                 queued_jobs = await self.pool.zcard(self.queue_name)
+                
                 if queued_jobs == 0:
                     await asyncio.gather(*self.tasks.values())
                     return None
@@ -379,7 +381,7 @@ class Worker:
                 job_ids = await self.pool.zrangebyscore(
                     self.queue_name, min=float('-inf'), start=self._queue_read_offset, num=count, max=now
                 )
-
+         
             await self.start_jobs(job_ids)
 
         if self.allow_abort_jobs:
@@ -427,21 +429,31 @@ class Worker:
             await self.sem.acquire()
             job_id = job_id_b.decode()
             in_progress_key = in_progress_key_prefix + job_id
+            scores = await self.pool.zscore(self.queue_name, job_id)
+            print(scores)
             async with self.pool.pipeline() as pipe:
-                await pipe.watch(in_progress_key)
-                ongoing_exists = await pipe.exists(in_progress_key)
+                
+             
                 score = await pipe.zscore(self.queue_name, job_id)
-                if ongoing_exists or not score:
+                
+                
+                if not score:
+                  
+                  
+                    print(f"score is {bool(score)} queue {self.queue_name} didn't have job {job_id}")
                     # job already started elsewhere, or already finished and removed from queue
                     self.sem.release()
-                    logger.debug('job %s already running elsewhere', job_id)
+                    # logger.debug('job %s already running elsewhere', job_id)
                     continue
 
-                pipe.multi()
+                
                 pipe.psetex(  # type: ignore[no-untyped-call]
                     in_progress_key, int(self.in_progress_timeout_s * 1000), b'1'
                 )
+
                 try:
+
+                    print("we triedeeeeeeeeeeeeeeee")
                     await pipe.execute()
                 except (ResponseError, WatchError):
                     # job already started elsewhere since we got 'existing'
@@ -461,8 +473,10 @@ class Worker:
             if self.allow_abort_jobs:
                 pipe.zrem(abort_jobs_ss, job_id)  # type: ignore[unused-coroutine]
                 v, job_try, _, abort_job = await pipe.execute()
+                print(f"v in worker l-471 {v}")
             else:
                 v, job_try, _ = await pipe.execute()
+                print(f"v in worker l-473 {v}")
                 abort_job = False
 
         function_name, enqueue_time_ms = '<unknown>', 0

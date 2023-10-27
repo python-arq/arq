@@ -17,7 +17,7 @@ from .jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('arq.connections')
-
+logging.basicConfig(level=logging.DEBUG)
 
 @dataclass
 class RedisSettings:
@@ -27,9 +27,9 @@ class RedisSettings:
     Used by :func:`arq.connections.create_pool` and :class:`arq.worker.Worker`.
     """
 
-    host: Union[str, List[Tuple[str, int]]] = 'localhost'
+    host: Union[str, List[Tuple[str, int]]] = 'test-cluster.aqtke6.clustercfg.use2.cache.amazonaws.com'
     port: int = 6379
-    
+
     username: Optional[str] = None
     password: Optional[str] = None
     ssl: bool = False
@@ -50,8 +50,8 @@ class RedisSettings:
     def from_dsn(cls, dsn: str) -> 'RedisSettings':
         conf = urlparse(dsn)
         assert conf.scheme in {'redis', 'rediss', 'unix'}, 'invalid DSN scheme'
-  
-   
+
+
         return RedisSettings(
             host=conf.hostname or 'localhost',
             port=conf.port or 6379,
@@ -135,10 +135,9 @@ class ArqRedis(BaseRedis):
         defer_by_ms = to_ms(_defer_by)
         expires_ms = to_ms(_expires)
 
-        
+
         async with self.pipeline() as pipe:
-            logger.debug("insides pipeline---------------------------")
-            
+            logger.debug("insides pipeline Enq Job---------------------------")
             if await pipe.exists(job_key, result_key_prefix + job_id):
                 await pipe.reset()
                 return None
@@ -154,15 +153,18 @@ class ArqRedis(BaseRedis):
             expires_ms = expires_ms or score - enqueue_time_ms + self.expires_extra_ms
 
             job = serialize_job(function, args, kwargs, _job_try, enqueue_time_ms, serializer=self.job_serializer)
-            
+
             pipe.psetex(job_key, expires_ms, job)  # type: ignore[no-untyped-call]
             pipe.zadd(_queue_name, {job_id: score})  # type: ignore[unused-coroutine]
             try:
+                logger.debug("Executing Enq Job---------------------------")
                 await pipe.execute()
             except WatchError:
                 # job got enqueued since we checked 'job_exists'
                 return None
-        return Job(job_id, redis=self, _queue_name=_queue_name, _deserializer=self.job_deserializer)
+        the_job = Job(job_id, redis=self, _queue_name=_queue_name, _deserializer=self.job_deserializer)
+        logger.debug(the_job)
+        return the_job
 
     async def _get_job_result(self, key: bytes) -> JobResult:
         job_id = key[len(result_key_prefix) :].decode()
@@ -254,8 +256,8 @@ async def create_pool(
             pool.job_deserializer = job_deserializer
             pool.default_queue_name = default_queue_name
             pool.expires_extra_ms = expires_extra_ms
-            
-            
+
+
 
         except (ConnectionError, OSError, RedisError, asyncio.TimeoutError) as e:
             if retry < settings.conn_retries:

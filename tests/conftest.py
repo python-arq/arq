@@ -19,9 +19,9 @@ def _fix_loop(event_loop):
 @pytest.fixture
 async def arq_redis(loop):
     redis_ =  ArqRedis(
-        host="tf-rep-group-1.48tzwx.clustercfg.use2.cache.amazonaws.com", 
+        host="test-cluster.aqtke6.clustercfg.use2.cache.amazonaws.com",
         port="6379",
-        decode_responses=True,
+        
     )
 
     yield redis_
@@ -34,9 +34,9 @@ async def arq_redis(loop):
 @pytest.fixture
 async def arq_redis_msgpack(loop):
     redis_ = await ArqRedis(
-        host="tf-rep-group-1.48tzwx.clustercfg.use2.cache.amazonaws.com", 
+        host="tf-rep-group-1.48tzwx.clustercfg.use2.cache.amazonaws.com",
         port="6379",
-        decode_responses=True,
+ 
         encoding='utf-8',
         job_serializer=msgpack.packb,
         job_deserializer=functools.partial(msgpack.unpackb, raw=False),
