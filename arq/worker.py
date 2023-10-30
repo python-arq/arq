@@ -236,7 +236,11 @@ class Worker:
         self.on_job_start = on_job_start
         self.on_job_end = on_job_end
         self.after_job_end = after_job_end
-        self.sem = asyncio.BoundedSemaphore(max_jobs)
+
+        self.max_jobs = max_jobs
+        self.sem = asyncio.BoundedSemaphore(max_jobs + 1)
+        self.job_counter: int = 0
+
         self.job_timeout_s = to_seconds(job_timeout)
         self.keep_result_s = to_seconds(keep_result)
         self.keep_result_forever = keep_result_forever
@@ -374,13 +378,13 @@ class Worker:
                 return
             count = min(burst_jobs_remaining, count)
         if self.allow_pick_jobs:
-            async with self.sem:  # don't bother with zrangebyscore until we have "space" to run the jobs
+            if self.job_counter < self.max_jobs:
                 now = timestamp_ms()
                 job_ids = await self.pool.zrangebyscore(
                     self.queue_name, min=float('-inf'), start=self._queue_read_offset, num=count, max=now
                 )
 
-            await self.start_jobs(job_ids)
+                await self.start_jobs(job_ids)
 
         if self.allow_abort_jobs:
             await self._cancel_aborted_jobs()
@@ -419,12 +423,23 @@ class Worker:
             self.aborting_tasks.update(aborted)
             await self.pool.zrem(abort_jobs_ss, *aborted)
 
+    def _release_sem_dec_counter_on_complete(self) -> None:
+        self.job_counter = self.job_counter - 1
+        self.sem.release()
+
     async def start_jobs(self, job_ids: List[bytes]) -> None:
         """
         For each job id, get the job definition, check it's not running and start it in a task
         """
         for job_id_b in job_ids:
             await self.sem.acquire()
+
+            if self.job_counter >= self.max_jobs:
+                self.sem.release()
+                return None
+
+            self.job_counter = self.job_counter + 1
+
             job_id = job_id_b.decode()
             in_progress_key = in_progress_key_prefix + job_id
             async with self.pool.pipeline(transaction=True) as pipe:
@@ -433,6 +448,7 @@ class Worker:
                 score = await pipe.zscore(self.queue_name, job_id)
                 if ongoing_exists or not score:
                     # job already started elsewhere, or already finished and removed from queue
+                    self.job_counter = self.job_counter - 1
                     self.sem.release()
                     logger.debug('job %s already running elsewhere', job_id)
                     continue
@@ -445,11 +461,12 @@ class Worker:
                     await pipe.execute()
                 except (ResponseError, WatchError):
                     # job already started elsewhere since we got 'existing'
+                    self.job_counter = self.job_counter - 1
                     self.sem.release()
                     logger.debug('multi-exec error, job %s already started elsewhere', job_id)
                 else:
                     t = self.loop.create_task(self.run_job(job_id, int(score)))
-                    t.add_done_callback(lambda _: self.sem.release())
+                    t.add_done_callback(lambda _: self._release_sem_dec_counter_on_complete())
                     self.tasks[job_id] = t
 
     async def run_job(self, job_id: str, score: int) -> None:  # noqa: C901
