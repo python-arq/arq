@@ -14,7 +14,8 @@ def arq_from_settings() -> arq.connections.RedisSettings:
     return arq.connections.RedisSettings(
         host="test-cluster.aqtke6.clustercfg.use2.cache.amazonaws.com",
         port="6379",
-        conn_timeout=5
+        conn_timeout=5,
+        cluster_mode=True
 
     )
 
@@ -53,7 +54,7 @@ def print_job():
 async def create_worker(arq_redis:arq.ArqRedis, functions=[], burst=True, poll_delay=0, max_jobs=10,  **kwargs):
         global worker_
         worker_ = Worker(
-            functions=functions, redis_pool=arq_redis, burst=burst, poll_delay=poll_delay, max_jobs=max_jobs,on_job_start=print_job, **kwargs
+            functions=functions, redis_pool=arq_redis, burst=burst, poll_delay=poll_delay, max_jobs=max_jobs, **kwargs
         )
         return worker_
 
@@ -68,7 +69,7 @@ async def qj():
         return 42
 
     j = await arq.enqueue_job('foobar')
-    
+
     worker: Worker = await create_worker(arq,functions=[func(foobar, name='foobar')],)
     await worker.main()
     r = await j.result(poll_delay=0)
@@ -79,4 +80,3 @@ if __name__ == "__main__":
 
 
     asyncio.run(qj())
-

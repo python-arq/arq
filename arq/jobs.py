@@ -7,8 +7,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Dict, Optional, Tuple
 
-
 from redis.asyncio.cluster import RedisCluster
+
 from .constants import abort_jobs_ss, default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
 from .utils import ms_to_datetime, poll, timestamp_ms
 
@@ -102,11 +102,11 @@ class Job:
             poll_delay = pole_delay
 
         async for delay in poll(poll_delay):
-            async with self._redis.pipeline() as tr:
+            async with self._redis.pipeline(transaction=True) as tr:
                 tr.get(result_key_prefix + self.job_id)  # type: ignore[unused-coroutine]
                 tr.zscore(self._queue_name, self.job_id)  # type: ignore[unused-coroutine]
                 v, s = await tr.execute()
-                
+
             if v:
                 info = deserialize_result(v, deserializer=self._deserializer)
                 print(info)
@@ -154,7 +154,7 @@ class Job:
         """
         Status of the job.
         """
-        async with self._redis.pipeline() as tr:
+        async with self._redis.pipeline(transaction=True) as tr:
             tr.exists(result_key_prefix + self.job_id)  # type: ignore[unused-coroutine]
             tr.exists(in_progress_key_prefix + self.job_id)  # type: ignore[unused-coroutine]
             tr.zscore(self._queue_name, self.job_id)  # type: ignore[unused-coroutine]
@@ -180,7 +180,7 @@ class Job:
         """
         job_info = await self.info()
         if job_info and job_info.score and job_info.score > timestamp_ms():
-            async with self._redis.pipeline() as tr:
+            async with self._redis.pipeline(transaction=True) as tr:
                 tr.zrem(self._queue_name, self.job_id)  # type: ignore[unused-coroutine]
                 tr.zadd(self._queue_name, {self.job_id: 1})  # type: ignore[unused-coroutine]
                 await tr.execute()

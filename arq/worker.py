@@ -359,7 +359,7 @@ class Worker:
                     await asyncio.gather(*self.tasks.values())
                     return None
                 queued_jobs = await self.pool.zcard(self.queue_name)
-                
+
                 if queued_jobs == 0:
                     await asyncio.gather(*self.tasks.values())
                     return None
@@ -381,7 +381,7 @@ class Worker:
                 job_ids = await self.pool.zrangebyscore(
                     self.queue_name, min=float('-inf'), start=self._queue_read_offset, num=count, max=now
                 )
-         
+
             await self.start_jobs(job_ids)
 
         if self.allow_abort_jobs:
@@ -399,7 +399,7 @@ class Worker:
         """
         Go through job_ids in the abort_jobs_ss sorted set and cancel those tasks.
         """
-        async with self.pool.pipeline() as pipe:
+        async with self.pool.pipeline(transaction=True) as pipe:
             pipe.zrange(abort_jobs_ss, start=0, end=-1)  # type: ignore[unused-coroutine]
             pipe.zremrangebyscore(  # type: ignore[unused-coroutine]
                 abort_jobs_ss, min=timestamp_ms() + abort_job_max_age, max=float('inf')
@@ -429,31 +429,25 @@ class Worker:
             await self.sem.acquire()
             job_id = job_id_b.decode()
             in_progress_key = in_progress_key_prefix + job_id
-            scores = await self.pool.zscore(self.queue_name, job_id)
-            print(scores)
-            async with self.pool.pipeline() as pipe:
-                
-             
+
+            async with self.pool.pipeline(transaction=True) as pipe:
+                await pipe.watch(in_progress_key)
+                ongoing_exists = await pipe.exists(in_progress_key)
                 score = await pipe.zscore(self.queue_name, job_id)
-                
-                
-                if not score:
-                  
-                  
-                    print(f"score is {bool(score)} queue {self.queue_name} didn't have job {job_id}")
+
+                if ongoing_exists or not score:
                     # job already started elsewhere, or already finished and removed from queue
                     self.sem.release()
                     # logger.debug('job %s already running elsewhere', job_id)
                     continue
 
-                
+                pipe.multi()
                 pipe.psetex(  # type: ignore[no-untyped-call]
                     in_progress_key, int(self.in_progress_timeout_s * 1000), b'1'
                 )
 
                 try:
 
-                    print("we triedeeeeeeeeeeeeeeee")
                     await pipe.execute()
                 except (ResponseError, WatchError):
                     # job already started elsewhere since we got 'existing'
@@ -466,17 +460,15 @@ class Worker:
 
     async def run_job(self, job_id: str, score: int) -> None:  # noqa: C901
         start_ms = timestamp_ms()
-        async with self.pool.pipeline() as pipe:
+        async with self.pool.pipeline(transaction=True) as pipe:
             pipe.get(job_key_prefix + job_id)  # type: ignore[unused-coroutine]
             pipe.incr(retry_key_prefix + job_id)  # type: ignore[unused-coroutine]
             pipe.expire(retry_key_prefix + job_id, 88400)  # type: ignore[unused-coroutine]
             if self.allow_abort_jobs:
                 pipe.zrem(abort_jobs_ss, job_id)  # type: ignore[unused-coroutine]
                 v, job_try, _, abort_job = await pipe.execute()
-                print(f"v in worker l-471 {v}")
             else:
                 v, job_try, _ = await pipe.execute()
-                print(f"v in worker l-473 {v}")
                 abort_job = False
 
         function_name, enqueue_time_ms = '<unknown>', 0
@@ -677,7 +669,7 @@ class Worker:
         incr_score: Optional[int],
         keep_in_progress: Optional[float],
     ) -> None:
-        async with self.pool.pipeline() as tr:
+        async with self.pool.pipeline(transaction=True) as tr:
             delete_keys = []
             in_progress_key = in_progress_key_prefix + job_id
             if keep_in_progress is None:
@@ -699,7 +691,7 @@ class Worker:
             await tr.execute()
 
     async def finish_failed_job(self, job_id: str, result_data: Optional[bytes]) -> None:
-        async with self.pool.pipeline() as tr:
+        async with self.pool.pipeline(transaction=True) as tr:
             tr.delete(  # type: ignore[unused-coroutine]
                 retry_key_prefix + job_id,
                 in_progress_key_prefix + job_id,

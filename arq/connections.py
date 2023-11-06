@@ -4,20 +4,26 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, TypeVar, Union
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
-from redis.asyncio import ConnectionPool
+from redis.asyncio import ConnectionPool, Redis
+from redis.asyncio.cluster import ClusterPipeline, PipelineCommand, RedisCluster
 from redis.asyncio.sentinel import Sentinel
 from redis.exceptions import RedisError, WatchError
-from redis.asyncio.cluster import RedisCluster
+from redis.typing import EncodableT, KeyT
+
 from .constants import default_queue_name, expires_extra_ms, job_key_prefix, result_key_prefix
 from .jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('arq.connections')
 logging.basicConfig(level=logging.DEBUG)
+
+
+_KeyT = TypeVar('_KeyT', bound=KeyT)
+
 
 @dataclass
 class RedisSettings:
@@ -29,7 +35,8 @@ class RedisSettings:
 
     host: Union[str, List[Tuple[str, int]]] = 'test-cluster.aqtke6.clustercfg.use2.cache.amazonaws.com'
     port: int = 6379
-
+    unix_socket_path: Optional[str] = None
+    database: int = 0
     username: Optional[str] = None
     password: Optional[str] = None
     ssl: bool = False
@@ -42,7 +49,7 @@ class RedisSettings:
     conn_timeout: int = 1
     conn_retries: int = 5
     conn_retry_delay: int = 1
-    cluster_mode: bool = False
+    cluster_mode: bool = True
     sentinel: bool = False
     sentinel_master: str = 'mymaster'
 
@@ -50,7 +57,6 @@ class RedisSettings:
     def from_dsn(cls, dsn: str) -> 'RedisSettings':
         conf = urlparse(dsn)
         assert conf.scheme in {'redis', 'rediss', 'unix'}, 'invalid DSN scheme'
-
 
         return RedisSettings(
             host=conf.hostname or 'localhost',
@@ -64,9 +70,9 @@ class RedisSettings:
 
 
 if TYPE_CHECKING:
-    BaseRedis = RedisCluster[bytes]
+    BaseRedis = Redis[bytes]
 else:
-    BaseRedis = RedisCluster
+    BaseRedis = Redis
 
 
 class ArqRedis(BaseRedis):
@@ -135,9 +141,8 @@ class ArqRedis(BaseRedis):
         defer_by_ms = to_ms(_defer_by)
         expires_ms = to_ms(_expires)
 
-
-        async with self.pipeline() as pipe:
-            logger.debug("insides pipeline Enq Job---------------------------")
+        async with self.pipeline(transaction=True) as pipe:
+            await pipe.watch(job_key)
             if await pipe.exists(job_key, result_key_prefix + job_id):
                 await pipe.reset()
                 return None
@@ -153,11 +158,10 @@ class ArqRedis(BaseRedis):
             expires_ms = expires_ms or score - enqueue_time_ms + self.expires_extra_ms
 
             job = serialize_job(function, args, kwargs, _job_try, enqueue_time_ms, serializer=self.job_serializer)
-
+            pipe.multi()
             pipe.psetex(job_key, expires_ms, job)  # type: ignore[no-untyped-call]
             pipe.zadd(_queue_name, {job_id: score})  # type: ignore[unused-coroutine]
             try:
-                logger.debug("Executing Enq Job---------------------------")
                 await pipe.execute()
             except WatchError:
                 # job got enqueued since we checked 'job_exists'
@@ -201,6 +205,64 @@ class ArqRedis(BaseRedis):
         return await asyncio.gather(*[self._get_job_def(job_id, int(score)) for job_id, score in jobs])
 
 
+class ArqRedisCluster(RedisCluster):
+    def __init__(
+        self,
+        job_serializer: Optional[Serializer] = None,
+        job_deserializer: Optional[Deserializer] = None,
+        default_queue_name: str = default_queue_name,
+        expires_extra_ms: int = expires_extra_ms,
+        **kwargs: Any,
+    ) -> None:
+        self.job_serializer = job_serializer
+        self.job_deserializer = job_deserializer
+        self.default_queue_name = default_queue_name
+        self.expires_extra_ms = expires_extra_ms
+        super().__init__(**kwargs)
+
+    enqueue_job = ArqRedis.enqueue_job
+    _get_job_result = ArqRedis._get_job_result
+    all_job_results = ArqRedis.all_job_results
+    _get_job_def = ArqRedis._get_job_def
+    queued_jobs = ArqRedis.queued_jobs
+
+    def pipeline(self, transaction: Any | None = None, shard_hint: Any | None = None) -> ClusterPipeline:
+
+        return ArqRedisClusterPipeline(self)
+
+
+class ArqRedisClusterPipeline(ClusterPipeline):
+    def __init__(self, client: RedisCluster) -> None:
+        self.watching = False
+        super().__init__(client)
+
+    async def watch(self, *names: KeyT) -> None:
+        self.watching = True
+
+    def multi(self) -> None:
+        self.watching = False
+
+    def execute_command(self, *args: Union[KeyT, EncodableT], **kwargs: Any) -> 'ClusterPipeline':
+        """
+        Append a raw command to the pipeline.
+
+        :param args:
+            | Raw command args
+        :param kwargs:
+
+            - target_nodes: :attr:`NODE_FLAGS` or :class:`~.ClusterNode`
+              or List[:class:`~.ClusterNode`] or Dict[Any, :class:`~.ClusterNode`]
+            - Rest of the kwargs are passed to the Redis connection
+        """
+        cmd = PipelineCommand(len(self._command_stack), *args, **kwargs)
+        if self.watching:
+            cmd.result = self._client.execute_command(*cmd.args, **cmd.kwargs)
+
+            return cmd.result
+        self._command_stack.append(cmd)
+        return self
+
+
 async def create_pool(
     settings_: RedisSettings = None,
     *,
@@ -232,11 +294,28 @@ async def create_pool(
             )
             return client.master_for(settings.sentinel_master, redis_class=ArqRedis)
 
+    if settings.cluster_mode:
+        pool_factory = functools.partial(
+            ArqRedisCluster,
+            host=settings.host,
+            port=settings.port,
+            socket_connect_timeout=settings.conn_timeout,
+            ssl=settings.ssl,
+            ssl_keyfile=settings.ssl_keyfile,
+            ssl_certfile=settings.ssl_certfile,
+            ssl_cert_reqs=settings.ssl_cert_reqs,
+            ssl_ca_certs=settings.ssl_ca_certs,
+            ssl_ca_data=settings.ssl_ca_data,
+            ssl_check_hostname=settings.ssl_check_hostname,
+        )
     else:
         pool_factory = functools.partial(
             ArqRedis,
+            db=settings.database,
+            username=settings.username,
             host=settings.host,
             port=settings.port,
+            unix_socket_path=settings.unix_socket_path,
             socket_connect_timeout=settings.conn_timeout,
             ssl=settings.ssl,
             ssl_keyfile=settings.ssl_keyfile,
@@ -249,15 +328,11 @@ async def create_pool(
 
     while True:
         try:
-            pool = await pool_factory(
-                 password=settings.password, encoding='utf8'
-            )
+            pool = await pool_factory(password=settings.password, encoding='utf8')
             pool.job_serializer = job_serializer
             pool.job_deserializer = job_deserializer
             pool.default_queue_name = default_queue_name
             pool.expires_extra_ms = expires_extra_ms
-
-
 
         except (ConnectionError, OSError, RedisError, asyncio.TimeoutError) as e:
             if retry < settings.conn_retries:
@@ -279,6 +354,7 @@ async def create_pool(
             return pool
 
 
+# TODO
 async def log_redis_info(redis: 'RedisCluster[bytes]', log_func: Callable[[str], Any]) -> None:
     # async with redis.pipeline() as pipe:
     #     pipe.info(section='Server')
@@ -290,7 +366,7 @@ async def log_redis_info(redis: 'RedisCluster[bytes]', log_func: Callable[[str],
 
     redis_version = "info_server.get('redis_version', '?')"
     mem_usage = "info_memory.get('used_memory_human', '?')"
-    clients_connected =" info_clients.get('connected_clients', '?')"
+    clients_connected = " info_clients.get('connected_clients', '?')"
 
     log_func(
         f'redis_version={redis_version} '

@@ -6,7 +6,6 @@ import sys
 import msgpack
 import pytest
 
-
 from arq.connections import ArqRedis, create_pool
 from arq.worker import Worker
 
@@ -18,10 +17,9 @@ def _fix_loop(event_loop):
 
 @pytest.fixture
 async def arq_redis(loop):
-    redis_ =  ArqRedis(
-        host="test-cluster.aqtke6.clustercfg.use2.cache.amazonaws.com",
-        port="6379",
-        
+    redis_ = ArqRedis(
+        host='localhost',
+        port='6379',
     )
 
     yield redis_
@@ -29,14 +27,11 @@ async def arq_redis(loop):
     await redis_.close()
 
 
-
-
 @pytest.fixture
 async def arq_redis_msgpack(loop):
     redis_ = await ArqRedis(
-        host="tf-rep-group-1.48tzwx.clustercfg.use2.cache.amazonaws.com",
-        port="6379",
- 
+        host='localhost',
+        port='6379',
         encoding='utf-8',
         job_serializer=msgpack.packb,
         job_deserializer=functools.partial(msgpack.unpackb, raw=False),
