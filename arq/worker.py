@@ -15,7 +15,7 @@ from redis.exceptions import ResponseError, WatchError
 from arq.cron import CronJob
 from arq.jobs import Deserializer, JobResult, SerializationError, Serializer, deserialize_job_raw, serialize_result
 
-from .connections import ArqRedis, RedisSettings, create_pool, log_redis_info
+from .connections import ArqRedis, ArqRedisCluster, RedisSettings, create_pool, log_redis_info
 from .constants import (
     abort_job_max_age,
     abort_jobs_ss,
@@ -346,7 +346,8 @@ class Worker:
             )
 
         logger.info('Starting worker for %d functions: %s', len(self.functions), ', '.join(self.functions))
-        await log_redis_info(self.pool, logger.info)
+        if not isinstance(self._pool, ArqRedisCluster):
+            await log_redis_info(self.pool, logger.info)
         self.ctx['redis'] = self.pool
         if self.on_startup:
             await self.on_startup(self.ctx)
@@ -429,12 +430,10 @@ class Worker:
             await self.sem.acquire()
             job_id = job_id_b.decode()
             in_progress_key = in_progress_key_prefix + job_id
-
             async with self.pool.pipeline(transaction=True) as pipe:
                 await pipe.watch(in_progress_key)
                 ongoing_exists = await pipe.exists(in_progress_key)
                 score = await pipe.zscore(self.queue_name, job_id)
-
                 if ongoing_exists or not score:
                     # job already started elsewhere, or already finished and removed from queue
                     self.sem.release()
@@ -445,9 +444,7 @@ class Worker:
                 pipe.psetex(  # type: ignore[no-untyped-call]
                     in_progress_key, int(self.in_progress_timeout_s * 1000), b'1'
                 )
-
                 try:
-
                     await pipe.execute()
                 except (ResponseError, WatchError):
                     # job already started elsewhere since we got 'existing'

@@ -6,7 +6,7 @@ import sys
 import msgpack
 import pytest
 
-from arq.connections import ArqRedis, create_pool
+from arq.connections import ArqRedis, RedisSettings, create_pool
 from arq.worker import Worker
 
 
@@ -19,26 +19,39 @@ def _fix_loop(event_loop):
 async def arq_redis(loop):
     redis_ = ArqRedis(
         host='localhost',
-        port='6379',
+        port=6379,
+        encoding='utf-8',
     )
+
+    await redis_.flushall()
 
     yield redis_
 
+    await redis_.close(close_connection_pool=True)
+
+
+@pytest.fixture
+async def arq_redis_cluster(loop):
+    settings = RedisSettings(host='localhost', port='6379', conn_timeout=5, cluster_mode=True)
+    redis_ = await create_pool(settings)
+    await redis_.flushall()
+
+    yield redis_
     await redis_.close()
 
 
 @pytest.fixture
 async def arq_redis_msgpack(loop):
-    redis_ = await ArqRedis(
+    redis_ = ArqRedis(
         host='localhost',
-        port='6379',
+        port=6379,
         encoding='utf-8',
         job_serializer=msgpack.packb,
         job_deserializer=functools.partial(msgpack.unpackb, raw=False),
     )
-
+    await redis_.flushall()
     yield redis_
-    await redis_.close()
+    await redis_.close(close_connection_pool=True)
 
 
 @pytest.fixture
@@ -49,6 +62,28 @@ async def worker(arq_redis):
         nonlocal worker_
         worker_ = Worker(
             functions=functions, redis_pool=arq_redis, burst=burst, poll_delay=poll_delay, max_jobs=max_jobs, **kwargs
+        )
+        return worker_
+
+    yield create
+
+    if worker_:
+        await worker_.close()
+
+
+@pytest.fixture
+async def cluster_worker(arq_redis_cluster):
+    worker_: Worker = None
+
+    def create(functions=[], burst=True, poll_delay=0, max_jobs=10, arq_redis=arq_redis_cluster, **kwargs):
+        nonlocal worker_
+        worker_ = Worker(
+            functions=functions,
+            redis_pool=arq_redis_cluster,
+            burst=burst,
+            poll_delay=poll_delay,
+            max_jobs=max_jobs,
+            **kwargs,
         )
         return worker_
 
@@ -69,7 +104,7 @@ async def fix_create_pool(loop):
 
     yield create_pool_
 
-    await asyncio.gather(*[await p.close() for p in pools])
+    await asyncio.gather(*[await p.close(close_connection_pool=True) for p in pools])
 
 
 @pytest.fixture(name='cancel_remaining_task')

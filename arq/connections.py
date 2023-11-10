@@ -57,12 +57,20 @@ class RedisSettings:
     def from_dsn(cls, dsn: str) -> 'RedisSettings':
         conf = urlparse(dsn)
         assert conf.scheme in {'redis', 'rediss', 'unix'}, 'invalid DSN scheme'
-
+        query_db = parse_qs(conf.query).get('db')
+        if query_db:
+            # e.g. redis://localhost:6379?db=1
+            database = int(query_db[0])
+        else:
+            database = int(conf.path.lstrip('/')) if conf.path else 0
         return RedisSettings(
             host=conf.hostname or 'localhost',
             port=conf.port or 6379,
             ssl=conf.scheme == 'rediss',
+            username=conf.username,
             password=conf.password,
+            database=database,
+            unix_socket_path=conf.path if conf.scheme == 'unix' else None,
         )
 
     def __repr__(self) -> str:
@@ -227,7 +235,6 @@ class ArqRedisCluster(RedisCluster):
     queued_jobs = ArqRedis.queued_jobs
 
     def pipeline(self, transaction: Any | None = None, shard_hint: Any | None = None) -> ClusterPipeline:
-
         return ArqRedisClusterPipeline(self)
 
 
@@ -243,23 +250,22 @@ class ArqRedisClusterPipeline(ClusterPipeline):
         self.watching = False
 
     def execute_command(self, *args: Union[KeyT, EncodableT], **kwargs: Any) -> 'ClusterPipeline':
-        """
-        Append a raw command to the pipeline.
-
-        :param args:
-            | Raw command args
-        :param kwargs:
-
-            - target_nodes: :attr:`NODE_FLAGS` or :class:`~.ClusterNode`
-              or List[:class:`~.ClusterNode`] or Dict[Any, :class:`~.ClusterNode`]
-            - Rest of the kwargs are passed to the Redis connection
-        """
         cmd = PipelineCommand(len(self._command_stack), *args, **kwargs)
         if self.watching:
-            cmd.result = self._client.execute_command(*cmd.args, **cmd.kwargs)
-
-            return cmd.result
+            return self.immediate_execute_command(cmd)
         self._command_stack.append(cmd)
+        return self
+
+    async def immediate_execute_command(self, cmd: PipelineCommand):
+        try:
+            return await self._client.execute_command(*cmd.args, **cmd.kwargs)
+        except Exception as e:
+            cmd.result = e
+
+    def _split_command_across_slots(self, command: str, *keys: KeyT) -> 'ClusterPipeline':
+        for slot_keys in self._client._partition_keys_by_slot(keys).values():
+            if self.watching:
+                return self.execute_command(command, *slot_keys)
         return self
 
 
@@ -294,7 +300,7 @@ async def create_pool(
             )
             return client.master_for(settings.sentinel_master, redis_class=ArqRedis)
 
-    if settings.cluster_mode:
+    elif settings.cluster_mode:
         pool_factory = functools.partial(
             ArqRedisCluster,
             host=settings.host,
@@ -355,18 +361,17 @@ async def create_pool(
 
 
 # TODO
-async def log_redis_info(redis: 'RedisCluster[bytes]', log_func: Callable[[str], Any]) -> None:
-    # async with redis.pipeline() as pipe:
-    #     pipe.info(section='Server')
-    #   # type: ignore[unused-coroutine]
-    #     pipe.info(section='Memory')  # type: ignore[unused-coroutine]
-    #     pipe.info(section='Clients')  # type: ignore[unused-coroutine]
-    #     pipe.dbsize()  # type: ignore[unused-coroutine]
-    #     info_server, info_memory, info_clients, key_count = await pipe.execute()
+async def log_redis_info(redis: 'Redis[bytes]', log_func: Callable[[str], Any]) -> None:
+    async with redis.pipeline() as pipe:
+        pipe.info(section='Server')  # type: ignore[unused-coroutine]
+        pipe.info(section='Memory')  # type: ignore[unused-coroutine]
+        pipe.info(section='Clients')  # type: ignore[unused-coroutine]
+        pipe.dbsize()  # type: ignore[unused-coroutine]
+        info_server, info_memory, info_clients, key_count = await pipe.execute()
 
-    redis_version = "info_server.get('redis_version', '?')"
-    mem_usage = "info_memory.get('used_memory_human', '?')"
-    clients_connected = " info_clients.get('connected_clients', '?')"
+    redis_version = info_server.get('redis_version', '?')
+    mem_usage = info_memory.get('used_memory_human', '?')
+    clients_connected = info_clients.get('connected_clients', '?')
 
     log_func(
         f'redis_version={redis_version} '
