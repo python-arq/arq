@@ -7,13 +7,13 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Dict, Optional, Tuple
 
-from redis.asyncio.cluster import RedisCluster
+from redis.asyncio import Redis
 
 from .constants import abort_jobs_ss, default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
 from .utils import ms_to_datetime, poll, timestamp_ms
 
 logger = logging.getLogger('arq.jobs')
-logging.basicConfig(level=logging.DEBUG)
+
 Serializer = Callable[[Dict[str, Any]], bytes]
 Deserializer = Callable[[bytes], Dict[str, Any]]
 
@@ -73,7 +73,7 @@ class Job:
     def __init__(
         self,
         job_id: str,
-        redis: 'RedisCluster[bytes]',
+        redis: 'Redis[bytes]',
         _queue_name: str = default_queue_name,
         _deserializer: Optional[Deserializer] = None,
     ):
@@ -109,7 +109,6 @@ class Job:
 
             if v:
                 info = deserialize_result(v, deserializer=self._deserializer)
-                print(info)
                 if info.success:
                     return info.result
                 elif isinstance(info.result, (Exception, asyncio.CancelledError)):

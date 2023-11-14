@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 from redis.asyncio import ConnectionPool, Redis
-from redis.asyncio.cluster import ClusterPipeline, PipelineCommand, RedisCluster
+from redis.asyncio.cluster import ClusterPipeline, PipelineCommand, RedisCluster  # type: ignore
 from redis.asyncio.sentinel import Sentinel
 from redis.exceptions import RedisError, WatchError
 from redis.typing import EncodableT, KeyT
@@ -213,7 +213,7 @@ class ArqRedis(BaseRedis):
         return await asyncio.gather(*[self._get_job_def(job_id, int(score)) for job_id, score in jobs])
 
 
-class ArqRedisCluster(RedisCluster):
+class ArqRedisCluster(RedisCluster):  # type: ignore
     def __init__(
         self,
         job_serializer: Optional[Serializer] = None,
@@ -238,7 +238,7 @@ class ArqRedisCluster(RedisCluster):
         return ArqRedisClusterPipeline(self)
 
 
-class ArqRedisClusterPipeline(ClusterPipeline):
+class ArqRedisClusterPipeline(ClusterPipeline):  # type: ignore
     def __init__(self, client: RedisCluster) -> None:
         self.watching = False
         super().__init__(client)
