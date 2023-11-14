@@ -78,6 +78,16 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: Test redis cluster
+      uses: vishnudxb/redis-cluster@1.0.9
+      with:
+        master1-port: 5000
+        master2-port: 5001
+        master3-port: 5002
+        slave1-port: 5003
+        slave2-port: 5004
+        slave3-port: 5005
+        sleep-duration: 5
 
     - name: set up python
       uses: actions/setup-python@v4
