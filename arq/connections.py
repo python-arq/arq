@@ -257,7 +257,7 @@ class ArqRedisClusterPipeline(ClusterPipeline):
         self._command_stack.append(cmd)
         return self
 
-    async def immediate_execute_command(self, cmd: PipelineCommand)-> Any:
+    async def immediate_execute_command(self, cmd: PipelineCommand) -> Any:
         try:
             return await self._client.execute_command(*cmd.args, **cmd.kwargs)
         except Exception as e:
