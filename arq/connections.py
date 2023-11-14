@@ -244,6 +244,7 @@ class ArqRedisClusterPipeline(ClusterPipeline):
         super().__init__(client)
 
     async def watch(self, *names: KeyT) -> None:
+        await self.immediate_execute_command('WATCH', *names)
         self.watching = True
 
     def multi(self) -> None:
@@ -256,7 +257,7 @@ class ArqRedisClusterPipeline(ClusterPipeline):
         self._command_stack.append(cmd)
         return self
 
-    async def immediate_execute_command(self, cmd: PipelineCommand):
+    async def immediate_execute_command(self, cmd: PipelineCommand)-> Any:
         try:
             return await self._client.execute_command(*cmd.args, **cmd.kwargs)
         except Exception as e:
