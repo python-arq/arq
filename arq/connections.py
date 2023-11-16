@@ -244,7 +244,6 @@ class ArqRedisClusterPipeline(ClusterPipeline):  # type: ignore
         super().__init__(client)
 
     async def watch(self, *names: KeyT) -> None:
-        await self.immediate_execute_command('WATCH', *names)
         self.watching = True
 
     def multi(self) -> None:

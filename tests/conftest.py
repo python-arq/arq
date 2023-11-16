@@ -54,7 +54,14 @@ async def arq_redis_msgpack(loop):
 
 @pytest.fixture
 async def arq_redis_cluster(loop):
-    settings = RedisSettings(host='localhost', port='5000', conn_timeout=5, cluster_mode=True)
+    settings = RedisSettings(
+        host='http://clustercfg.test-cluster-ssl.aqtke6.use2.cache.amazonaws.com',
+        port='6379',
+        conn_timeout=5,
+        cluster_mode=True,
+        ssl=True,
+        ssl_cert_reqs=None,
+    )
     redis_ = await create_pool(settings)
     await redis_.flushall()
 
