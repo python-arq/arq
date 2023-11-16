@@ -69,12 +69,12 @@ jobs:
 
     runs-on: ${{ format('{0}-latest', matrix.os) }}
 
-    services:
-      redis:
-        image: redis:${{ matrix.redis }}
-        ports:
-        - 6379:6379
-        options: --entrypoint redis-server
+    # services:
+    #   redis:
+    #     image: redis:${{ matrix.redis }}
+    #     ports:
+    #     - 6379:6379
+    #     options: --entrypoint redis-server
 
     steps:
     - uses: actions/checkout@v2
