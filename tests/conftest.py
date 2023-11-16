@@ -57,7 +57,7 @@ async def arq_redis_cluster(loop):
     settings = RedisSettings(
         host='127.0.0.1',
         port='5000',
-        conn_timeout=60,
+        conn_timeout=5,
         cluster_mode=True
     )
     redis_ = await create_pool(settings)
