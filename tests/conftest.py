@@ -20,7 +20,7 @@ def _fix_loop(event_loop):
 async def arq_redis(loop):
     redis_ = ArqRedis(
         host='localhost',
-        port=9000,
+        port=6379,
         encoding='utf-8',
     )
 
@@ -42,7 +42,7 @@ async def unix_socket_path(loop, tmp_path):
 async def arq_redis_msgpack(loop):
     redis_ = ArqRedis(
         host='localhost',
-        port=6379,
+        port=5000,
         encoding='utf-8',
         job_serializer=msgpack.packb,
         job_deserializer=functools.partial(msgpack.unpackb, raw=False),
