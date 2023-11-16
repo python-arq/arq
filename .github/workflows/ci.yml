@@ -69,12 +69,12 @@ jobs:
 
     runs-on: ${{ format('{0}-latest', matrix.os) }}
 
-    # services:
-    #   redis:
-    #     image: redis:${{ matrix.redis }}
-    #     ports:
-    #     - 6379:6379
-    #     options: --entrypoint redis-server
+    services:
+      redis:
+        image: redis:${{ matrix.redis }}
+        ports:
+        - 7000:7000
+        options: --entrypoint redis-server
 
     steps:
     - uses: actions/checkout@v2
@@ -87,7 +87,7 @@ jobs:
         slave1-port: 5003
         slave2-port: 5004
         slave3-port: 5005
-        sleep-duration: 5
+        sleep-duration: 10
     - name: Redis Cluster Health Check
       run: |
          sudo apt-get install -y redis-tools
