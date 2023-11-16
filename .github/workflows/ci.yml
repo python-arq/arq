@@ -73,7 +73,7 @@ jobs:
       redis:
         image: redis:${{ matrix.redis }}
         ports:
-        - 6380:6379
+        - 9000:6379
         options: --entrypoint redis-server
 
     steps:

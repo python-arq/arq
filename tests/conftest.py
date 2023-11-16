@@ -20,7 +20,7 @@ def _fix_loop(event_loop):
 async def arq_redis(loop):
     redis_ = ArqRedis(
         host='localhost',
-        port=6380,
+        port=9000,
         encoding='utf-8',
     )
 
