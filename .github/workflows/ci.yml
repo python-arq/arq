@@ -88,6 +88,12 @@ jobs:
         slave2-port: 5004
         slave3-port: 5005
         sleep-duration: 5
+    - name: Redis Cluster Health Check
+      run: |
+         sudo apt-get install -y redis-tools
+         docker ps -a
+         redis-cli -h 127.0.0.1 -p 5000 ping
+         redis-cli -h 127.0.0.1 -p 5000 cluster nodes
 
     - name: set up python
       uses: actions/setup-python@v4
