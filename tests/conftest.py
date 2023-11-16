@@ -55,7 +55,7 @@ async def arq_redis_msgpack(loop):
 @pytest.fixture
 async def arq_redis_cluster(loop):
     settings = RedisSettings(
-        host=' 127.0.0.1',
+        host='127.0.0.1',
         port='5000',
         conn_timeout=60,
         cluster_mode=True
