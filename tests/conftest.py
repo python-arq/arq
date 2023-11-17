@@ -7,7 +7,7 @@ import msgpack
 import pytest
 from redislite import Redis
 
-from arq.connections import ArqRedis, create_pool
+from arq.connections import ArqRedis, RedisSettings, create_pool
 from arq.worker import Worker
 
 
@@ -20,7 +20,7 @@ def _fix_loop(event_loop):
 async def arq_redis(loop):
     redis_ = ArqRedis(
         host='localhost',
-        port=6379,
+        port=7000,
         encoding='utf-8',
     )
 
@@ -42,7 +42,7 @@ async def unix_socket_path(loop, tmp_path):
 async def arq_redis_msgpack(loop):
     redis_ = ArqRedis(
         host='localhost',
-        port=6379,
+        port=7000,
         encoding='utf-8',
         job_serializer=msgpack.packb,
         job_deserializer=functools.partial(msgpack.unpackb, raw=False),
@@ -53,6 +53,16 @@ async def arq_redis_msgpack(loop):
 
 
 @pytest.fixture
+async def arq_redis_cluster(loop):
+    settings = RedisSettings(host='localhost', port=6379, conn_timeout=5, cluster_mode=True)
+    redis_ = await create_pool(settings)
+    await redis_.flushall()
+
+    yield redis_
+    await redis_.close()
+
+
+@pytest.fixture
 async def worker(arq_redis):
     worker_: Worker = None
 
@@ -60,6 +70,28 @@ async def worker(arq_redis):
         nonlocal worker_
         worker_ = Worker(
             functions=functions, redis_pool=arq_redis, burst=burst, poll_delay=poll_delay, max_jobs=max_jobs, **kwargs
+        )
+        return worker_
+
+    yield create
+
+    if worker_:
+        await worker_.close()
+
+
+@pytest.fixture
+async def cluster_worker(arq_redis_cluster):
+    worker_: Worker = None
+
+    def create(functions=[], burst=True, poll_delay=0, max_jobs=10, arq_redis=arq_redis_cluster, **kwargs):
+        nonlocal worker_
+        worker_ = Worker(
+            functions=functions,
+            redis_pool=arq_redis_cluster,
+            burst=burst,
+            poll_delay=poll_delay,
+            max_jobs=max_jobs,
+            **kwargs,
         )
         return worker_
 

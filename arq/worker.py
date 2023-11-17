@@ -15,7 +15,7 @@ from redis.exceptions import ResponseError, WatchError
 from arq.cron import CronJob
 from arq.jobs import Deserializer, JobResult, SerializationError, Serializer, deserialize_job_raw, serialize_result
 
-from .connections import ArqRedis, RedisSettings, create_pool, log_redis_info
+from .connections import ArqRedis, ArqRedisCluster, RedisSettings, create_pool, log_redis_info
 from .constants import (
     abort_job_max_age,
     abort_jobs_ss,
@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from .typing import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType  # noqa F401
 
 logger = logging.getLogger('arq.worker')
+logging.basicConfig(level=logging.DEBUG)
 no_result = object()
 
 
@@ -349,7 +350,8 @@ class Worker:
             )
 
         logger.info('Starting worker for %d functions: %s', len(self.functions), ', '.join(self.functions))
-        await log_redis_info(self.pool, logger.info)
+        if not isinstance(self._pool, ArqRedisCluster):
+            await log_redis_info(self.pool, logger.info)
         self.ctx['redis'] = self.pool
         if self.on_startup:
             await self.on_startup(self.ctx)
@@ -362,6 +364,7 @@ class Worker:
                     await asyncio.gather(*self.tasks.values())
                     return None
                 queued_jobs = await self.pool.zcard(self.queue_name)
+
                 if queued_jobs == 0:
                     await asyncio.gather(*self.tasks.values())
                     return None
@@ -450,7 +453,7 @@ class Worker:
                     # job already started elsewhere, or already finished and removed from queue
                     self.job_counter = self.job_counter - 1
                     self.sem.release()
-                    logger.debug('job %s already running elsewhere', job_id)
+                    # logger.debug('job %s already running elsewhere', job_id)
                     continue
 
                 pipe.multi()
@@ -860,7 +863,7 @@ class Worker:
         await self.pool.delete(self.health_check_key)
         if self.on_shutdown:
             await self.on_shutdown(self.ctx)
-        await self.pool.close(close_connection_pool=True)
+        await self.pool.close()
         self._pool = None
 
     def __repr__(self) -> str:
@@ -901,7 +904,7 @@ async def async_check_health(
     else:
         logger.info('Health check successful: %s', data)
         r = 0
-    await redis.close(close_connection_pool=True)
+    await redis.close()
     return r
 
 
