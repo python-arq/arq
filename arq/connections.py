@@ -214,6 +214,19 @@ class ArqRedis(BaseRedis):
 
 
 class ArqRedisCluster(RedisCluster):  # type: ignore
+    """
+    Thin subclass of ``from redis.asyncio.cluster.RedisCluster`` which patches methods of RedisClusterPipeline
+    to support redis cluster`.
+
+    :param redis_settings: an instance of ``arq.connections.RedisSettings``.
+    :param job_serializer: a function that serializes Python objects to bytes, defaults to pickle.dumps
+    :param job_deserializer: a function that deserializes bytes into Python objects, defaults to pickle.loads
+    :param default_queue_name: the default queue name to use, defaults to ``arq.queue``.
+    :param expires_extra_ms: the default length of time from when a job is expected to start
+     after which the job expires, defaults to 1 day in ms.
+    :param kwargs: keyword arguments directly passed to ``from redis.asyncio.cluster.RedisCluster``.
+    """
+
     def __init__(
         self,
         job_serializer: Optional[Serializer] = None,
@@ -281,7 +294,8 @@ async def create_pool(
     """
     Create a new redis pool, retrying up to ``conn_retries`` times if the connection fails.
 
-    Returns a :class:`arq.connections.ArqRedis` instance, thus allowing job enqueuing.
+    Returns a :class:`arq.connections.ArqRedis` instance or :class: `arq.connections.ArqRedisCluster` depending on
+    whether `cluster_mode` flag is enabled in `RedisSettings`, thus allowing job enqueuing.
     """
     settings: RedisSettings = RedisSettings() if settings_ is None else settings_
 

@@ -54,12 +54,7 @@ async def arq_redis_msgpack(loop):
 
 @pytest.fixture
 async def arq_redis_cluster(loop):
-    settings = RedisSettings(
-        host='localhost',
-        port=6379,
-        conn_timeout=5,
-        cluster_mode=True
-    )
+    settings = RedisSettings(host='localhost', port=6379, conn_timeout=5, cluster_mode=True)
     redis_ = await create_pool(settings)
     await redis_.flushall()
 
