@@ -1,7 +1,7 @@
 import asyncio
 import functools
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from operator import attrgetter
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Union
@@ -46,6 +46,7 @@ class RedisSettings:
 
     sentinel: bool = False
     sentinel_master: str = 'mymaster'
+    sentinel_kwargs: dict = field(default_factory = lambda: {})
 
     @classmethod
     def from_dsn(cls, dsn: str) -> 'RedisSettings':
@@ -231,6 +232,7 @@ async def create_pool(
             client = Sentinel(  # type: ignore[misc]
                 *args,
                 sentinels=settings.host,
+                sentinel_kwargs=settings.sentinel_kwargs,
                 ssl=settings.ssl,
                 **kwargs,
             )
