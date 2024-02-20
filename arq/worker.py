@@ -483,10 +483,11 @@ class Worker:
                 abort_job = False
 
         function_name, enqueue_time_ms = '<unknown>', 0
+        function: Optional[Union[Function, CronJob]] = None
         args: Tuple[Any, ...] = ()
         kwargs: Dict[Any, Any] = {}
 
-        async def job_failed(exc: BaseException, function: Optional[Union[Function, CronJob]]) -> None:
+        async def job_failed(exc: BaseException) -> None:
             self.jobs_failed += 1
             result_data_ = serialize_result(
                 function=function_name,
@@ -506,7 +507,7 @@ class Worker:
 
         if not v:
             logger.warning('job %s expired', job_id)
-            return await job_failed(JobExecutionFailed('job expired'), None)
+            return await job_failed(JobExecutionFailed('job expired'))
 
         try:
             function_name, args, kwargs, enqueue_job_try, enqueue_time_ms = deserialize_job_raw(
@@ -514,20 +515,19 @@ class Worker:
             )
         except SerializationError as e:
             logger.exception('deserializing job %s failed', job_id)
-            return await job_failed(e, None)
+            return await job_failed(e)
 
-        function: Optional[Union[Function, CronJob]] = None
         with contextlib.suppress(KeyError):
             function = self.functions[function_name]
 
         if abort_job:
             t = (timestamp_ms() - enqueue_time_ms) / 1000
             logger.info('%6.2fs ⊘ %s:%s aborted before start', t, job_id, function_name)
-            return await job_failed(asyncio.CancelledError(), function)
+            return await job_failed(asyncio.CancelledError())
 
         if function is None:
             logger.warning('job %s, function %r not found', job_id, function_name)
-            return await job_failed(JobExecutionFailed(f'function {function_name!r} not found'), None)
+            return await job_failed(JobExecutionFailed(f'function {function_name!r} not found'))
 
         if hasattr(function, 'next_run'):
             # cron_job
