@@ -4,7 +4,7 @@ black = black arq tests
 
 .PHONY: install
 install:
-	pip install -U pip pre-commit
+	pip install -U pip pre-commit pip-tools
 	pip install -r requirements/all.txt
 	pip install -e .[watch]
 	pre-commit install
