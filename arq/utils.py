@@ -34,7 +34,7 @@ def to_unix_ms(dt: datetime) -> int:
     return as_int(dt.timestamp() * 1000)
 
 
-@lru_cache()
+@lru_cache
 def get_tz() -> Optional['pytz.BaseTzInfo']:
     if pytz:  # pragma: no branch
         for timezone_key in timezone_env_vars:
