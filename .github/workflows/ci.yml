@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - v0.23-branch
     tags:
       - '**'
   pull_request: {}
@@ -14,12 +13,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
 
     - name: set up python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.10'
+        python-version: '3.11'
 
     - run: pip install -r requirements/linting.txt -r requirements/pyproject.txt pre-commit
 
@@ -29,12 +28,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
 
     - name: set up python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.10'
+        python-version: '3.11'
 
     - run: pip install -r requirements/docs.txt -r requirements/pyproject.txt
     - run: pip install .
@@ -42,7 +41,7 @@ jobs:
     - run: make docs
 
     - name: Store docs site
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: docs
         path: docs/_build/
@@ -53,13 +52,13 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu]
-        python: ['3.7', '3.8', '3.9', '3.10', '3.11']
+        python: ['3.8', '3.9', '3.10', '3.11', '3.12']
         redis: ['5']
         include:
-          - python: '3.10'
+          - python: '3.11'
             redis: '6'
             os: 'ubuntu'
-          - python: '3.10'
+          - python: '3.11'
             redis: '7'
             os: 'ubuntu'
 
@@ -67,7 +66,7 @@ jobs:
       PYTHON: ${{ matrix.python }}
       OS: ${{ matrix.os }}
 
-    runs-on: ${{ format('{0}-latest', matrix.os) }}
+    runs-on: ${{ matrix.os }}-latest
 
     services:
       redis:
@@ -77,10 +76,10 @@ jobs:
         options: --entrypoint redis-server
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
 
     - name: set up python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python }}
 
@@ -90,50 +89,61 @@ jobs:
 
     - run: coverage xml
 
-    - uses: codecov/codecov-action@v2
+    - uses: codecov/codecov-action@v4
       with:
         file: ./coverage.xml
         env_vars: PYTHON,OS
 
-  deploy:
-    name: Deploy
+  check:
+    if: always()
     needs: [lint, docs, test]
-    if: "success() && startsWith(github.ref, 'refs/tags/')"
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - name: Decide whether the needed jobs succeeded or failed
+        uses: re-actors/alls-green@release/v1
+        id: all-green
+        with:
+          jobs: ${{ toJSON(needs) }}
+
+  release:
+    name: Release
+    needs: [check]
+    if: "success() && startsWith(github.ref, 'refs/tags/')"
+    runs-on: ubuntu-latest
+    environment: release
+
+    permissions:
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
 
       - name: get docs
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: docs
           path: docs/_build/
 
       - name: set up python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: install
-        run: pip install -U twine build packaging
+        run: pip install -U build
 
       - name: check version
         id: check-version
-        run: python <(curl -Ls https://gist.githubusercontent.com/samuelcolvin/4e1ad439c5489e8d6478cdee3eb952ef/raw/check_version.py)
-        env:
-          VERSION_PATH: 'arq/version.py'
+        uses: samuelcolvin/check-python-version@v3.2
+        with:
+          version_file_path: 'arq/version.py'
 
       - name: build
         run: python -m build
 
-      - run: twine check dist/*
-
-      - name: upload to pypi
-        run: twine upload dist/*
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.pypi_token }}
+      - name: Upload package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
 
       - name: publish docs
         if: '!fromJSON(steps.check-version.outputs.IS_PRERELEASE)'

@@ -136,7 +136,7 @@ Sometimes you want a job to only be run once at a time (eg. a backup) or once fo
 invoices for a particular company).
 
 *arq* supports this via custom job ids, see :func:`arq.connections.ArqRedis.enqueue_job`. It guarantees
-that a job with a particular ID cannot be enqueued again until its execution has finished.
+that a job with a particular ID cannot be enqueued again until its execution has finished and its result has cleared. To control when a finished job's result clears, you can use the `keep_result` setting on your worker, see :func:`arq.worker.func`.
 
 .. literalinclude:: examples/job_ids.py
 

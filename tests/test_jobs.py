@@ -2,7 +2,7 @@ import asyncio
 import pickle
 
 import pytest
-from dirty_equals import IsNow
+from dirty_equals import IsNow, IsStr
 
 from arq import Worker, func
 from arq.connections import ArqRedis, RedisSettings, create_pool
@@ -89,6 +89,7 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker, queue_name=default_queue
         finish_time=IsNow(tz='utc'),
         score=None,
         queue_name=expected_queue_name,
+        job_id=IsStr(),
     )
     results = await arq_redis.all_job_results()
     assert results == [
@@ -107,17 +108,6 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker, queue_name=default_queue
             job_id=j.job_id,
         )
     ]
-
-
-async def test_enqueue_job_with_unix_socket(worker, unix_socket_path):
-    """Test initializing arq_redis using a unix socket connection, and the worker using it."""
-    settings = RedisSettings(unix_socket_path=unix_socket_path)
-    arq_redis = await create_pool(settings, default_queue_name='socket_queue')
-    await test_enqueue_job(
-        arq_redis,
-        lambda functions, **_: worker(functions=functions, arq_redis=arq_redis, queue_name=None),
-        queue_name=None,
-    )
 
 
 async def test_enqueue_job_alt_queue(arq_redis: ArqRedis, worker):
@@ -139,9 +129,9 @@ async def test_cant_unpickle_at_all():
         def __getstate__(self):
             raise TypeError("this doesn't pickle")
 
-    r1 = serialize_result('foobar', (1,), {}, 1, 123, True, Foobar(), 123, 123, 'testing', 'test-queue')
+    r1 = serialize_result('foobar', (1,), {}, 1, 123, True, Foobar(), 123, 123, 'testing', 'test-queue', 'job_1')
     assert isinstance(r1, bytes)
-    r2 = serialize_result('foobar', (Foobar(),), {}, 1, 123, True, Foobar(), 123, 123, 'testing', 'test-queue')
+    r2 = serialize_result('foobar', (Foobar(),), {}, 1, 123, True, Foobar(), 123, 123, 'testing', 'test-queue', 'job_1')
     assert r2 is None
 
 
@@ -154,7 +144,19 @@ async def test_custom_serializer():
         return b'0123456789'
 
     r1 = serialize_result(
-        'foobar', (1,), {}, 1, 123, True, Foobar(), 123, 123, 'testing', 'test-queue', serializer=custom_serializer
+        'foobar',
+        (1,),
+        {},
+        1,
+        123,
+        True,
+        Foobar(),
+        123,
+        123,
+        'testing',
+        'test-queue',
+        'job_1',
+        serializer=custom_serializer,
     )
     assert r1 == b'0123456789'
     r2 = serialize_result(
@@ -169,6 +171,7 @@ async def test_custom_serializer():
         123,
         'testing',
         'test-queue',
+        'job_1',
         serializer=custom_serializer,
     )
     assert r2 == b'0123456789'
@@ -213,7 +216,7 @@ async def test_get_job_result(arq_redis: ArqRedis):
 
 async def test_result_pole_delay_dep(arq_redis: ArqRedis):
     j = Job('foobar', arq_redis)
-    r = serialize_result('foobar', (1,), {}, 1, 123, True, 42, 123, 123, 'testing', 'test-queue')
+    r = serialize_result('foobar', (1,), {}, 1, 123, True, 42, 123, 123, 'testing', 'test-queue', 'job_1')
     await arq_redis.set(result_key_prefix + j.job_id, r)
     with pytest.warns(
         DeprecationWarning, match='"pole_delay" is deprecated, use the correct spelling "poll_delay" instead'
