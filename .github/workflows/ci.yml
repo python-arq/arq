@@ -22,7 +22,9 @@ jobs:
 
     - run: pip install -r requirements/linting.txt -r requirements/pyproject.txt pre-commit
 
-    - run: pre-commit run -a
+    - run: pre-commit run -a --verbose
+      env:
+        SKIP: no-commit-to-branch
 
   docs:
     runs-on: ubuntu-latest
