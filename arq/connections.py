@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Union, cast
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
@@ -168,8 +168,8 @@ class ArqRedis(BaseRedis):
 
             job = serialize_job(function, args, kwargs, _job_try, enqueue_time_ms, serializer=self.job_serializer)
             pipe.multi()
-            pipe.psetex(job_key, expires_ms, job)  # type: ignore[no-untyped-call]
-            pipe.zadd(_queue_name, {job_id: score})  # type: ignore[unused-coroutine]
+            pipe.psetex(job_key, expires_ms, job)
+            pipe.zadd(_queue_name, {job_id: score})
             try:
                 await pipe.execute()
             except WatchError:
@@ -215,7 +215,7 @@ class ArqRedis(BaseRedis):
 
 
 async def create_pool(
-    settings_: RedisSettings = None,
+    settings_: Optional[RedisSettings] = None,
     *,
     retry: int = 0,
     job_serializer: Optional[Serializer] = None,
@@ -242,7 +242,8 @@ async def create_pool(
                 ssl=settings.ssl,
                 **kwargs,
             )
-            return client.master_for(settings.sentinel_master, redis_class=ArqRedis)
+            redis = client.master_for(settings.sentinel_master, redis_class=ArqRedis)
+            return cast(ArqRedis, redis)
 
     else:
         pool_factory = functools.partial(
@@ -296,10 +297,10 @@ async def create_pool(
 
 async def log_redis_info(redis: 'Redis[bytes]', log_func: Callable[[str], Any]) -> None:
     async with redis.pipeline(transaction=False) as pipe:
-        pipe.info(section='Server')  # type: ignore[unused-coroutine]
-        pipe.info(section='Memory')  # type: ignore[unused-coroutine]
-        pipe.info(section='Clients')  # type: ignore[unused-coroutine]
-        pipe.dbsize()  # type: ignore[unused-coroutine]
+        pipe.info(section='Server')
+        pipe.info(section='Memory')
+        pipe.info(section='Clients')
+        pipe.dbsize()
         info_server, info_memory, info_clients, key_count = await pipe.execute()
 
     redis_version = info_server.get('redis_version', '?')

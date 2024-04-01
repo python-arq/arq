@@ -1,7 +1,4 @@
-black>=22,<23
-flake8>=5,<6
-flake8-quotes>=3,<4
-isort[colors]>=5,<6
-mypy<1
+ruff
+mypy
 types-pytz
-types_redis>=4.2,<4.3
+types_redis
