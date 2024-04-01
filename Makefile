@@ -19,7 +19,7 @@ update-lockfiles:
 	pip-compile -q --strip-extras -o requirements/linting.txt requirements/linting.in
 	pip-compile -q --strip-extras -o requirements/testing.txt requirements/testing.in
 	pip-compile -q --strip-extras -o requirements/docs.txt requirements/docs.in
-	pip-compile -q --strip-extras -o requirements/pyproject.txt pyproject.toml
+	pip-compile -q --strip-extras -o requirements/pyproject.txt pyproject.toml --all-extras
 	pip install --dry-run -r requirements/all.txt
 
 .PHONY: format
