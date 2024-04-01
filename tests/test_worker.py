@@ -760,8 +760,12 @@ async def test_max_bursts_multiple(arq_redis: ArqRedis, worker, caplog):
     assert worker.jobs_complete == 1
     assert worker.jobs_retried == 0
     assert worker.jobs_failed == 0
-    assert 'foo(1)' in caplog.text
-    assert 'foo(2)' not in caplog.text
+    # either foo(1) or foo(2) can be run, but not both
+    if 'foo(1)' in caplog.text:
+        assert 'foo(2)' not in caplog.text
+    else:
+        assert 'foo(2)' in caplog.text
+        assert 'foo(1)' not in caplog.text
 
 
 async def test_max_bursts_dont_get(arq_redis: ArqRedis, worker):
