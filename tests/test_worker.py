@@ -879,7 +879,9 @@ async def test_abort_deferred_job_before(arq_redis: ArqRedis, worker, caplog, lo
 
     caplog.set_level(logging.INFO)
 
-    job = await arq_redis.enqueue_job('longfunc', _job_id='testing', _defer_until=datetime.now(timezone.utc) + timedelta(days=1))
+    job = await arq_redis.enqueue_job(
+        'longfunc', _job_id='testing', _defer_until=datetime.now(timezone.utc) + timedelta(days=1)
+    )
 
     worker: Worker = worker(functions=[func(longfunc, name='longfunc')], allow_abort_jobs=True, poll_delay=0.1)
     assert worker.jobs_complete == 0

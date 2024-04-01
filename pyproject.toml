@@ -91,6 +91,9 @@ extend-ignore = [
 flake8-quotes = {inline-quotes = 'single', multiline-quotes = 'double'}
 mccabe = { max-complexity = 13 }
 
+[tool.ruff.format]
+quote-style = 'single'
+
 [tool.mypy]
 show_error_codes = true
 follow_imports = 'silent'

@@ -1,6 +1,5 @@
 .DEFAULT_GOAL := all
-isort = isort arq tests
-black = black arq tests
+sources = arq tests
 
 .PHONY: install
 install:
@@ -25,14 +24,13 @@ update-lockfiles:
 
 .PHONY: format
 format:
-	$(isort)
-	$(black)
+	ruff check --fix $(sources)
+	ruff format $(sources)
 
 .PHONY: lint
 lint:
-	flake8 --max-complexity 10 --max-line-length 120 --ignore E203,W503 arq/ tests/
-	$(isort) --check-only --df
-	$(black) --check
+	ruff check $(sources)
+	ruff format --check $(sources)
 
 .PHONY: test
 test:
