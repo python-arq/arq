@@ -24,11 +24,11 @@ classifiers = [
     'Programming Language :: Python',
     'Programming Language :: Python :: 3',
     'Programming Language :: Python :: 3 :: Only',
-    'Programming Language :: Python :: 3.7',
     'Programming Language :: Python :: 3.8',
     'Programming Language :: Python :: 3.9',
     'Programming Language :: Python :: 3.10',
     'Programming Language :: Python :: 3.11',
+    'Programming Language :: Python :: 3.12',
     'Topic :: Internet',
     'Topic :: Software Development :: Libraries :: Python Modules',
     'Topic :: System :: Clustering',
@@ -38,7 +38,7 @@ classifiers = [
 ]
 requires-python = '>=3.7'
 dependencies = [
-    'redis[hiredis]>=4.2.0',
+    'redis[hiredis]>=4.2.0,<5',
     'click>=8.0',
     'typing-extensions>=4.1.0',
 ]
@@ -57,7 +57,11 @@ Changelog = 'https://github.com/samuelcolvin/arq/releases'
 
 [tool.pytest.ini_options]
 testpaths = 'tests'
-filterwarnings = ['error']
+filterwarnings = [
+    'error',
+#    'ignore:pkg_resources is deprecated as an API.*:DeprecationWarning',
+#    'ignore:Deprecated call to.*:DeprecationWarning',
+]
 asyncio_mode = 'auto'
 timeout = 10
 
@@ -76,20 +80,16 @@ exclude_lines = [
     '@overload',
 ]
 
-[tool.black]
-color = true
+[tool.ruff]
 line-length = 120
-target-version = ['py39']
-skip-string-normalization = true
 
-[tool.isort]
-line_length = 120
-known_third_party = 'foxglove'
-multi_line_output = 3
-include_trailing_comma = true
-force_grid_wrap = 0
-combine_as_imports = true
-color_output = true
+[tool.ruff.lint]
+extend-select = ['Q', 'RUF100', 'C90', 'I']
+extend-ignore = [
+    'E721',  # using type() instead of isinstance() - we use this in tests
+]
+flake8-quotes = {inline-quotes = 'single', multiline-quotes = 'double'}
+mccabe = { max-complexity = 13 }
 
 [tool.mypy]
 show_error_codes = true

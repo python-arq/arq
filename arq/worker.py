@@ -41,7 +41,7 @@ from .utils import (
 )
 
 if TYPE_CHECKING:
-    from .typing import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType  # noqa F401
+    from .typing import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType
 
 logger = logging.getLogger('arq.worker')
 no_result = object()
@@ -357,7 +357,7 @@ class Worker:
         if self.on_startup:
             await self.on_startup(self.ctx)
 
-        async for _ in poll(self.poll_delay_s):  # noqa F841
+        async for _ in poll(self.poll_delay_s):
             await self._poll_iteration()
 
             if self.burst:
