@@ -4,7 +4,7 @@ import logging
 import re
 import signal
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import msgpack
@@ -760,8 +760,12 @@ async def test_max_bursts_multiple(arq_redis: ArqRedis, worker, caplog):
     assert worker.jobs_complete == 1
     assert worker.jobs_retried == 0
     assert worker.jobs_failed == 0
-    assert 'foo(1)' in caplog.text
-    assert 'foo(2)' not in caplog.text
+    # either foo(1) or foo(2) can be run, but not both
+    if 'foo(1)' in caplog.text:
+        assert 'foo(2)' not in caplog.text
+    else:
+        assert 'foo(2)' in caplog.text
+        assert 'foo(1)' not in caplog.text
 
 
 async def test_max_bursts_dont_get(arq_redis: ArqRedis, worker):
@@ -879,7 +883,9 @@ async def test_abort_deferred_job_before(arq_redis: ArqRedis, worker, caplog, lo
 
     caplog.set_level(logging.INFO)
 
-    job = await arq_redis.enqueue_job('longfunc', _job_id='testing', _defer_until=datetime.utcnow() + timedelta(days=1))
+    job = await arq_redis.enqueue_job(
+        'longfunc', _job_id='testing', _defer_until=datetime.now(timezone.utc) + timedelta(days=1)
+    )
 
     worker: Worker = worker(functions=[func(longfunc, name='longfunc')], allow_abort_jobs=True, poll_delay=0.1)
     assert worker.jobs_complete == 0

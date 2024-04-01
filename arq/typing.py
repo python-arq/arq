@@ -19,8 +19,8 @@ __all__ = (
 
 
 if TYPE_CHECKING:
-    from .cron import CronJob  # noqa F401
-    from .worker import Function  # noqa F401
+    from .cron import CronJob
+    from .worker import Function
 
 OptionType = Union[None, Set[int], int]
 WEEKDAYS = 'mon', 'tues', 'wed', 'thurs', 'fri', 'sat', 'sun'

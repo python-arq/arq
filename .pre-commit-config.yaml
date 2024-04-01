@@ -11,9 +11,9 @@ repos:
 
 - repo: local
   hooks:
-  - id: lint
-    name: Lint
-    entry: make lint
+  - id: format
+    name: Format
+    entry: make format
     types: [python]
     language: system
     pass_filenames: false

@@ -83,7 +83,7 @@ class Job:
         self._deserializer = _deserializer
 
     async def result(
-        self, timeout: Optional[float] = None, *, poll_delay: float = 0.5, pole_delay: float = None
+        self, timeout: Optional[float] = None, *, poll_delay: float = 0.5, pole_delay: Optional[float] = None
     ) -> Any:
         """
         Get the result of the job or, if the job raised an exception, reraise it.
@@ -103,8 +103,8 @@ class Job:
 
         async for delay in poll(poll_delay):
             async with self._redis.pipeline(transaction=True) as tr:
-                tr.get(result_key_prefix + self.job_id)  # type: ignore[unused-coroutine]
-                tr.zscore(self._queue_name, self.job_id)  # type: ignore[unused-coroutine]
+                tr.get(result_key_prefix + self.job_id)
+                tr.zscore(self._queue_name, self.job_id)
                 v, s = await tr.execute()
 
             if v:
@@ -154,9 +154,9 @@ class Job:
         Status of the job.
         """
         async with self._redis.pipeline(transaction=True) as tr:
-            tr.exists(result_key_prefix + self.job_id)  # type: ignore[unused-coroutine]
-            tr.exists(in_progress_key_prefix + self.job_id)  # type: ignore[unused-coroutine]
-            tr.zscore(self._queue_name, self.job_id)  # type: ignore[unused-coroutine]
+            tr.exists(result_key_prefix + self.job_id)
+            tr.exists(in_progress_key_prefix + self.job_id)
+            tr.zscore(self._queue_name, self.job_id)
             is_complete, is_in_progress, score = await tr.execute()
 
         if is_complete:
@@ -180,8 +180,8 @@ class Job:
         job_info = await self.info()
         if job_info and job_info.score and job_info.score > timestamp_ms():
             async with self._redis.pipeline(transaction=True) as tr:
-                tr.zrem(self._queue_name, self.job_id)  # type: ignore[unused-coroutine]
-                tr.zadd(self._queue_name, {self.job_id: 1})  # type: ignore[unused-coroutine]
+                tr.zrem(self._queue_name, self.job_id)
+                tr.zadd(self._queue_name, {self.job_id: 1})
                 await tr.execute()
 
         await self._redis.zadd(abort_jobs_ss, {self.job_id: timestamp_ms()})
