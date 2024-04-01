@@ -3,6 +3,29 @@
 History
 -------
 
+v0.26.0b1 (2023-04-01)
+......................
+
+* Prevent worker getting stuck in terminating state by @JonasKs in #370
+* Fix redis pipeline created and not used by @iamlikeme in #374
+* Bump certifi from 2022.6.15 to 2022.12.7 in ``/requirements`` by @dependabot in #373
+* Use instance's default queue for ``queued_jobs`` default by @phy1729 in #368
+* Docs: Add details about reusing a unique job id by @ross-nordstrom in #391
+* Delete ``setup.py`` in #398
+* Adding a job counter to address ``Semaphore`` issues by @rm-21 in #408
+* docs: add documentation on how to retrieve running jobs by @JonasKs in #377
+* feat: add ``job_id`` to ``JobDef``, closing #376 by @JonasKs in #378
+* chore: update dependencies, fixing tests by @JonasKs in #382
+* refactor: refactor all asserts into raise ``<exception>``, close #371 by @JonasKs in #379
+* Fix: timezone info occasionally removed from cron job execution time by @iamlikeme in #383
+* 3.12 support, drop 3.7, uprev dependencies by @samuelcolvin in #439
+* Extend ``RedisSettings`` to include redis Retry Helper settings by @mernmic in #387
+* Allow to connect to Redis using a Unix socket URL… by @drygdryg in #392
+* Allow infinite retry by @vvmruder in #396
+* Allow ``max_connections`` to be set in RedisSettings by @danbox in #406
+* Improve ``RedisSettings`` explanation in ``main_demo.py`` by @RamonGiovane in #422
+* uprev to v0.26.0b1 by @samuelcolvin in #440
+
 v0.25 (2022-12-02)
 ..................
 
