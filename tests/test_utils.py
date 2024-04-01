@@ -225,6 +225,7 @@ def test_settings_plain():
         'retry_on_timeout': False,
         'retry_on_error': None,
         'retry': None,
+        'max_connections': None,
     }
 
 
@@ -253,4 +254,5 @@ def test_settings_from_socket_dsn():
         'retry_on_timeout': False,
         'retry_on_error': None,
         'retry': None,
+        'max_connections': None,
     }
