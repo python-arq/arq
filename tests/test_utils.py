@@ -1,6 +1,7 @@
 import logging
 import re
 import sys
+from dataclasses import asdict
 from datetime import timedelta
 
 import pytest
@@ -197,3 +198,58 @@ def test_import_string_invalid_short():
 def test_import_string_invalid_missing():
     with pytest.raises(ImportError, match='Module "math" does not define a "foobar" attribute'):
         arq.utils.import_string('math.foobar')
+
+
+def test_settings_plain():
+    settings = RedisSettings()
+    assert asdict(settings) == {
+        'host': 'localhost',
+        'port': 6379,
+        'unix_socket_path': None,
+        'database': 0,
+        'username': None,
+        'password': None,
+        'ssl': False,
+        'ssl_keyfile': None,
+        'ssl_certfile': None,
+        'ssl_cert_reqs': 'required',
+        'ssl_ca_certs': None,
+        'ssl_ca_data': None,
+        'ssl_check_hostname': False,
+        'conn_timeout': 1,
+        'conn_retries': 5,
+        'conn_retry_delay': 1,
+        'sentinel': False,
+        'sentinel_master': 'mymaster',
+        'retry_on_timeout': False,
+        'retry_on_error': None,
+        'retry': None,
+    }
+
+
+def test_settings_from_socket_dsn():
+    settings = RedisSettings.from_dsn('unix:///run/redis/redis.sock')
+    # insert_assert(asdict(settings))
+    assert asdict(settings) == {
+        'host': 'localhost',
+        'port': 6379,
+        'unix_socket_path': '/run/redis/redis.sock',
+        'database': 0,
+        'username': None,
+        'password': None,
+        'ssl': False,
+        'ssl_keyfile': None,
+        'ssl_certfile': None,
+        'ssl_cert_reqs': 'required',
+        'ssl_ca_certs': None,
+        'ssl_ca_data': None,
+        'ssl_check_hostname': False,
+        'conn_timeout': 1,
+        'conn_retries': 5,
+        'conn_retry_delay': 1,
+        'sentinel': False,
+        'sentinel_master': 'mymaster',
+        'retry_on_timeout': False,
+        'retry_on_error': None,
+        'retry': None,
+    }
