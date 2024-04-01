@@ -4,11 +4,12 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Union, cast
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 from redis.asyncio import ConnectionPool, Redis
+from redis.asyncio.retry import Retry
 from redis.asyncio.sentinel import Sentinel
 from redis.exceptions import RedisError, WatchError
 
@@ -48,16 +49,23 @@ class RedisSettings:
     sentinel: bool = False
     sentinel_master: str = 'mymaster'
 
+    retry_on_timeout: bool = False
+    retry_on_error: Optional[List[Exception]] = None
+    retry: Optional[Retry] = None
+
     @classmethod
     def from_dsn(cls, dsn: str) -> 'RedisSettings':
         conf = urlparse(dsn)
-        assert conf.scheme in {'redis', 'rediss', 'unix'}, 'invalid DSN scheme'
+        if conf.scheme not in {'redis', 'rediss', 'unix'}:
+            raise RuntimeError('invalid DSN scheme')
         query_db = parse_qs(conf.query).get('db')
         if query_db:
             # e.g. redis://localhost:6379?db=1
             database = int(query_db[0])
-        else:
+        elif conf.scheme != 'unix':
             database = int(conf.path.lstrip('/')) if conf.path else 0
+        else:
+            database = 0
         return RedisSettings(
             host=conf.hostname or 'localhost',
             port=conf.port or 6379,
@@ -139,7 +147,8 @@ class ArqRedis(BaseRedis):
             _queue_name = self.default_queue_name
         job_id = _job_id or uuid4().hex
         job_key = job_key_prefix + job_id
-        assert not (_defer_until and _defer_by), "use either 'defer_until' or 'defer_by' or neither, not both"
+        if _defer_until and _defer_by:
+            raise RuntimeError("use either 'defer_until' or 'defer_by' or neither, not both")
 
         defer_by_ms = to_ms(_defer_by)
         expires_ms = to_ms(_expires)
@@ -162,8 +171,8 @@ class ArqRedis(BaseRedis):
 
             job = serialize_job(function, args, kwargs, _job_try, enqueue_time_ms, serializer=self.job_serializer)
             pipe.multi()
-            pipe.psetex(job_key, expires_ms, job)  # type: ignore[no-untyped-call]
-            pipe.zadd(_queue_name, {job_id: score})  # type: ignore[unused-coroutine]
+            pipe.psetex(job_key, expires_ms, job)
+            pipe.zadd(_queue_name, {job_id: score})
             try:
                 await pipe.execute()
             except WatchError:
@@ -191,9 +200,11 @@ class ArqRedis(BaseRedis):
     async def _get_job_def(self, job_id: bytes, score: int) -> JobDef:
         key = job_key_prefix + job_id.decode()
         v = await self.get(key)
-        assert v is not None, f'job "{key}" not found'
+        if v is None:
+            raise RuntimeError(f'job "{key}" not found')
         jd = deserialize_job(v, deserializer=self.job_deserializer)
         jd.score = score
+        jd.job_id = job_id.decode()
         return jd
 
     async def queued_jobs(self, *, queue_name: Optional[str] = None) -> List[JobDef]:
@@ -207,7 +218,7 @@ class ArqRedis(BaseRedis):
 
 
 async def create_pool(
-    settings_: RedisSettings = None,
+    settings_: Optional[RedisSettings] = None,
     *,
     retry: int = 0,
     job_serializer: Optional[Serializer] = None,
@@ -222,9 +233,8 @@ async def create_pool(
     """
     settings: RedisSettings = RedisSettings() if settings_ is None else settings_
 
-    assert not (
-        type(settings.host) is str and settings.sentinel
-    ), "str provided for 'host' but 'sentinel' is true; list of sentinels expected"
+    if isinstance(settings.host, str) and settings.sentinel:
+        raise RuntimeError("str provided for 'host' but 'sentinel' is true; list of sentinels expected")
 
     if settings.sentinel:
 
@@ -235,7 +245,8 @@ async def create_pool(
                 ssl=settings.ssl,
                 **kwargs,
             )
-            return client.master_for(settings.sentinel_master, redis_class=ArqRedis)
+            redis = client.master_for(settings.sentinel_master, redis_class=ArqRedis)
+            return cast(ArqRedis, redis)
 
     else:
         pool_factory = functools.partial(
@@ -251,6 +262,9 @@ async def create_pool(
             ssl_ca_certs=settings.ssl_ca_certs,
             ssl_ca_data=settings.ssl_ca_data,
             ssl_check_hostname=settings.ssl_check_hostname,
+            retry=settings.retry,
+            retry_on_timeout=settings.retry_on_timeout,
+            retry_on_error=settings.retry_on_error,
             max_connections=settings.max_connections,
         )
 
@@ -268,7 +282,7 @@ async def create_pool(
         except (ConnectionError, OSError, RedisError, asyncio.TimeoutError) as e:
             if retry < settings.conn_retries:
                 logger.warning(
-                    'redis connection error %s:%s %s %s, %d retries remaining...',
+                    'redis connection error %s:%s %s %s, %s retries remaining...',
                     settings.host,
                     settings.port,
                     e.__class__.__name__,
@@ -287,10 +301,10 @@ async def create_pool(
 
 async def log_redis_info(redis: 'Redis[bytes]', log_func: Callable[[str], Any]) -> None:
     async with redis.pipeline(transaction=False) as pipe:
-        pipe.info(section='Server')  # type: ignore[unused-coroutine]
-        pipe.info(section='Memory')  # type: ignore[unused-coroutine]
-        pipe.info(section='Clients')  # type: ignore[unused-coroutine]
-        pipe.dbsize()  # type: ignore[unused-coroutine]
+        pipe.info(section='Server')
+        pipe.info(section='Memory')
+        pipe.info(section='Clients')
+        pipe.dbsize()
         info_server, info_memory, info_clients, key_count = await pipe.execute()
 
     redis_version = info_server.get('redis_version', '?')

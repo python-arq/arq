@@ -41,7 +41,7 @@ from .utils import (
 )
 
 if TYPE_CHECKING:
-    from .typing import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType  # noqa F401
+    from .typing import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType
 
 logger = logging.getLogger('arq.worker')
 no_result = object()
@@ -85,7 +85,8 @@ def func(
     else:
         coroutine_ = coroutine
 
-    assert asyncio.iscoroutinefunction(coroutine_), f'{coroutine_} is not a coroutine function'
+    if not asyncio.iscoroutinefunction(coroutine_):
+        raise RuntimeError(f'{coroutine_} is not a coroutine function')
     timeout = to_seconds(timeout)
     keep_result = to_seconds(keep_result)
 
@@ -188,8 +189,8 @@ class Worker:
         *,
         queue_name: Optional[str] = default_queue_name,
         cron_jobs: Optional[Sequence[CronJob]] = None,
-        redis_settings: RedisSettings = None,
-        redis_pool: ArqRedis = None,
+        redis_settings: Optional[RedisSettings] = None,
+        redis_pool: Optional[ArqRedis] = None,
         burst: bool = False,
         on_startup: Optional['StartupShutdown'] = None,
         on_shutdown: Optional['StartupShutdown'] = None,
@@ -226,17 +227,23 @@ class Worker:
         self.queue_name = queue_name
         self.cron_jobs: List[CronJob] = []
         if cron_jobs is not None:
-            assert all(isinstance(cj, CronJob) for cj in cron_jobs), 'cron_jobs, must be instances of CronJob'
+            if not all(isinstance(cj, CronJob) for cj in cron_jobs):
+                raise RuntimeError('cron_jobs, must be instances of CronJob')
             self.cron_jobs = list(cron_jobs)
             self.functions.update({cj.name: cj for cj in self.cron_jobs})
-        assert len(self.functions) > 0, 'at least one function or cron_job must be registered'
+        if len(self.functions) == 0:
+            raise RuntimeError('at least one function or cron_job must be registered')
         self.burst = burst
         self.on_startup = on_startup
         self.on_shutdown = on_shutdown
         self.on_job_start = on_job_start
         self.on_job_end = on_job_end
         self.after_job_end = after_job_end
-        self.sem = asyncio.BoundedSemaphore(max_jobs)
+
+        self.max_jobs = max_jobs
+        self.sem = asyncio.BoundedSemaphore(max_jobs + 1)
+        self.job_counter: int = 0
+
         self.job_timeout_s = to_seconds(job_timeout)
         self.keep_result_s = to_seconds(keep_result)
         self.keep_result_forever = keep_result_forever
@@ -350,7 +357,7 @@ class Worker:
         if self.on_startup:
             await self.on_startup(self.ctx)
 
-        async for _ in poll(self.poll_delay_s):  # noqa F841
+        async for _ in poll(self.poll_delay_s):
             await self._poll_iteration()
 
             if self.burst:
@@ -374,13 +381,13 @@ class Worker:
                 return
             count = min(burst_jobs_remaining, count)
         if self.allow_pick_jobs:
-            async with self.sem:  # don't bother with zrangebyscore until we have "space" to run the jobs
+            if self.job_counter < self.max_jobs:
                 now = timestamp_ms()
                 job_ids = await self.pool.zrangebyscore(
                     self.queue_name, min=float('-inf'), start=self._queue_read_offset, num=count, max=now
                 )
 
-            await self.start_jobs(job_ids)
+                await self.start_jobs(job_ids)
 
         if self.allow_abort_jobs:
             await self._cancel_aborted_jobs()
@@ -398,10 +405,8 @@ class Worker:
         Go through job_ids in the abort_jobs_ss sorted set and cancel those tasks.
         """
         async with self.pool.pipeline(transaction=True) as pipe:
-            pipe.zrange(abort_jobs_ss, start=0, end=-1)  # type: ignore[unused-coroutine]
-            pipe.zremrangebyscore(  # type: ignore[unused-coroutine]
-                abort_jobs_ss, min=timestamp_ms() + abort_job_max_age, max=float('inf')
-            )
+            pipe.zrange(abort_jobs_ss, start=0, end=-1)
+            pipe.zremrangebyscore(abort_jobs_ss, min=timestamp_ms() + abort_job_max_age, max=float('inf'))
             abort_job_ids, _ = await pipe.execute()
 
         aborted: Set[str] = set()
@@ -419,12 +424,23 @@ class Worker:
             self.aborting_tasks.update(aborted)
             await self.pool.zrem(abort_jobs_ss, *aborted)
 
+    def _release_sem_dec_counter_on_complete(self) -> None:
+        self.job_counter = self.job_counter - 1
+        self.sem.release()
+
     async def start_jobs(self, job_ids: List[bytes]) -> None:
         """
         For each job id, get the job definition, check it's not running and start it in a task
         """
         for job_id_b in job_ids:
             await self.sem.acquire()
+
+            if self.job_counter >= self.max_jobs:
+                self.sem.release()
+                return None
+
+            self.job_counter = self.job_counter + 1
+
             job_id = job_id_b.decode()
             in_progress_key = in_progress_key_prefix + job_id
             async with self.pool.pipeline(transaction=True) as pipe:
@@ -433,33 +449,33 @@ class Worker:
                 score = await pipe.zscore(self.queue_name, job_id)
                 if ongoing_exists or not score:
                     # job already started elsewhere, or already finished and removed from queue
+                    self.job_counter = self.job_counter - 1
                     self.sem.release()
                     logger.debug('job %s already running elsewhere', job_id)
                     continue
 
                 pipe.multi()
-                pipe.psetex(  # type: ignore[no-untyped-call]
-                    in_progress_key, int(self.in_progress_timeout_s * 1000), b'1'
-                )
+                pipe.psetex(in_progress_key, int(self.in_progress_timeout_s * 1000), b'1')
                 try:
                     await pipe.execute()
                 except (ResponseError, WatchError):
                     # job already started elsewhere since we got 'existing'
+                    self.job_counter = self.job_counter - 1
                     self.sem.release()
                     logger.debug('multi-exec error, job %s already started elsewhere', job_id)
                 else:
                     t = self.loop.create_task(self.run_job(job_id, int(score)))
-                    t.add_done_callback(lambda _: self.sem.release())
+                    t.add_done_callback(lambda _: self._release_sem_dec_counter_on_complete())
                     self.tasks[job_id] = t
 
     async def run_job(self, job_id: str, score: int) -> None:  # noqa: C901
         start_ms = timestamp_ms()
         async with self.pool.pipeline(transaction=True) as pipe:
-            pipe.get(job_key_prefix + job_id)  # type: ignore[unused-coroutine]
-            pipe.incr(retry_key_prefix + job_id)  # type: ignore[unused-coroutine]
-            pipe.expire(retry_key_prefix + job_id, 88400)  # type: ignore[unused-coroutine]
+            pipe.get(job_key_prefix + job_id)
+            pipe.incr(retry_key_prefix + job_id)
+            pipe.expire(retry_key_prefix + job_id, 88400)
             if self.allow_abort_jobs:
-                pipe.zrem(abort_jobs_ss, job_id)  # type: ignore[unused-coroutine]
+                pipe.zrem(abort_jobs_ss, job_id)
                 v, job_try, _, abort_job = await pipe.execute()
             else:
                 v, job_try, _ = await pipe.execute()
@@ -484,6 +500,7 @@ class Worker:
                 ref=f'{job_id}:{function_name}',
                 serializer=self.job_serializer,
                 queue_name=self.queue_name,
+                job_id=job_id,
             )
             await asyncio.shield(self.finish_failed_job(job_id, result_data_))
 
@@ -539,6 +556,7 @@ class Worker:
                 timestamp_ms(),
                 ref,
                 self.queue_name,
+                job_id=job_id,
                 serializer=self.job_serializer,
             )
             return await asyncio.shield(self.finish_failed_job(job_id, result_data))
@@ -632,6 +650,7 @@ class Worker:
                 finished_ms,
                 ref,
                 self.queue_name,
+                job_id=job_id,
                 serializer=self.job_serializer,
             )
 
@@ -669,35 +688,35 @@ class Worker:
             if keep_in_progress is None:
                 delete_keys += [in_progress_key]
             else:
-                tr.pexpire(in_progress_key, to_ms(keep_in_progress))  # type: ignore[unused-coroutine]
+                tr.pexpire(in_progress_key, to_ms(keep_in_progress))
 
             if finish:
                 if result_data:
                     expire = None if keep_result_forever else result_timeout_s
-                    tr.set(result_key_prefix + job_id, result_data, px=to_ms(expire))  # type: ignore[unused-coroutine]
+                    tr.set(result_key_prefix + job_id, result_data, px=to_ms(expire))
                 delete_keys += [retry_key_prefix + job_id, job_key_prefix + job_id]
-                tr.zrem(abort_jobs_ss, job_id)  # type: ignore[unused-coroutine]
-                tr.zrem(self.queue_name, job_id)  # type: ignore[unused-coroutine]
+                tr.zrem(abort_jobs_ss, job_id)
+                tr.zrem(self.queue_name, job_id)
             elif incr_score:
-                tr.zincrby(self.queue_name, incr_score, job_id)  # type: ignore[unused-coroutine]
+                tr.zincrby(self.queue_name, incr_score, job_id)
             if delete_keys:
-                tr.delete(*delete_keys)  # type: ignore[unused-coroutine]
+                tr.delete(*delete_keys)
             await tr.execute()
 
     async def finish_failed_job(self, job_id: str, result_data: Optional[bytes]) -> None:
         async with self.pool.pipeline(transaction=True) as tr:
-            tr.delete(  # type: ignore[unused-coroutine]
+            tr.delete(
                 retry_key_prefix + job_id,
                 in_progress_key_prefix + job_id,
                 job_key_prefix + job_id,
             )
-            tr.zrem(abort_jobs_ss, job_id)  # type: ignore[unused-coroutine]
-            tr.zrem(self.queue_name, job_id)  # type: ignore[unused-coroutine]
+            tr.zrem(abort_jobs_ss, job_id)
+            tr.zrem(self.queue_name, job_id)
             # result_data would only be None if serializing the result fails
             keep_result = self.keep_result_forever or self.keep_result_s > 0
             if result_data is not None and keep_result:  # pragma: no branch
                 expire = 0 if self.keep_result_forever else self.keep_result_s
-                tr.set(result_key_prefix + job_id, result_data, px=to_ms(expire))  # type: ignore[unused-coroutine]
+                tr.set(result_key_prefix + job_id, result_data, px=to_ms(expire))
             await tr.execute()
 
     async def heart_beat(self) -> None:
@@ -860,7 +879,7 @@ def get_kwargs(settings_cls: 'WorkerSettingsType') -> Dict[str, NameError]:
 
 
 def create_worker(settings_cls: 'WorkerSettingsType', **kwargs: Any) -> Worker:
-    return Worker(**{**get_kwargs(settings_cls), **kwargs})  # type: ignore
+    return Worker(**{**get_kwargs(settings_cls), **kwargs})
 
 
 def run_worker(settings_cls: 'WorkerSettingsType', **kwargs: Any) -> Worker:
