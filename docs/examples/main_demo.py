@@ -26,7 +26,7 @@ async def main():
 
 # WorkerSettings defines the settings to use when creating the work,
 # It's used by the arq CLI.
-# redis_settings might be ommitted here if using the default settings
+# redis_settings might be omitted here if using the default settings
 # For a list of all available settings, see https://arq-docs.helpmanual.io/#arq.worker.Worker
 class WorkerSettings:
     functions = [download_content]
