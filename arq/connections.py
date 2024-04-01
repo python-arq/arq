@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Union, cast
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
@@ -237,7 +237,8 @@ async def create_pool(
                 ssl=settings.ssl,
                 **kwargs,
             )
-            return client.master_for(settings.sentinel_master, redis_class=ArqRedis)
+            redis = client.master_for(settings.sentinel_master, redis_class=ArqRedis)
+            return cast(ArqRedis, redis)
 
     else:
         pool_factory = functools.partial(
