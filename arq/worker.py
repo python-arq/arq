@@ -41,7 +41,7 @@ from .utils import (
 )
 
 if TYPE_CHECKING:
-    from .typing import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType  # noqa F401
+    from .typing import SecondsTimedelta, StartupShutdown, WorkerCoroutine, WorkerSettingsType
 
 logger = logging.getLogger('arq.worker')
 no_result = object()
@@ -85,7 +85,8 @@ def func(
     else:
         coroutine_ = coroutine
 
-    assert asyncio.iscoroutinefunction(coroutine_), f'{coroutine_} is not a coroutine function'
+    if not asyncio.iscoroutinefunction(coroutine_):
+        raise RuntimeError(f'{coroutine_} is not a coroutine function')
     timeout = to_seconds(timeout)
     keep_result = to_seconds(keep_result)
 
@@ -188,8 +189,8 @@ class Worker:
         *,
         queue_name: Optional[str] = default_queue_name,
         cron_jobs: Optional[Sequence[CronJob]] = None,
-        redis_settings: RedisSettings = None,
-        redis_pool: ArqRedis = None,
+        redis_settings: Optional[RedisSettings] = None,
+        redis_pool: Optional[ArqRedis] = None,
         burst: bool = False,
         on_startup: Optional['StartupShutdown'] = None,
         on_shutdown: Optional['StartupShutdown'] = None,
@@ -226,10 +227,12 @@ class Worker:
         self.queue_name = queue_name
         self.cron_jobs: List[CronJob] = []
         if cron_jobs is not None:
-            assert all(isinstance(cj, CronJob) for cj in cron_jobs), 'cron_jobs, must be instances of CronJob'
+            if not all(isinstance(cj, CronJob) for cj in cron_jobs):
+                raise RuntimeError('cron_jobs, must be instances of CronJob')
             self.cron_jobs = list(cron_jobs)
             self.functions.update({cj.name: cj for cj in self.cron_jobs})
-        assert len(self.functions) > 0, 'at least one function or cron_job must be registered'
+        if len(self.functions) == 0:
+            raise RuntimeError('at least one function or cron_job must be registered')
         self.burst = burst
         self.on_startup = on_startup
         self.on_shutdown = on_shutdown
@@ -354,7 +357,7 @@ class Worker:
         if self.on_startup:
             await self.on_startup(self.ctx)
 
-        async for _ in poll(self.poll_delay_s):  # noqa F841
+        async for _ in poll(self.poll_delay_s):
             await self._poll_iteration()
 
             if self.burst:
@@ -402,10 +405,8 @@ class Worker:
         Go through job_ids in the abort_jobs_ss sorted set and cancel those tasks.
         """
         async with self.pool.pipeline(transaction=True) as pipe:
-            pipe.zrange(abort_jobs_ss, start=0, end=-1)  # type: ignore[unused-coroutine]
-            pipe.zremrangebyscore(  # type: ignore[unused-coroutine]
-                abort_jobs_ss, min=timestamp_ms() + abort_job_max_age, max=float('inf')
-            )
+            pipe.zrange(abort_jobs_ss, start=0, end=-1)
+            pipe.zremrangebyscore(abort_jobs_ss, min=timestamp_ms() + abort_job_max_age, max=float('inf'))
             abort_job_ids, _ = await pipe.execute()
 
         aborted: Set[str] = set()
@@ -454,9 +455,7 @@ class Worker:
                     continue
 
                 pipe.multi()
-                pipe.psetex(  # type: ignore[no-untyped-call]
-                    in_progress_key, int(self.in_progress_timeout_s * 1000), b'1'
-                )
+                pipe.psetex(in_progress_key, int(self.in_progress_timeout_s * 1000), b'1')
                 try:
                     await pipe.execute()
                 except (ResponseError, WatchError):
@@ -472,11 +471,11 @@ class Worker:
     async def run_job(self, job_id: str, score: int) -> None:  # noqa: C901
         start_ms = timestamp_ms()
         async with self.pool.pipeline(transaction=True) as pipe:
-            pipe.get(job_key_prefix + job_id)  # type: ignore[unused-coroutine]
-            pipe.incr(retry_key_prefix + job_id)  # type: ignore[unused-coroutine]
-            pipe.expire(retry_key_prefix + job_id, 88400)  # type: ignore[unused-coroutine]
+            pipe.get(job_key_prefix + job_id)
+            pipe.incr(retry_key_prefix + job_id)
+            pipe.expire(retry_key_prefix + job_id, 88400)
             if self.allow_abort_jobs:
-                pipe.zrem(abort_jobs_ss, job_id)  # type: ignore[unused-coroutine]
+                pipe.zrem(abort_jobs_ss, job_id)
                 v, job_try, _, abort_job = await pipe.execute()
             else:
                 v, job_try, _ = await pipe.execute()
@@ -501,6 +500,7 @@ class Worker:
                 ref=f'{job_id}:{function_name}',
                 serializer=self.job_serializer,
                 queue_name=self.queue_name,
+                job_id=job_id,
             )
             await asyncio.shield(self.finish_failed_job(job_id, result_data_))
 
@@ -556,6 +556,7 @@ class Worker:
                 timestamp_ms(),
                 ref,
                 self.queue_name,
+                job_id=job_id,
                 serializer=self.job_serializer,
             )
             return await asyncio.shield(self.finish_failed_job(job_id, result_data))
@@ -649,6 +650,7 @@ class Worker:
                 finished_ms,
                 ref,
                 self.queue_name,
+                job_id=job_id,
                 serializer=self.job_serializer,
             )
 
@@ -686,35 +688,35 @@ class Worker:
             if keep_in_progress is None:
                 delete_keys += [in_progress_key]
             else:
-                tr.pexpire(in_progress_key, to_ms(keep_in_progress))  # type: ignore[unused-coroutine]
+                tr.pexpire(in_progress_key, to_ms(keep_in_progress))
 
             if finish:
                 if result_data:
                     expire = None if keep_result_forever else result_timeout_s
-                    tr.set(result_key_prefix + job_id, result_data, px=to_ms(expire))  # type: ignore[unused-coroutine]
+                    tr.set(result_key_prefix + job_id, result_data, px=to_ms(expire))
                 delete_keys += [retry_key_prefix + job_id, job_key_prefix + job_id]
-                tr.zrem(abort_jobs_ss, job_id)  # type: ignore[unused-coroutine]
-                tr.zrem(self.queue_name, job_id)  # type: ignore[unused-coroutine]
+                tr.zrem(abort_jobs_ss, job_id)
+                tr.zrem(self.queue_name, job_id)
             elif incr_score:
-                tr.zincrby(self.queue_name, incr_score, job_id)  # type: ignore[unused-coroutine]
+                tr.zincrby(self.queue_name, incr_score, job_id)
             if delete_keys:
-                tr.delete(*delete_keys)  # type: ignore[unused-coroutine]
+                tr.delete(*delete_keys)
             await tr.execute()
 
     async def finish_failed_job(self, job_id: str, result_data: Optional[bytes]) -> None:
         async with self.pool.pipeline(transaction=True) as tr:
-            tr.delete(  # type: ignore[unused-coroutine]
+            tr.delete(
                 retry_key_prefix + job_id,
                 in_progress_key_prefix + job_id,
                 job_key_prefix + job_id,
             )
-            tr.zrem(abort_jobs_ss, job_id)  # type: ignore[unused-coroutine]
-            tr.zrem(self.queue_name, job_id)  # type: ignore[unused-coroutine]
+            tr.zrem(abort_jobs_ss, job_id)
+            tr.zrem(self.queue_name, job_id)
             # result_data would only be None if serializing the result fails
             keep_result = self.keep_result_forever or self.keep_result_s > 0
             if result_data is not None and keep_result:  # pragma: no branch
                 expire = 0 if self.keep_result_forever else self.keep_result_s
-                tr.set(result_key_prefix + job_id, result_data, px=to_ms(expire))  # type: ignore[unused-coroutine]
+                tr.set(result_key_prefix + job_id, result_data, px=to_ms(expire))
             await tr.execute()
 
     async def heart_beat(self) -> None:
@@ -877,7 +879,7 @@ def get_kwargs(settings_cls: 'WorkerSettingsType') -> Dict[str, NameError]:
 
 
 def create_worker(settings_cls: 'WorkerSettingsType', **kwargs: Any) -> Worker:
-    return Worker(**{**get_kwargs(settings_cls), **kwargs})  # type: ignore
+    return Worker(**{**get_kwargs(settings_cls), **kwargs})
 
 
 def run_worker(settings_cls: 'WorkerSettingsType', **kwargs: Any) -> Worker:

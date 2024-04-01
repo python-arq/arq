@@ -1,24 +1,36 @@
 .DEFAULT_GOAL := all
-isort = isort arq tests
-black = black arq tests
+sources = arq tests
 
 .PHONY: install
 install:
-	pip install -U pip pre-commit
+	pip install -U pip pre-commit pip-tools
 	pip install -r requirements/all.txt
 	pip install -e .[watch]
 	pre-commit install
 
+.PHONY: refresh-lockfiles
+refresh-lockfiles:
+	find requirements/ -name '*.txt' ! -name 'all.txt' -type f -delete
+	make update-lockfiles
+
+.PHONY: update-lockfiles
+update-lockfiles:
+	@echo "Updating requirements/*.txt files using pip-compile"
+	pip-compile -q --strip-extras -o requirements/linting.txt requirements/linting.in
+	pip-compile -q --strip-extras -o requirements/testing.txt requirements/testing.in
+	pip-compile -q --strip-extras -o requirements/docs.txt requirements/docs.in
+	pip-compile -q --strip-extras -o requirements/pyproject.txt pyproject.toml --all-extras
+	pip install --dry-run -r requirements/all.txt
+
 .PHONY: format
 format:
-	$(isort)
-	$(black)
+	ruff check --fix $(sources)
+	ruff format $(sources)
 
 .PHONY: lint
 lint:
-	flake8 --max-complexity 10 --max-line-length 120 --ignore E203,W503 arq/ tests/
-	$(isort) --check-only --df
-	$(black) --check
+	ruff check $(sources)
+	ruff format --check $(sources)
 
 .PHONY: test
 test:
