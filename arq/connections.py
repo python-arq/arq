@@ -225,6 +225,7 @@ async def create_pool(
     job_deserializer: Optional[Deserializer] = None,
     default_queue_name: str = default_queue_name,
     expires_extra_ms: int = expires_extra_ms,
+    **additional_redis_args: Any,
 ) -> ArqRedis:
     """
     Create a new redis pool, retrying up to ``conn_retries`` times if the connection fails.
@@ -243,7 +244,7 @@ async def create_pool(
                 *args,
                 sentinels=settings.host,
                 ssl=settings.ssl,
-                **kwargs,
+                **{**kwargs, **additional_redis_args},
             )
             redis = client.master_for(settings.sentinel_master, redis_class=ArqRedis)
             return cast(ArqRedis, redis)
@@ -266,6 +267,7 @@ async def create_pool(
             retry_on_timeout=settings.retry_on_timeout,
             retry_on_error=settings.retry_on_error,
             max_connections=settings.max_connections,
+            **additional_redis_args,
         )
 
     while True:
