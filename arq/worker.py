@@ -691,12 +691,12 @@ class Worker:
                 tr.pexpire(in_progress_key, to_ms(keep_in_progress))
 
             if finish:
-                if result_data:
-                    expire = None if keep_result_forever else result_timeout_s
-                    tr.set(result_key_prefix + job_id, result_data, px=to_ms(expire))
                 delete_keys += [retry_key_prefix + job_id, job_key_prefix + job_id]
                 tr.zrem(abort_jobs_ss, job_id)
                 tr.zrem(self.queue_name, job_id)
+                if result_data:
+                    expire = None if keep_result_forever else result_timeout_s
+                    tr.set(result_key_prefix + job_id, result_data, px=to_ms(expire))
             elif incr_score:
                 tr.zincrby(self.queue_name, incr_score, job_id)
             if delete_keys:
