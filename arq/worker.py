@@ -20,6 +20,8 @@ from .constants import (
     abort_job_max_age,
     abort_jobs_ss,
     default_queue_name,
+    default_worker_group,
+    default_worker_name,
     expires_extra_ms,
     health_check_key_suffix,
     in_progress_key_prefix,
@@ -27,6 +29,7 @@ from .constants import (
     keep_cronjob_progress,
     result_key_prefix,
     retry_key_prefix,
+    stream_prefix,
 )
 from .utils import (
     args_to_string,
@@ -144,10 +147,13 @@ class Worker:
     :param functions: list of functions to register, can either be raw coroutine functions or the
       result of :func:`arq.worker.func`.
     :param queue_name: queue name to get jobs from
+    :param worker_name: unique name to identify this worker
+    :param worker_group: worker group that this worker belongs to
     :param cron_jobs:  list of cron jobs to run, use :func:`arq.cron.cron` to create them
     :param redis_settings: settings for creating a redis connection
     :param redis_pool: existing redis pool, generally None
     :param burst: whether to stop the worker once all jobs have been run
+    :param stream: whether to constantly listen for new jobs from a redis stream
     :param on_startup: coroutine function to run at startup
     :param on_shutdown: coroutine function to run at shutdown
     :param on_job_start: coroutine function to run on job start
@@ -188,10 +194,13 @@ class Worker:
         functions: Sequence[Union[Function, 'WorkerCoroutine']] = (),
         *,
         queue_name: Optional[str] = default_queue_name,
+        worker_name: Optional[str] = None,
+        worker_group: Optional[str] = None,
         cron_jobs: Optional[Sequence[CronJob]] = None,
         redis_settings: Optional[RedisSettings] = None,
         redis_pool: Optional[ArqRedis] = None,
         burst: bool = False,
+        stream: bool = False,
         on_startup: Optional['StartupShutdown'] = None,
         on_shutdown: Optional['StartupShutdown'] = None,
         on_job_start: Optional['StartupShutdown'] = None,
@@ -234,6 +243,10 @@ class Worker:
         if len(self.functions) == 0:
             raise RuntimeError('at least one function or cron_job must be registered')
         self.burst = burst
+        self.stream = stream
+        if stream is True:
+            self.worker_name = worker_name if worker_name is not None else default_worker_name
+            self.worker_group = worker_group if worker_group is not None else default_worker_group
         self.on_startup = on_startup
         self.on_shutdown = on_shutdown
         self.on_job_start = on_job_start
@@ -357,17 +370,31 @@ class Worker:
         if self.on_startup:
             await self.on_startup(self.ctx)
 
-        async for _ in poll(self.poll_delay_s):
-            await self._poll_iteration()
+        if self.stream is False:
+            async for _ in poll(self.poll_delay_s):
+                await self._poll_iteration()
 
-            if self.burst:
-                if 0 <= self.max_burst_jobs <= self._jobs_started():
-                    await asyncio.gather(*self.tasks.values())
-                    return None
-                queued_jobs = await self.pool.zcard(self.queue_name)
-                if queued_jobs == 0:
-                    await asyncio.gather(*self.tasks.values())
-                    return None
+                if self.burst:
+                    if 0 <= self.max_burst_jobs <= self._jobs_started():
+                        await asyncio.gather(*self.tasks.values())
+                        return None
+                    queued_jobs = await self.pool.zcard(self.queue_name)
+                    if queued_jobs == 0:
+                        await asyncio.gather(*self.tasks.values())
+                        return None
+        else:
+            stream_name = stream_prefix + self.queue_name
+
+            with contextlib.suppress(ResponseError):
+                await self.pool.xgroup_create(stream_name, self.worker_group, '$', mkstream=True)
+                logger.info('Stream consumer group created with name: %s', self.worker_group)
+
+            while True:
+                if event := await self.pool.xreadgroup(
+                    consumername=self.worker_name, groupname=self.worker_group, streams={stream_name: '>'}, block=0
+                ):
+                    await self._poll_iteration()
+                    await self.pool.xack(stream_name, self.worker_group, event[0][1][0][0])  # type: ignore[no-untyped-call]
 
     async def _poll_iteration(self) -> None:
         """
