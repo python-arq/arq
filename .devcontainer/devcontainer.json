@@ -1,0 +1,55 @@
+{
+    "name": "CentralAPI",
+    "image": "python:3.11",
+    "workspaceFolder": "/app",
+    "remoteUser": "root",
+    "overrideCommand": true,
+    "postStartCommand": "make install && docker run -d -p 6379:6379 --name redis redis",
+    "appPort": ["8000:8000"],
+    "mounts": [
+      "source=${localWorkspaceFolder},target=/app,type=bind"
+      // "source=${localWorkspaceFolder}/.devcontainer/.zsh_history,target=/root/.zsh_history,type=bind"
+    ],
+    "features": {
+      "ghcr.io/devcontainers/features/common-utils:2": {
+        "configureZshAsDefaultShell": true
+      },
+      "ghcr.io/devcontainers-contrib/features/zsh-plugins:0": {
+        "omzPlugins": "https://github.com/zsh-users/zsh-autosuggestions https://github.com/zsh-users/zsh-syntax-highlighting https://github.com/zsh-users/zsh-completions https://github.com/zsh-users/zsh-history-substring-search",
+        "plugins": "zsh-autosuggestions zsh-syntax-highlighting zsh-completions zsh-history-substring-search"
+      },
+      "ghcr.io/devcontainers-contrib/features/flake8:2": {},
+      "ghcr.io/jungaretti/features/make":1,
+      "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+    },
+    "customizations": {
+      // Configure properties specific to VS Code.
+      "vscode": {
+        // Set *default* container specific settings.json values on container create.
+        "settings": {
+          "python.defaultInterpreterPath": "/usr/local/bin/python",
+          "python.linting.enabled": true,
+          "python.formatting.yapfPath": "/usr/local/py-utils/bin/yapf",
+          "python.linting.flake8Path": "/usr/local/py-utils/bin/flake8",
+          "python.linting.pycodestylePath": "/usr/local/py-utils/bin/pycodestyle",
+          "python.linting.pydocstylePath": "/usr/local/py-utils/bin/pydocstyle"
+        },
+        // Add the IDs of extensions you want installed when the container is created.
+        "extensions": [
+            "ms-python.python",
+            "ms-python.isort",
+            "ms-python.flake8",
+            "ms-python.autopep8",
+            "ms-vscode.makefile-tools",
+            "mikestead.dotenv",
+            "PKief.material-icon-theme",
+            "aaron-bond.better-comments",
+            "redhat.vscode-yaml",
+            "eamodio.gitlens",
+            "oderwat.indent-rainbow",
+            "VisualStudioExptTeam.vscodeintellicode",
+            "njpwerner.autodocstring"
+        ]
+      }
+    }
+  }
