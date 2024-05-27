@@ -2,3 +2,4 @@
 -r ./linting.txt
 -r ./testing.txt
 -r ./pyproject.txt
+-r ./ui.txt
