@@ -1,4 +1,7 @@
 default_queue_name = 'arq:queue'
+default_worker_name = 'arq:worker'
+default_worker_group = 'arq:workers'
+stream_prefix = 'arq:stream:'
 job_key_prefix = 'arq:job:'
 in_progress_key_prefix = 'arq:in-progress:'
 result_key_prefix = 'arq:result:'

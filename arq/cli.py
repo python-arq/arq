@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from .typing import WorkerSettingsType
 
 burst_help = 'Batch mode: exit once no jobs are found in any queue.'
+stream_help = 'Stream mode: use redis streams for job delivery. Does not support batch mode.'
 health_check_help = 'Health Check: run a health check and exit.'
 watch_help = 'Watch a directory and reload the worker upon changes.'
 verbose_help = 'Enable verbose output.'
@@ -26,11 +27,14 @@ logdict_help = "Import path for a dictionary in logdict form, to configure Arq's
 @click.version_option(VERSION, '-V', '--version', prog_name='arq')
 @click.argument('worker-settings', type=str, required=True)
 @click.option('--burst/--no-burst', default=None, help=burst_help)
+@click.option('--stream/--no-stream', default=None, help=stream_help)
 @click.option('--check', is_flag=True, help=health_check_help)
 @click.option('--watch', type=click.Path(exists=True, dir_okay=True, file_okay=False), help=watch_help)
 @click.option('-v', '--verbose', is_flag=True, help=verbose_help)
 @click.option('--custom-log-dict', type=str, help=logdict_help)
-def cli(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: bool, custom_log_dict: str) -> None:
+def cli(
+    *, worker_settings: str, burst: bool, stream: bool, check: bool, watch: str, verbose: bool, custom_log_dict: str
+) -> None:
     """
     Job queues in python with asyncio and redis.
 
@@ -48,6 +52,8 @@ def cli(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: 
         exit(check_health(worker_settings_))
     else:
         kwargs = {} if burst is None else {'burst': burst}
+        if stream:
+            kwargs['stream'] = stream
         if watch:
             asyncio.run(watch_reload(watch, worker_settings_))
         else:

@@ -13,7 +13,7 @@ from redis.asyncio.retry import Retry
 from redis.asyncio.sentinel import Sentinel
 from redis.exceptions import RedisError, WatchError
 
-from .constants import default_queue_name, expires_extra_ms, job_key_prefix, result_key_prefix
+from .constants import default_queue_name, expires_extra_ms, job_key_prefix, result_key_prefix, stream_prefix
 from .jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
@@ -120,6 +120,7 @@ class ArqRedis(BaseRedis):
         self,
         function: str,
         *args: Any,
+        _use_stream: bool = False,
         _job_id: Optional[str] = None,
         _queue_name: Optional[str] = None,
         _defer_until: Optional[datetime] = None,
@@ -133,6 +134,7 @@ class ArqRedis(BaseRedis):
 
         :param function: Name of the function to call
         :param args: args to pass to the function
+        :param _use_stream: queue the job through redis streams. Stream mode must be enabled in worker.
         :param _job_id: ID of the job, can be used to enforce job uniqueness
         :param _queue_name: queue of the job, can be used to create job in different queue
         :param _defer_until: datetime at which to run the job
@@ -171,6 +173,8 @@ class ArqRedis(BaseRedis):
 
             job = serialize_job(function, args, kwargs, _job_try, enqueue_time_ms, serializer=self.job_serializer)
             pipe.multi()
+            if _use_stream:
+                pipe.xadd(stream_prefix + _queue_name, {job_key_prefix: job})
             pipe.psetex(job_key, expires_ms, job)
             pipe.zadd(_queue_name, {job_id: score})
             try:
