@@ -389,14 +389,15 @@ class Worker:
                 await self.pool.xgroup_create(stream_name, self.worker_group, '$', mkstream=True)
                 logger.info('Stream consumer group created with name: %s', self.worker_group)
 
-            async def read_messages(name: Literal['>', '0']):  # type: ignore[no-untyped-def]
+            async def read_messages(name: Literal['>', '0']) -> None:
                 if event := await self.pool.xreadgroup(
                     consumername=self.worker_name, groupname=self.worker_group, streams={stream_name: name}, block=0
                 ):
                     await self._poll_iteration()
 
+                    acknowledge = cast(Callable[..., Any], self.pool.xack)
                     for message in event[0][1]:
-                        await self.pool.xack(stream_name, self.worker_group, message[0])  # type: ignore[no-untyped-call]
+                        await acknowledge(stream_name, self.worker_group, message[0])
 
             # Heartbeat before blocking, or health check will fail previous to receiving first message
             await self.heart_beat()
