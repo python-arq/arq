@@ -79,6 +79,32 @@ async def worker(arq_redis):
         await worker_.close()
 
 
+poll_worker = worker
+
+
+@pytest.fixture
+async def stream_worker(arq_redis):
+    worker_: Worker = None
+
+    def create(functions=[], burst=True, stream=True, poll_delay=0, max_jobs=10, arq_redis=arq_redis, **kwargs):
+        nonlocal worker_
+        worker_ = Worker(
+            functions=functions,
+            redis_pool=arq_redis,
+            burst=burst,
+            stream=stream,
+            poll_delay=poll_delay,
+            max_jobs=max_jobs,
+            **kwargs,
+        )
+        return worker_
+
+    yield create
+
+    if worker_:
+        await worker_.close()
+
+
 @pytest.fixture
 async def worker_retry(arq_redis_retry):
     worker_retry_: Worker = None

@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from functools import partial
 from signal import Signals
 from time import time
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Literal, Optional, Sequence, Set, Tuple, Union, cast
 
 from redis.exceptions import ResponseError, WatchError
 
@@ -389,12 +389,23 @@ class Worker:
                 await self.pool.xgroup_create(stream_name, self.worker_group, '$', mkstream=True)
                 logger.info('Stream consumer group created with name: %s', self.worker_group)
 
-            while True:
+            async def read_messages(name: Literal['>', '0']):  # type: ignore[no-untyped-def]
                 if event := await self.pool.xreadgroup(
-                    consumername=self.worker_name, groupname=self.worker_group, streams={stream_name: '>'}, block=0
+                    consumername=self.worker_name, groupname=self.worker_group, streams={stream_name: name}, block=0
                 ):
                     await self._poll_iteration()
-                    await self.pool.xack(stream_name, self.worker_group, event[0][1][0][0])  # type: ignore[no-untyped-call]
+
+                    for message in event[0][1]:
+                        await self.pool.xack(stream_name, self.worker_group, message[0])  # type: ignore[no-untyped-call]
+
+            # Heartbeat before blocking, or health check will fail previous to receiving first message
+            await self.heart_beat()
+
+            if self.burst:
+                await read_messages('0')
+            else:
+                while True:
+                    await read_messages('>')
 
     async def _poll_iteration(self) -> None:
         """
