@@ -6,10 +6,18 @@
 #
 annotated-types==0.6.0
     # via pydantic
+certifi==2024.7.4
+    # via requests
+charset-normalizer==3.3.2
+    # via requests
 coverage==7.4.4
     # via -r requirements/testing.in
 dirty-equals==0.7.1.post0
     # via -r requirements/testing.in
+docker==7.1.0
+    # via testcontainers
+idna==3.7
+    # via requests
 iniconfig==2.0.0
     # via pytest
 markdown-it-py==3.0.0
@@ -47,9 +55,21 @@ pytz==2024.1
     # via
     #   -r requirements/testing.in
     #   dirty-equals
+requests==2.32.3
+    # via docker
 rich==13.7.1
     # via pytest-pretty
+testcontainers==4.7.2
+    # via -r requirements/testing.in
 typing-extensions==4.10.0
     # via
     #   pydantic
     #   pydantic-core
+    #   testcontainers
+urllib3==2.2.2
+    # via
+    #   docker
+    #   requests
+    #   testcontainers
+wrapt==1.16.0
+    # via testcontainers

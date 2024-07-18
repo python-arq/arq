@@ -3,6 +3,7 @@ from click.testing import CliRunner
 
 from arq import logs
 from arq.cli import cli
+from arq.connections import RedisSettings
 
 
 async def foobar(ctx):
@@ -12,6 +13,11 @@ async def foobar(ctx):
 class WorkerSettings:
     burst = True
     functions = [foobar]
+
+
+@pytest.fixture(scope='module', autouse=True)
+def setup_worker_connection(test_redis_host: str, test_redis_port: int):
+    WorkerSettings.redis_settings = RedisSettings(host=test_redis_host, port=test_redis_port)
 
 
 def test_help():
