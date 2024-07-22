@@ -5,7 +5,7 @@ on:
     branches:
       - main
     tags:
-      - "**"
+      - '**'
   pull_request: {}
 
 jobs:
@@ -13,40 +13,40 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - name: set up python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+    - name: set up python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
 
-      - run: pip install -r requirements/linting.txt -r requirements/pyproject.txt pre-commit
+    - run: pip install -r requirements/linting.txt -r requirements/pyproject.txt pre-commit
 
-      - run: pre-commit run -a --verbose
-        env:
-          SKIP: no-commit-to-branch
+    - run: pre-commit run -a --verbose
+      env:
+        SKIP: no-commit-to-branch
 
   docs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - name: set up python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+    - name: set up python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
 
-      - run: pip install -r requirements/docs.txt -r requirements/pyproject.txt
-      - run: pip install .
+    - run: pip install -r requirements/docs.txt -r requirements/pyproject.txt
+    - run: pip install .
 
-      - run: make docs
+    - run: make docs
 
-      - name: Store docs site
-        uses: actions/upload-artifact@v4
-        with:
-          name: docs
-          path: docs/_build/
+    - name: Store docs site
+      uses: actions/upload-artifact@v4
+      with:
+        name: docs
+        path: docs/_build/
 
   test:
     name: test py${{ matrix.python }} with redis:${{ matrix.redis }} on ${{ matrix.os }}
@@ -54,15 +54,15 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu]
-        python: ["3.8", "3.9", "3.10", "3.11", "3.12"]
-        redis: ["5"]
+        python: ['3.8', '3.9', '3.10', '3.11', '3.12']
+        redis: ['5']
         include:
-          - python: "3.11"
-            redis: "6"
-            os: "ubuntu"
-          - python: "3.11"
-            redis: "7"
-            os: "ubuntu"
+          - python: '3.11'
+            redis: '6'
+            os: 'ubuntu'
+          - python: '3.11'
+            redis: '7'
+            os: 'ubuntu'
 
     env:
       PYTHON: ${{ matrix.python }}
@@ -72,23 +72,23 @@ jobs:
     runs-on: ${{ matrix.os }}-latest
 
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - name: set up python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
+    - name: set up python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python }}
 
-      - run: pip install -r requirements/testing.txt -r requirements/pyproject.txt
+    - run: pip install -r requirements/testing.txt -r requirements/pyproject.txt
 
-      - run: make test
+    - run: make test
 
-      - run: coverage xml
+    - run: coverage xml
 
-      - uses: codecov/codecov-action@v4
-        with:
-          file: ./coverage.xml
-          env_vars: PYTHON,OS
+    - uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.xml
+        env_vars: PYTHON,OS
 
   check:
     if: always()
@@ -124,7 +124,7 @@ jobs:
       - name: set up python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: install
         run: pip install -U build
@@ -133,7 +133,7 @@ jobs:
         id: check-version
         uses: samuelcolvin/check-python-version@v3.2
         with:
-          version_file_path: "arq/version.py"
+          version_file_path: 'arq/version.py'
 
       - name: build
         run: python -m build
@@ -142,7 +142,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
 
       - name: publish docs
-        if: "!fromJSON(steps.check-version.outputs.IS_PRERELEASE)"
+        if: '!fromJSON(steps.check-version.outputs.IS_PRERELEASE)'
         run: make publish-docs
         env:
           NETLIFY: ${{ secrets.netlify_token }}
