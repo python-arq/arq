@@ -11,7 +11,7 @@ import msgpack
 import pytest
 from dirty_equals import IsInt, IsNow
 
-from arq.connections import ArqRedis
+from arq.connections import ArqRedis, RedisSettings
 from arq.constants import default_queue_name
 from arq.jobs import Job, JobDef, SerializationError
 from arq.utils import timestamp_ms
@@ -65,7 +65,9 @@ async def test_enqueue_job_nested(arq_redis: ArqRedis, worker):
     assert inner_result == 42
 
 
-async def test_enqueue_job_nested_custom_serializer(arq_redis_msgpack: ArqRedis, worker):
+async def test_enqueue_job_nested_custom_serializer(
+    arq_redis_msgpack: ArqRedis, test_redis_settings: RedisSettings, worker
+):
     async def foobar(ctx):
         return 42
 
@@ -78,6 +80,7 @@ async def test_enqueue_job_nested_custom_serializer(arq_redis_msgpack: ArqRedis,
     worker: Worker = worker(
         functions=[func(parent_job, name='parent_job'), func(foobar, name='foobar')],
         arq_redis=None,
+        redis_settings=test_redis_settings,
         job_serializer=msgpack.packb,
         job_deserializer=functools.partial(msgpack.unpackb, raw=False),
     )
@@ -90,7 +93,7 @@ async def test_enqueue_job_nested_custom_serializer(arq_redis_msgpack: ArqRedis,
     assert inner_result == 42
 
 
-async def test_enqueue_job_custom_queue(arq_redis: ArqRedis, worker):
+async def test_enqueue_job_custom_queue(arq_redis: ArqRedis, test_redis_settings: RedisSettings, worker):
     async def foobar(ctx):
         return 42
 
@@ -103,6 +106,7 @@ async def test_enqueue_job_custom_queue(arq_redis: ArqRedis, worker):
     worker: Worker = worker(
         functions=[func(parent_job, name='parent_job'), func(foobar, name='foobar')],
         arq_redis=None,
+        redis_settings=test_redis_settings,
         queue_name='spanner',
     )
 

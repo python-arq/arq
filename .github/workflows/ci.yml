@@ -67,15 +67,9 @@ jobs:
     env:
       PYTHON: ${{ matrix.python }}
       OS: ${{ matrix.os }}
+      ARQ_TEST_REDIS_VERSION: ${{ matrix.redis }}
 
     runs-on: ${{ matrix.os }}-latest
-
-    services:
-      redis:
-        image: redis:${{ matrix.redis }}
-        ports:
-        - 6379:6379
-        options: --entrypoint redis-server
 
     steps:
     - uses: actions/checkout@v4
