@@ -28,6 +28,7 @@ class RedisSettings:
     Used by :func:`arq.connections.create_pool` and :class:`arq.worker.Worker`.
     """
 
+    connection_pool: Optional[ConnectionPool] = None
     host: Union[str, List[Tuple[str, int]]] = 'localhost'
     port: int = 6379
     unix_socket_path: Optional[str] = None
@@ -251,6 +252,7 @@ async def create_pool(
     else:
         pool_factory = functools.partial(
             ArqRedis,
+            pool_or_conn=settings.connection_pool,
             host=settings.host,
             port=settings.port,
             unix_socket_path=settings.unix_socket_path,
