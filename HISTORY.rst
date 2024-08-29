@@ -3,6 +3,17 @@
 History
 -------
 
+v0.26.1 (2023-08-29)
+....................
+
+* Uses ``testcontainers`` to provide a redis instance for the unit tests by @chrisguidry in #470
+* Bump ``redis`` version from <5 to <6 by @Wh1isper in #460
+* Bump ``idna`` from 3.6 to 3.7 in /requirements by @dependabot in #444
+* Bump ``jinja2`` from 3.1.3 to 3.1.4 in /requirements by @dependabot in #452
+* Bump ``requests`` from 2.31.0 to 2.32.0 in /requirements by @dependabot in #461
+* Bump ``urllib3`` from 2.2.1 to 2.2.2 in /requirements by @dependabot in #464
+* Bump ``certifi`` from 2024.2.2 to 2024.7.4 in /requirements by @dependabot in #468
+
 v0.26.0 (2023-05-01)
 ....................
 
