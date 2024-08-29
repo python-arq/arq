@@ -55,20 +55,19 @@ async def test_redis_sentinel_failure(create_pool, cancel_remaining_task, mocker
         await create_pool(settings)
 
 
-async def test_redis_success_log(caplog, create_pool):
+async def test_redis_success_log(test_redis_settings: RedisSettings, caplog, create_pool):
     caplog.set_level(logging.INFO)
-    settings = RedisSettings()
-    pool = await create_pool(settings)
+    pool = await create_pool(test_redis_settings)
     assert 'redis connection successful' not in [r.message for r in caplog.records]
     await pool.close(close_connection_pool=True)
 
-    pool = await create_pool(settings, retry=1)
+    pool = await create_pool(test_redis_settings, retry=1)
     assert 'redis connection successful' in [r.message for r in caplog.records]
     await pool.close(close_connection_pool=True)
 
 
-async def test_redis_log(create_pool):
-    redis = await create_pool(RedisSettings())
+async def test_redis_log(test_redis_settings: RedisSettings, create_pool):
+    redis = await create_pool(test_redis_settings)
     await redis.flushall()
     await redis.set(b'a', b'1')
     await redis.set(b'b', b'2')
@@ -110,7 +109,7 @@ def test_typing():
     assert 'OptionType' in arq.typing.__all__
 
 
-def test_redis_settings_validation():
+def redis_settings_validation():
     class Settings(BaseModel, arbitrary_types_allowed=True):
         redis_settings: RedisSettings
 
