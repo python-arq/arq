@@ -41,7 +41,7 @@ dependencies = [
     'redis[hiredis]>=4.2.0,<6',
     'click>=8.0',
 ]
-optional-dependencies = {watch = ['watchfiles>=0.16'] }
+optional-dependencies = {watch = ['watchfiles>=0.16'], opentelemetry = ['opentelemetry-sdk>=1.20'] }
 dynamic = ['version']
 
 [project.scripts]
