@@ -167,9 +167,7 @@ class ArqRedis(BaseRedis):
             else:
                 score = enqueue_time_ms
 
-            expires_ms = expires_ms or (
-                1 if score - enqueue_time_ms < 1 else score - enqueue_time_ms + self.expires_extra_ms
-            )
+            expires_ms = expires_ms or score - enqueue_time_ms + self.expires_extra_ms
 
             job = serialize_job(function, args, kwargs, _job_try, enqueue_time_ms, serializer=self.job_serializer)
             pipe.multi()
