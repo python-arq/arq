@@ -751,7 +751,12 @@ class Worker:
                     job_id = f'{cron_job.name}:{to_unix_ms(cron_job.next_run)}' if cron_job.unique else None
                 job_futures.add(
                     self.pool.enqueue_job(
-                        cron_job.name, _job_id=job_id, _queue_name=self.queue_name, _defer_until=cron_job.next_run
+                        cron_job.name,
+                        _job_id=job_id,
+                        _queue_name=self.queue_name,
+                        _defer_until=(
+                            cron_job.next_run if cron_job.next_run > datetime.now(tz=self.timezone) else None
+                        ),
                     )
                 )
                 cron_job.calculate_next(cron_job.next_run)
