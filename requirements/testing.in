@@ -8,3 +8,4 @@ pytest-mock
 pytest-pretty
 pytest-timeout
 pytz
+testcontainers<4  # until we remove 3.8 support
