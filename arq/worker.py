@@ -447,8 +447,10 @@ class Worker:
                 await pipe.watch(in_progress_key)
                 ongoing_exists = await pipe.exists(in_progress_key)
                 score = await pipe.zscore(self.queue_name, job_id)
-                if ongoing_exists or not score:
+                if ongoing_exists or not score or score > timestamp_ms():
                     # job already started elsewhere, or already finished and removed from queue
+                    # if score > ts_now,
+                    # it means probably the job was re-enqueued with a delay in another worker
                     self.job_counter = self.job_counter - 1
                     self.sem.release()
                     logger.debug('job %s already running elsewhere', job_id)
