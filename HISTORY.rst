@@ -3,6 +3,13 @@
 History
 -------
 
+v0.26.3 (2025-01-06)
+....................
+
+* Fix negative expires_ms and avoid worker freezing while using cron by @Matvey-Kuk in #479
+* Fix race condition on task retry by @RB387 in #487
+
+
 v0.26.1 (2023-08-29)
 ....................
 
