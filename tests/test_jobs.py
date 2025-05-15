@@ -1,6 +1,6 @@
 import asyncio
 import pickle
-from datetime import UTC
+from datetime import timezone
 
 import pytest
 from dirty_equals import IsNow, IsStr
@@ -83,11 +83,11 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker, queue_name=default_queue
         function='foobar',
         args=(1, 2),
         kwargs={'c': 3},
-        enqueue_time=IsNow(tz=UTC),
+        enqueue_time=IsNow(tz=timezone.utc),
         success=True,
         result=42,
-        start_time=IsNow(tz=UTC),
-        finish_time=IsNow(tz=UTC),
+        start_time=IsNow(tz=timezone.utc),
+        finish_time=IsNow(tz=timezone.utc),
         score=None,
         queue_name=expected_queue_name,
         job_id=IsStr(),
@@ -99,11 +99,11 @@ async def test_enqueue_job(arq_redis: ArqRedis, worker, queue_name=default_queue
             args=(1, 2),
             kwargs={'c': 3},
             job_try=1,
-            enqueue_time=IsNow(tz=UTC),
+            enqueue_time=IsNow(tz=timezone.utc),
             success=True,
             result=42,
-            start_time=IsNow(tz=UTC),
-            finish_time=IsNow(tz=UTC),
+            start_time=IsNow(tz=timezone.utc),
+            finish_time=IsNow(tz=timezone.utc),
             score=None,
             queue_name=expected_queue_name,
             job_id=j.job_id,

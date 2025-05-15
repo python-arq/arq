@@ -4,12 +4,11 @@ import logging
 import re
 import signal
 import sys
-from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock, patch
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock
 
 import msgpack
 import pytest
-import redis.exceptions
 
 from arq.connections import ArqRedis, RedisSettings
 from arq.constants import abort_jobs_ss, default_queue_name, expires_extra_ms, health_check_key_suffix, job_key_prefix
@@ -919,7 +918,9 @@ async def test_abort_deferred_job_before(arq_redis: ArqRedis, worker, caplog, lo
 
     caplog.set_level(logging.INFO)
 
-    job = await arq_redis.enqueue_job('longfunc', _job_id='testing', _defer_until=datetime.now(UTC) + timedelta(days=1))
+    job = await arq_redis.enqueue_job(
+        'longfunc', _job_id='testing', _defer_until=datetime.now(timezone.utc) + timedelta(days=1)
+    )
 
     worker: Worker = worker(functions=[func(longfunc, name='longfunc')], allow_abort_jobs=True, poll_delay=0.1)
     assert worker.jobs_complete == 0

@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 from collections.abc import AsyncGenerator, Sequence
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from time import time
 from typing import TYPE_CHECKING, Any, Optional, overload
@@ -53,7 +53,7 @@ def ms_to_datetime(unix_ms: int) -> datetime:
     """
     convert milliseconds to datetime, use the timezone in os.environ
     """
-    dt = datetime.fromtimestamp(unix_ms / 1000, tz=UTC)
+    dt = datetime.fromtimestamp(unix_ms / 1000, tz=timezone.utc)
     tz = get_tz()
     if tz:
         dt = dt.astimezone(tz)
