@@ -24,7 +24,6 @@ classifiers = [
     'Programming Language :: Python',
     'Programming Language :: Python :: 3',
     'Programming Language :: Python :: 3 :: Only',
-    'Programming Language :: Python :: 3.8',
     'Programming Language :: Python :: 3.9',
     'Programming Language :: Python :: 3.10',
     'Programming Language :: Python :: 3.11',
@@ -36,9 +35,9 @@ classifiers = [
     'Topic :: System :: Monitoring',
     'Topic :: System :: Systems Administration',
 ]
-requires-python = '>=3.8'
+requires-python = '>=3.9'
 dependencies = [
-    'redis[hiredis]>=4.2.0,<6',
+    'redis[hiredis]>=4.2.0,<7',
     'click>=8.0',
 ]
 optional-dependencies = {watch = ['watchfiles>=0.16'] }
