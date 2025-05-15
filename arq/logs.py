@@ -1,7 +1,7 @@
-from typing import Any, Dict
+from typing import Any
 
 
-def default_log_config(verbose: bool) -> Dict[str, Any]:
+def default_log_config(verbose: bool) -> dict[str, Any]:
     """
     Setup default config. for dictConfig.
 
