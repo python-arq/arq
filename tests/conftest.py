@@ -82,7 +82,6 @@ async def arq_redis_retry(test_redis_host: str, test_redis_port: int):
         port=test_redis_port,
         encoding='utf-8',
         retry=Retry(backoff=NoBackoff(), retries=3),
-        retry_on_timeout=True,
         retry_on_error=[redis.exceptions.ConnectionError],
     )
     await redis_.flushall()

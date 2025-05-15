@@ -12,9 +12,7 @@ hiredis==3.1.1
     # via redis
 idna==3.10
     # via anyio
-pyjwt==2.9.0
-    # via redis
-redis==5.3.0
+redis==6.1.0
     # via arq (pyproject.toml)
 sniffio==1.3.1
     # via anyio

@@ -49,7 +49,6 @@ class RedisSettings:
     sentinel: bool = False
     sentinel_master: str = 'mymaster'
 
-    retry_on_timeout: bool = False
     retry_on_error: Optional[list[Exception]] = None
     retry: Optional[Retry] = None
 
@@ -263,7 +262,6 @@ async def create_pool(
             ssl_ca_data=settings.ssl_ca_data,
             ssl_check_hostname=settings.ssl_check_hostname,
             retry=settings.retry,
-            retry_on_timeout=settings.retry_on_timeout,
             retry_on_error=settings.retry_on_error,
             max_connections=settings.max_connections,
         )
