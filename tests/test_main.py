@@ -3,7 +3,7 @@ import dataclasses
 import functools
 import logging
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from random import shuffle
 from time import time
 
@@ -134,7 +134,7 @@ async def test_job_info(arq_redis: ArqRedis):
     t_before = time()
     j = await arq_redis.enqueue_job('foobar', 123, a=456)
     info = await j.info()
-    assert info.enqueue_time == IsNow(tz='utc')
+    assert info.enqueue_time == IsNow(tz=UTC)
     assert info.job_try is None
     assert info.function == 'foobar'
     assert info.args == (123,)
@@ -150,7 +150,7 @@ async def test_repeat_job(arq_redis: ArqRedis):
 
 
 async def test_defer_until(arq_redis: ArqRedis):
-    j1 = await arq_redis.enqueue_job('foobar', _job_id='job_id', _defer_until=datetime(2032, 1, 1, tzinfo=timezone.utc))
+    j1 = await arq_redis.enqueue_job('foobar', _job_id='job_id', _defer_until=datetime(2032, 1, 1, tzinfo=UTC))
     assert isinstance(j1, Job)
     score = await arq_redis.zscore(default_queue_name, 'job_id')
     assert score == 1_956_528_000_000
@@ -254,7 +254,7 @@ async def test_get_jobs(arq_redis: ArqRedis):
             'args': (),
             'kwargs': {'a': 1, 'b': 2, 'c': 3},
             'job_try': None,
-            'enqueue_time': IsNow(tz='utc'),
+            'enqueue_time': IsNow(tz=UTC),
             'score': IsInt(),
             'job_id': '1',
         },
@@ -263,7 +263,7 @@ async def test_get_jobs(arq_redis: ArqRedis):
             'args': (4,),
             'kwargs': {'b': 5, 'c': 6},
             'job_try': None,
-            'enqueue_time': IsNow(tz='utc'),
+            'enqueue_time': IsNow(tz=UTC),
             'score': IsInt(),
             'job_id': '2',
         },
@@ -272,7 +272,7 @@ async def test_get_jobs(arq_redis: ArqRedis):
             'args': (7,),
             'kwargs': {'b': 8},
             'job_try': None,
-            'enqueue_time': IsNow(tz='utc'),
+            'enqueue_time': IsNow(tz=UTC),
             'score': IsInt(),
             'job_id': '3',
         },

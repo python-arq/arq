@@ -38,10 +38,10 @@ classifiers = [
 ]
 requires-python = '>=3.9'
 dependencies = [
-    'redis[hiredis]>=4.2.0,<7',
-    'click>=8.0',
+    'redis[hiredis]>=5.3.0,<6',
+    'click>=8.0,<8.2',
 ]
-optional-dependencies = {watch = ['watchfiles>=0.16'] }
+optional-dependencies = {watch = ['watchfiles>=1.0'] }
 dynamic = ['version']
 
 [project.scripts]

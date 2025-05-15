@@ -4,7 +4,7 @@ import logging
 import re
 import signal
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import msgpack
@@ -421,7 +421,7 @@ async def test_job_old(arq_redis: ArqRedis, worker, caplog):
     assert worker.jobs_retried == 0
 
     log = re.sub(r'(\d+).\d\ds', r'\1.XXs', '\n'.join(r.message for r in caplog.records))
-    assert log.endswith('  0.XXs → testing:foobar() delayed=2.XXs\n' '  0.XXs ← testing:foobar ● 42')
+    assert log.endswith('  0.XXs → testing:foobar() delayed=2.XXs\n  0.XXs ← testing:foobar ● 42')
 
 
 async def test_retry_repr():
@@ -919,9 +919,7 @@ async def test_abort_deferred_job_before(arq_redis: ArqRedis, worker, caplog, lo
 
     caplog.set_level(logging.INFO)
 
-    job = await arq_redis.enqueue_job(
-        'longfunc', _job_id='testing', _defer_until=datetime.now(timezone.utc) + timedelta(days=1)
-    )
+    job = await arq_redis.enqueue_job('longfunc', _job_id='testing', _defer_until=datetime.now(UTC) + timedelta(days=1))
 
     worker: Worker = worker(functions=[func(longfunc, name='longfunc')], allow_abort_jobs=True, poll_delay=0.1)
     assert worker.jobs_complete == 0
