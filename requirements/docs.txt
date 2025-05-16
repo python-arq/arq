@@ -4,45 +4,47 @@
 #
 #    pip-compile --output-file=requirements/docs.txt --strip-extras requirements/docs.in
 #
-alabaster==0.7.16
+alabaster==1.0.0
     # via sphinx
-babel==2.14.0
+babel==2.17.0
     # via sphinx
-certifi==2024.7.4
+certifi==2025.4.26
     # via requests
-charset-normalizer==3.3.2
+charset-normalizer==3.4.2
     # via requests
-docutils==0.19
+docutils==0.21.2
     # via sphinx
-idna==3.7
+idna==3.10
     # via requests
 imagesize==1.4.1
     # via sphinx
-jinja2==3.1.4
+jinja2==3.1.6
     # via sphinx
-markupsafe==2.1.5
+markupsafe==3.0.2
     # via jinja2
-packaging==24.0
+packaging==25.0
     # via sphinx
-pygments==2.17.2
+pygments==2.19.1
     # via sphinx
 requests==2.32.3
     # via sphinx
-snowballstemmer==2.2.0
+roman-numerals-py==3.1.0
     # via sphinx
-sphinx==5.3.0
-    # via -r docs.in
-sphinxcontrib-applehelp==1.0.8
+snowballstemmer==3.0.1
     # via sphinx
-sphinxcontrib-devhelp==1.0.6
+sphinx==8.2.3
+    # via -r requirements/docs.in
+sphinxcontrib-applehelp==2.0.0
     # via sphinx
-sphinxcontrib-htmlhelp==2.0.5
+sphinxcontrib-devhelp==2.0.0
+    # via sphinx
+sphinxcontrib-htmlhelp==2.1.0
     # via sphinx
 sphinxcontrib-jsmath==1.0.1
     # via sphinx
-sphinxcontrib-qthelp==1.0.7
+sphinxcontrib-qthelp==2.0.0
     # via sphinx
-sphinxcontrib-serializinghtml==1.1.10
+sphinxcontrib-serializinghtml==2.0.0
     # via sphinx
-urllib3==2.2.2
+urllib3==2.4.0
     # via requests

@@ -18,7 +18,7 @@ jobs:
     - name: set up python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
+        python-version: '3.12'
 
     - run: pip install -r requirements/linting.txt -r requirements/pyproject.txt pre-commit
 
@@ -35,7 +35,7 @@ jobs:
     - name: set up python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
+        python-version: '3.12'
 
     - run: pip install -r requirements/docs.txt -r requirements/pyproject.txt
     - run: pip install .
@@ -54,16 +54,15 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu]
-        python: ['3.8', '3.9', '3.10', '3.11', '3.12']
-        redis: ['5']
+        python: ['3.9', '3.10', '3.11', '3.12', '3.13']
+        redis: ['8.0']
         include:
-          - python: '3.11'
-            redis: '6'
+          - python: '3.12'
+            redis: '7.2'
             os: 'ubuntu'
-          - python: '3.11'
-            redis: '7'
+          - python: '3.12'
+            redis: '7.4'
             os: 'ubuntu'
-
     env:
       PYTHON: ${{ matrix.python }}
       OS: ${{ matrix.os }}
@@ -124,7 +123,7 @@ jobs:
       - name: set up python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       - name: install
         run: pip install -U build

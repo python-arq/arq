@@ -5,7 +5,7 @@ import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Optional
 
 from redis.asyncio import Redis
 
@@ -14,8 +14,8 @@ from .utils import ms_to_datetime, poll, timestamp_ms
 
 logger = logging.getLogger('arq.jobs')
 
-Serializer = Callable[[Dict[str, Any]], bytes]
-Deserializer = Callable[[bytes], Dict[str, Any]]
+Serializer = Callable[[dict[str, Any]], bytes]
+Deserializer = Callable[[bytes], dict[str, Any]]
 
 
 class ResultNotFound(RuntimeError):
@@ -42,8 +42,8 @@ class JobStatus(str, Enum):
 @dataclass
 class JobDef:
     function: str
-    args: Tuple[Any, ...]
-    kwargs: Dict[str, Any]
+    args: tuple[Any, ...]
+    kwargs: dict[str, Any]
     job_try: int
     enqueue_time: datetime
     score: Optional[int]
@@ -210,8 +210,8 @@ class DeserializationError(SerializationError):
 
 def serialize_job(
     function_name: str,
-    args: Tuple[Any, ...],
-    kwargs: Dict[str, Any],
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
     job_try: Optional[int],
     enqueue_time_ms: int,
     *,
@@ -228,8 +228,8 @@ def serialize_job(
 
 def serialize_result(
     function: str,
-    args: Tuple[Any, ...],
-    kwargs: Dict[str, Any],
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
     job_try: int,
     enqueue_time_ms: int,
     success: bool,
@@ -291,7 +291,7 @@ def deserialize_job(r: bytes, *, deserializer: Optional[Deserializer] = None) ->
 
 def deserialize_job_raw(
     r: bytes, *, deserializer: Optional[Deserializer] = None
-) -> Tuple[str, Tuple[Any, ...], Dict[str, Any], int, int]:
+) -> tuple[str, tuple[Any, ...], dict[str, Any], int, int]:
     if deserializer is None:
         deserializer = pickle.loads
     try:

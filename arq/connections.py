@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
@@ -28,7 +28,7 @@ class RedisSettings:
     Used by :func:`arq.connections.create_pool` and :class:`arq.worker.Worker`.
     """
 
-    host: Union[str, List[Tuple[str, int]]] = 'localhost'
+    host: Union[str, list[tuple[str, int]]] = 'localhost'
     port: int = 6379
     unix_socket_path: Optional[str] = None
     database: int = 0
@@ -49,8 +49,7 @@ class RedisSettings:
     sentinel: bool = False
     sentinel_master: str = 'mymaster'
 
-    retry_on_timeout: bool = False
-    retry_on_error: Optional[List[Exception]] = None
+    retry_on_error: Optional[list[Exception]] = None
     retry: Optional[Retry] = None
 
     @classmethod
@@ -101,7 +100,7 @@ class ArqRedis(BaseRedis):
 
     def __init__(
         self,
-        pool_or_conn: Optional[ConnectionPool] = None,
+        pool_or_conn: Optional[ConnectionPool] = None,  # type: ignore[type-arg]
         job_serializer: Optional[Serializer] = None,
         job_deserializer: Optional[Deserializer] = None,
         default_queue_name: str = default_queue_name,
@@ -189,7 +188,7 @@ class ArqRedis(BaseRedis):
         r.job_id = job_id
         return r
 
-    async def all_job_results(self) -> List[JobResult]:
+    async def all_job_results(self) -> list[JobResult]:
         """
         Get results for all jobs in redis.
         """
@@ -207,7 +206,7 @@ class ArqRedis(BaseRedis):
         jd.job_id = job_id.decode()
         return jd
 
-    async def queued_jobs(self, *, queue_name: Optional[str] = None) -> List[JobDef]:
+    async def queued_jobs(self, *, queue_name: Optional[str] = None) -> list[JobDef]:
         """
         Get information about queued, mostly useful when testing.
         """
@@ -215,6 +214,9 @@ class ArqRedis(BaseRedis):
             queue_name = self.default_queue_name
         jobs = await self.zrange(queue_name, withscores=True, start=0, end=-1)
         return await asyncio.gather(*[self._get_job_def(job_id, int(score)) for job_id, score in jobs])
+
+    async def aclose(self) -> None:
+        await super().aclose()  # type: ignore[misc]
 
 
 async def create_pool(
@@ -241,12 +243,12 @@ async def create_pool(
         def pool_factory(*args: Any, **kwargs: Any) -> ArqRedis:
             client = Sentinel(  # type: ignore[misc]
                 *args,
-                sentinels=settings.host,
+                sentinels=settings.host,  # type: ignore[arg-type]
                 ssl=settings.ssl,
                 **kwargs,
             )
             redis = client.master_for(settings.sentinel_master, redis_class=ArqRedis)
-            return cast(ArqRedis, redis)
+            return redis
 
     else:
         pool_factory = functools.partial(
@@ -263,7 +265,6 @@ async def create_pool(
             ssl_ca_data=settings.ssl_ca_data,
             ssl_check_hostname=settings.ssl_check_hostname,
             retry=settings.retry,
-            retry_on_timeout=settings.retry_on_timeout,
             retry_on_error=settings.retry_on_error,
             max_connections=settings.max_connections,
         )
@@ -312,8 +313,5 @@ async def log_redis_info(redis: 'Redis[bytes]', log_func: Callable[[str], Any]) 
     clients_connected = info_clients.get('connected_clients', '?')
 
     log_func(
-        f'redis_version={redis_version} '
-        f'mem_usage={mem_usage} '
-        f'clients_connected={clients_connected} '
-        f'db_keys={key_count}'
+        f'redis_version={redis_version} mem_usage={mem_usage} clients_connected={clients_connected} db_keys={key_count}'
     )

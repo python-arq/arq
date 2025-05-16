@@ -3,6 +3,12 @@
 History
 -------
 
+v0.26.4 (2025-XX-XX)
+....................
+
+* Extend support for redis-py 6.x - Add python 3.13 support - Remove python 3.8 by @nsteinmetz in #500
+
+
 v0.26.3 (2025-01-06)
 ....................
 

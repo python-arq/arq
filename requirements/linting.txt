@@ -4,25 +4,32 @@
 #
 #    pip-compile --output-file=requirements/linting.txt --strip-extras requirements/linting.in
 #
-cffi==1.16.0
+cffi==1.17.1
     # via cryptography
-cryptography==42.0.5
+cryptography==44.0.3
     # via
     #   types-pyopenssl
     #   types-redis
-mypy==1.9.0
+mypy==1.15.0
     # via -r requirements/linting.in
-mypy-extensions==1.0.0
+mypy-extensions==1.1.0
     # via mypy
 pycparser==2.22
     # via cffi
-ruff==0.3.4
+ruff==0.11.9
     # via -r requirements/linting.in
-types-pyopenssl==24.0.0.20240311
+types-cffi==1.17.0.20250326
+    # via types-pyopenssl
+types-pyopenssl==24.1.0.20240722
     # via types-redis
-types-pytz==2024.1.0.20240203
+types-pytz==2025.2.0.20250326
     # via -r requirements/linting.in
-types-redis==4.6.0.20240311
+types-redis==4.6.0.20241004
     # via -r requirements/linting.in
-typing-extensions==4.10.0
+types-setuptools==80.4.0.20250511
+    # via types-cffi
+typing-extensions==4.13.2
     # via mypy
+
+# The following packages are considered to be unsafe in a requirements file:
+# setuptools

@@ -23,7 +23,7 @@ def test_settings_changed():
         "ssl=False, ssl_keyfile=None, ssl_certfile=None, ssl_cert_reqs='required', ssl_ca_certs=None, "
         'ssl_ca_data=None, ssl_check_hostname=False, conn_timeout=1, conn_retries=5, conn_retry_delay=1, '
         "max_connections=None, sentinel=False, sentinel_master='mymaster', "
-        'retry_on_timeout=False, retry_on_error=None, retry=None)'
+        'retry_on_error=None, retry=None)'
     ) == str(settings)
 
 
@@ -59,11 +59,11 @@ async def test_redis_success_log(test_redis_settings: RedisSettings, caplog, cre
     caplog.set_level(logging.INFO)
     pool = await create_pool(test_redis_settings)
     assert 'redis connection successful' not in [r.message for r in caplog.records]
-    await pool.close(close_connection_pool=True)
+    await pool.aclose()
 
     pool = await create_pool(test_redis_settings, retry=1)
     assert 'redis connection successful' in [r.message for r in caplog.records]
-    await pool.close(close_connection_pool=True)
+    await pool.aclose()
 
 
 async def test_redis_log(test_redis_settings: RedisSettings, create_pool):
@@ -221,7 +221,6 @@ def test_settings_plain():
         'conn_retry_delay': 1,
         'sentinel': False,
         'sentinel_master': 'mymaster',
-        'retry_on_timeout': False,
         'retry_on_error': None,
         'retry': None,
         'max_connections': None,
@@ -250,7 +249,6 @@ def test_settings_from_socket_dsn():
         'conn_retry_delay': 1,
         'sentinel': False,
         'sentinel_master': 'mymaster',
-        'retry_on_timeout': False,
         'retry_on_error': None,
         'retry': None,
         'max_connections': None,
