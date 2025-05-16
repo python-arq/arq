@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
@@ -100,7 +100,7 @@ class ArqRedis(BaseRedis):
 
     def __init__(
         self,
-        pool_or_conn: Optional[ConnectionPool] = None,
+        pool_or_conn: Optional[ConnectionPool] = None,  # type: ignore[type-arg]
         job_serializer: Optional[Serializer] = None,
         job_deserializer: Optional[Deserializer] = None,
         default_queue_name: str = default_queue_name,
@@ -215,6 +215,9 @@ class ArqRedis(BaseRedis):
         jobs = await self.zrange(queue_name, withscores=True, start=0, end=-1)
         return await asyncio.gather(*[self._get_job_def(job_id, int(score)) for job_id, score in jobs])
 
+    async def aclose(self) -> None:
+        await super().aclose()  # type: ignore[misc]
+
 
 async def create_pool(
     settings_: Optional[RedisSettings] = None,
@@ -240,12 +243,12 @@ async def create_pool(
         def pool_factory(*args: Any, **kwargs: Any) -> ArqRedis:
             client = Sentinel(  # type: ignore[misc]
                 *args,
-                sentinels=settings.host,
+                sentinels=settings.host,  # type: ignore[arg-type]
                 ssl=settings.ssl,
                 **kwargs,
             )
             redis = client.master_for(settings.sentinel_master, redis_class=ArqRedis)
-            return cast(ArqRedis, redis)
+            return redis
 
     else:
         pool_factory = functools.partial(

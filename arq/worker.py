@@ -870,7 +870,7 @@ class Worker:
         await self.pool.delete(self.health_check_key)
         if self.on_shutdown:
             await self.on_shutdown(self.ctx)
-        await self.pool.aclose(close_connection_pool=True)
+        await self.pool.aclose()
         self._pool = None
 
     def __repr__(self) -> str:
@@ -911,7 +911,7 @@ async def async_check_health(
     else:
         logger.info('Health check successful: %s', data)
         r = 0
-    await redis.aclose(close_connection_pool=True)
+    await redis.aclose()
     return r
 
 
