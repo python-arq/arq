@@ -17,6 +17,7 @@ from arq.jobs import Job, JobStatus
 from arq.worker import (
     FailedJobs,
     JobExecutionFailed,
+    JobMetaInfo,
     Retry,
     RetryJob,
     Worker,
@@ -179,10 +180,10 @@ async def test_job_retry_race_condition(arq_redis: ArqRedis, worker):
     assert worker_two.jobs_failed == 0
     assert worker_two.jobs_retried == 0
 
-    await worker_one.start_jobs([job_id.encode()])
+    await worker_one.start_jobs([JobMetaInfo(job_id=job_id)])
     await asyncio.gather(*worker_one.tasks.values())
 
-    await worker_two.start_jobs([job_id.encode()])
+    await worker_two.start_jobs([JobMetaInfo(job_id=job_id)])
     await asyncio.gather(*worker_two.tasks.values())
 
     assert worker_one.jobs_complete == 0
@@ -846,7 +847,7 @@ async def test_multi_exec(arq_redis: ArqRedis, worker, caplog):
     caplog.set_level(logging.DEBUG, logger='arq.worker')
     await arq_redis.enqueue_job('foo', 1, _job_id='testing')
     worker: Worker = worker(functions=[func(foo, name='foo')])
-    await asyncio.gather(*[worker.start_jobs([b'testing']) for _ in range(5)])
+    await asyncio.gather(*[worker.start_jobs([JobMetaInfo(job_id='testing')]) for _ in range(5)])
     # debug(caplog.text)
     await worker.main()
     assert c == 1
