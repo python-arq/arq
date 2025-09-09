@@ -95,7 +95,7 @@ def func(
 
 class Retry(RuntimeError):
     """
-    Special exception to retry the job (if ``max_retries`` hasn't been reached).
+    Special exception to retry the job (if ``max_tries`` hasn't been reached).
 
     :param defer: duration to wait before rerunning the job
     """
