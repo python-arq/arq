@@ -592,7 +592,7 @@ class Worker:
             # run repr(result) and extra inside try/except as they can raise exceptions
             try:
                 result = await asyncio.wait_for(task, timeout_s)
-            except (Exception, asyncio.CancelledError) as e:
+            except (Exception, asyncio.CancelledError, asyncio.TimeoutError) as e:
                 exc_extra = getattr(e, 'extra', None)
                 if callable(exc_extra):
                     exc_extra = exc_extra()
@@ -602,7 +602,7 @@ class Worker:
             finally:
                 del self.job_tasks[job_id]
 
-        except (Exception, asyncio.CancelledError) as e:
+        except (Exception, asyncio.CancelledError, asyncio.TimeoutError) as e:
             finished_ms = timestamp_ms()
             t = (finished_ms - start_ms) / 1000
             if self.retry_jobs and isinstance(e, Retry):
@@ -617,7 +617,7 @@ class Worker:
                 finish = True
                 self.aborting_tasks.remove(job_id)
                 self.jobs_failed += 1
-            elif self.retry_jobs and isinstance(e, (asyncio.CancelledError, RetryJob)):
+            elif self.retry_jobs and isinstance(e, (asyncio.TimeoutError, RetryJob)):
                 logger.info('%6.2fs ↻ %s cancelled, will be run again', t, ref)
                 self.jobs_retried += 1
             else:
