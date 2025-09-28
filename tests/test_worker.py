@@ -980,10 +980,11 @@ async def test_job_timeout(arq_redis: ArqRedis, worker, caplog):
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
+    assert worker.retry_jobs
     await worker.main()
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 1
-    assert worker.jobs_retried == 0
+    assert worker.jobs_retried == worker.max_tries
     log = re.sub(r'\d+.\d\ds', 'X.XXs', '\n'.join(r.message for r in caplog.records))
     assert 'X.XXs ! testing:longfunc failed, TimeoutError:' in log
 
