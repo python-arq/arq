@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import inspect
 import logging
+import sys
 import signal
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -266,7 +267,7 @@ class Worker:
         # self.job_tasks holds references the actual jobs running
         self.job_tasks: Dict[str, asyncio.Task[Any]] = {}
         self.main_task: Optional[asyncio.Task[None]] = None
-        self.loop = asyncio.get_event_loop()
+        self.loop = asyncio.get_event_loop() if sys.version_info < (3, 14) else asyncio.new_event_loop()
         self.ctx = ctx or {}
         max_timeout = max(f.timeout_s or self.job_timeout_s for f in self.functions.values())
         self.in_progress_timeout_s = (max_timeout or 0) + 10

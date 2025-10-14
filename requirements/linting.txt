@@ -4,15 +4,15 @@
 #
 #    pip-compile --output-file=requirements/linting.txt --strip-extras requirements/linting.in
 #
-cffi==1.16.0
+cffi==2.0.0
     # via cryptography
 cryptography==42.0.5
     # via
     #   types-pyopenssl
     #   types-redis
-mypy==1.9.0
+mypy==1.18.2
     # via -r requirements/linting.in
-mypy-extensions==1.0.0
+mypy-extensions==1.1.0
     # via mypy
 pycparser==2.22
     # via cffi
@@ -24,5 +24,5 @@ types-pytz==2024.1.0.20240203
     # via -r requirements/linting.in
 types-redis==4.6.0.20240311
     # via -r requirements/linting.in
-typing-extensions==4.10.0
+typing-extensions==4.15.0
     # via mypy

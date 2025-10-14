@@ -36,9 +36,9 @@ packaging==24.0
     #   pytest
 pluggy==1.4.0
     # via pytest
-pydantic==2.6.4
+pydantic==2.12.1
     # via -r requirements/testing.in
-pydantic-core==2.16.3
+pydantic-core==2.41.3
     # via pydantic
 pygments==2.17.2
     # via rich
@@ -71,7 +71,7 @@ tomli==2.0.1
     # via
     #   coverage
     #   pytest
-typing-extensions==4.10.0
+typing-extensions==4.15.0
     # via
     #   pydantic
     #   pydantic-core
