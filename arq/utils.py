@@ -148,3 +148,7 @@ def import_string(dotted_path: str) -> Any:
         return getattr(module, class_name)
     except AttributeError as e:
         raise ImportError(f'Module "{module_path}" does not define a "{class_name}" attribute') from e
+
+
+def _list_to_dict(input_list: list[Any]) -> dict[Any, Any]:
+    return dict(zip(input_list[::2], input_list[1::2], strict=True))
