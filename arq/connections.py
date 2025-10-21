@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union, cast
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
@@ -48,6 +48,7 @@ class RedisSettings:
 
     sentinel: bool = False
     sentinel_master: str = 'mymaster'
+    sentinel_kwargs: Optional[Dict[str, Any]] = None
 
     retry_on_timeout: bool = False
     retry_on_error: Optional[List[Exception]] = None
@@ -242,7 +243,7 @@ async def create_pool(
             client = Sentinel(  # type: ignore[misc]
                 *args,
                 sentinels=settings.host,
-                ssl=settings.ssl,
+                sentinel_kwargs=settings.sentinel_kwargs,
                 **kwargs,
             )
             redis = client.master_for(settings.sentinel_master, redis_class=ArqRedis)
@@ -255,13 +256,6 @@ async def create_pool(
             port=settings.port,
             unix_socket_path=settings.unix_socket_path,
             socket_connect_timeout=settings.conn_timeout,
-            ssl=settings.ssl,
-            ssl_keyfile=settings.ssl_keyfile,
-            ssl_certfile=settings.ssl_certfile,
-            ssl_cert_reqs=settings.ssl_cert_reqs,
-            ssl_ca_certs=settings.ssl_ca_certs,
-            ssl_ca_data=settings.ssl_ca_data,
-            ssl_check_hostname=settings.ssl_check_hostname,
             retry=settings.retry,
             retry_on_timeout=settings.retry_on_timeout,
             retry_on_error=settings.retry_on_error,
@@ -271,7 +265,17 @@ async def create_pool(
     while True:
         try:
             pool = pool_factory(
-                db=settings.database, username=settings.username, password=settings.password, encoding='utf8'
+                db=settings.database,
+                username=settings.username,
+                password=settings.password,
+                encoding='utf8',
+                ssl=settings.ssl,
+                ssl_keyfile=settings.ssl_keyfile,
+                ssl_certfile=settings.ssl_certfile,
+                ssl_cert_reqs=settings.ssl_cert_reqs,
+                ssl_ca_certs=settings.ssl_ca_certs,
+                ssl_ca_data=settings.ssl_ca_data,
+                ssl_check_hostname=settings.ssl_check_hostname,
             )
             pool.job_serializer = job_serializer
             pool.job_deserializer = job_deserializer
