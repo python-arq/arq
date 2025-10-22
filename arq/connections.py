@@ -13,8 +13,16 @@ from redis.asyncio.retry import Retry
 from redis.asyncio.sentinel import Sentinel
 from redis.exceptions import RedisError, WatchError
 
-from .constants import default_queue_name, expires_extra_ms, job_key_prefix, result_key_prefix
+from .constants import (
+    default_queue_name,
+    expires_extra_ms,
+    job_key_prefix,
+    job_message_id_prefix,
+    result_key_prefix,
+    stream_key_suffix,
+)
 from .jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
+from .lua import publish_job_lua
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('arq.connections')
@@ -165,20 +173,63 @@ class ArqRedis(BaseRedis):
             elif defer_by_ms:
                 score = enqueue_time_ms + defer_by_ms
             else:
-                score = enqueue_time_ms
+                score = None
 
-            expires_ms = expires_ms or score - enqueue_time_ms + self.expires_extra_ms
+            expires_ms = expires_ms or (score or enqueue_time_ms) - enqueue_time_ms + self.expires_extra_ms
 
-            job = serialize_job(function, args, kwargs, _job_try, enqueue_time_ms, serializer=self.job_serializer)
+            job = serialize_job(
+                function,
+                args,
+                kwargs,
+                _job_try,
+                enqueue_time_ms,
+                serializer=self.job_serializer,
+            )
             pipe.multi()
             pipe.psetex(job_key, expires_ms, job)
-            pipe.zadd(_queue_name, {job_id: score})
+
+            if score is not None:
+                pipe.zadd(_queue_name, {job_id: score})
+            else:
+                stream_key = _queue_name + stream_key_suffix
+                job_message_id_key = job_message_id_prefix + job_id
+                pipe.eval(
+                    publish_job_lua,
+                    2,
+                    # keys
+                    stream_key,
+                    job_message_id_key,
+                    # args
+                    job_id,
+                    str(enqueue_time_ms),
+                    str(expires_ms),
+                )
+
             try:
                 await pipe.execute()
             except WatchError:
                 # job got enqueued since we checked 'job_exists'
                 return None
-        return Job(job_id, redis=self, _queue_name=_queue_name, _deserializer=self.job_deserializer)
+        return Job(
+            job_id,
+            redis=self,
+            _queue_name=_queue_name,
+            _deserializer=self.job_deserializer,
+        )
+
+    async def get_queue_size(self, queue_name: str | None = None, include_delayed_tasks: bool = True) -> int:
+        if queue_name is None:
+            queue_name = self.default_queue_name
+
+        async with self.pipeline(transaction=True) as pipe:
+            pipe.xlen(queue_name + stream_key_suffix)
+            pipe.zcount(queue_name, '-inf', '+inf')
+            stream_size, delayed_queue_size = await pipe.execute()
+
+        if not include_delayed_tasks:
+            return stream_size
+
+        return stream_size + delayed_queue_size
 
     async def _get_job_result(self, key: bytes) -> JobResult:
         job_id = key[len(result_key_prefix) :].decode()
@@ -213,7 +264,16 @@ class ArqRedis(BaseRedis):
         """
         if queue_name is None:
             queue_name = self.default_queue_name
-        jobs = await self.zrange(queue_name, withscores=True, start=0, end=-1)
+
+        async with self.pipeline(transaction=True) as pipe:
+            pipe.zrange(queue_name, withscores=True, start=0, end=-1)
+            pipe.xrange(queue_name + stream_key_suffix, '-', '+')
+            delayed_jobs, stream_jobs = await pipe.execute()
+
+        jobs = [
+            *delayed_jobs,
+            *[(j[b'job_id'], int(j[b'score'])) for _, j in stream_jobs],
+        ]
         return await asyncio.gather(*[self._get_job_def(job_id, int(score)) for job_id, score in jobs])
 
 

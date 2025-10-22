@@ -9,7 +9,16 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from redis.asyncio import Redis
 
-from .constants import abort_jobs_ss, default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
+from .constants import (
+    abort_jobs_ss,
+    default_queue_name,
+    in_progress_key_prefix,
+    job_key_prefix,
+    job_message_id_prefix,
+    result_key_prefix,
+    stream_key_suffix,
+)
+from .lua import get_job_from_stream_lua
 from .utils import ms_to_datetime, poll, timestamp_ms
 
 logger = logging.getLogger('arq.jobs')
@@ -63,6 +72,10 @@ class JobResult(JobDef):
     queue_name: str
 
 
+def _list_to_dict(input_list: list[Any]) -> dict[Any, Any]:
+    return dict(zip(input_list[::2], input_list[1::2], strict=True))
+
+
 class Job:
     """
     Holds data a reference to a job.
@@ -105,7 +118,8 @@ class Job:
             async with self._redis.pipeline(transaction=True) as tr:
                 tr.get(result_key_prefix + self.job_id)
                 tr.zscore(self._queue_name, self.job_id)
-                v, s = await tr.execute()
+                tr.get(job_message_id_prefix + self.job_id)
+                v, s, m = await tr.execute()
 
             if v:
                 info = deserialize_result(v, deserializer=self._deserializer)
@@ -115,7 +129,7 @@ class Job:
                     raise info.result
                 else:
                     raise SerializationError(info.result)
-            elif s is None:
+            elif s is None and m is None:
                 raise ResultNotFound(
                     'Not waiting for job result because the job is not in queue. '
                     'Is the worker function configured to keep result?'
@@ -134,8 +148,24 @@ class Job:
             if v:
                 info = deserialize_job(v, deserializer=self._deserializer)
         if info:
-            s = await self._redis.zscore(self._queue_name, self.job_id)
-            info.score = None if s is None else int(s)
+            async with self._redis.pipeline(transaction=True) as tr:
+                tr.zscore(self._queue_name, self.job_id)
+                tr.eval(
+                    get_job_from_stream_lua,
+                    2,
+                    self._queue_name + stream_key_suffix,
+                    job_message_id_prefix + self.job_id,
+                )
+                delayed_score, job_info = await tr.execute()
+
+            if delayed_score:
+                info.score = int(delayed_score)
+            elif job_info:
+                _, job_info_payload = job_info
+                info.score = int(_list_to_dict(job_info_payload)[b'score'])
+            else:
+                info.score = None
+
         return info
 
     async def result_info(self) -> Optional[JobResult]:
@@ -157,12 +187,15 @@ class Job:
             tr.exists(result_key_prefix + self.job_id)
             tr.exists(in_progress_key_prefix + self.job_id)
             tr.zscore(self._queue_name, self.job_id)
-            is_complete, is_in_progress, score = await tr.execute()
+            tr.exists(job_message_id_prefix + self.job_id)
+            is_complete, is_in_progress, score, queued = await tr.execute()
 
         if is_complete:
             return JobStatus.complete
         elif is_in_progress:
             return JobStatus.in_progress
+        elif queued:
+            return JobStatus.queued
         elif score:
             return JobStatus.deferred if score > timestamp_ms() else JobStatus.queued
         else:

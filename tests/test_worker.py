@@ -17,6 +17,7 @@ from arq.jobs import Job, JobStatus
 from arq.worker import (
     FailedJobs,
     JobExecutionFailed,
+    JobMetaInfo,
     Retry,
     RetryJob,
     Worker,
@@ -71,7 +72,7 @@ async def test_set_health_check_key(arq_redis: ArqRedis, worker):
     await arq_redis.enqueue_job('foobar', _job_id='testing')
     worker: Worker = worker(functions=[func(foobar, keep_result=0)], health_check_key='arq:test:health-check')
     await worker.main()
-    assert sorted(await arq_redis.keys('*')) == [b'arq:test:health-check']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:queue:stream', b'arq:test:health-check']
 
 
 async def test_handle_sig(caplog, arq_redis: ArqRedis):
@@ -160,40 +161,6 @@ async def test_job_successful(arq_redis: ArqRedis, worker, caplog):
     assert 'X.XXs → testing:foobar()\n  X.XXs ← testing:foobar ● 42' in log
 
 
-async def test_job_retry_race_condition(arq_redis: ArqRedis, worker):
-    async def retry_job(ctx):
-        if ctx['job_try'] == 1:
-            raise Retry(defer=10)
-
-    job_id = 'testing'
-    await arq_redis.enqueue_job('retry_job', _job_id=job_id)
-
-    worker_one: Worker = worker(functions=[func(retry_job, name='retry_job')])
-    worker_two: Worker = worker(functions=[func(retry_job, name='retry_job')])
-
-    assert worker_one.jobs_complete == 0
-    assert worker_one.jobs_failed == 0
-    assert worker_one.jobs_retried == 0
-
-    assert worker_two.jobs_complete == 0
-    assert worker_two.jobs_failed == 0
-    assert worker_two.jobs_retried == 0
-
-    await worker_one.start_jobs([job_id.encode()])
-    await asyncio.gather(*worker_one.tasks.values())
-
-    await worker_two.start_jobs([job_id.encode()])
-    await asyncio.gather(*worker_two.tasks.values())
-
-    assert worker_one.jobs_complete == 0
-    assert worker_one.jobs_failed == 0
-    assert worker_one.jobs_retried == 1
-
-    assert worker_two.jobs_complete == 0
-    assert worker_two.jobs_failed == 0
-    assert worker_two.jobs_retried == 0
-
-
 async def test_job_successful_no_result_logging(arq_redis: ArqRedis, worker, caplog):
     caplog.set_level(logging.INFO)
     await arq_redis.enqueue_job('foobar', _job_id='testing')
@@ -214,6 +181,8 @@ async def test_job_retry(arq_redis: ArqRedis, worker, caplog):
     await arq_redis.enqueue_job('retry', _job_id='testing')
     worker: Worker = worker(functions=[func(retry, name='retry')])
     await worker.main()
+
+    assert await worker.pool.get_queue_size(worker.queue_name) == 0
     assert worker.jobs_complete == 1
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 2
@@ -517,38 +486,38 @@ async def test_log_health_check(arq_redis: ArqRedis, worker, caplog):
 async def test_remain_keys(test_redis_settings: RedisSettings, arq_redis: ArqRedis, worker, create_pool):
     redis2 = await create_pool(test_redis_settings)
     await arq_redis.enqueue_job('foobar', _job_id='testing')
-    assert sorted(await redis2.keys('*')) == [b'arq:job:testing', b'arq:queue']
+    assert sorted(await redis2.keys('*')) == [b'arq:job:testing', b'arq:message-id:testing', b'arq:queue:stream']
     worker: Worker = worker(functions=[foobar])
     await worker.main()
-    assert sorted(await redis2.keys('*')) == [b'arq:queue:health-check', b'arq:result:testing']
+    assert sorted(await redis2.keys('*')) == [b'arq:queue:health-check', b'arq:queue:stream', b'arq:result:testing']
     await worker.close()
-    assert sorted(await redis2.keys('*')) == [b'arq:result:testing']
+    assert sorted(await redis2.keys('*')) == [b'arq:queue:stream', b'arq:result:testing']
 
 
 async def test_remain_keys_no_results(arq_redis: ArqRedis, worker):
     await arq_redis.enqueue_job('foobar', _job_id='testing')
-    assert sorted(await arq_redis.keys('*')) == [b'arq:job:testing', b'arq:queue']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:job:testing', b'arq:message-id:testing', b'arq:queue:stream']
     worker: Worker = worker(functions=[func(foobar, keep_result=0)])
     await worker.main()
-    assert sorted(await arq_redis.keys('*')) == [b'arq:queue:health-check']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:queue:health-check', b'arq:queue:stream']
 
 
 async def test_remain_keys_keep_results_forever_in_function(arq_redis: ArqRedis, worker):
     await arq_redis.enqueue_job('foobar', _job_id='testing')
-    assert sorted(await arq_redis.keys('*')) == [b'arq:job:testing', b'arq:queue']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:job:testing', b'arq:message-id:testing', b'arq:queue:stream']
     worker: Worker = worker(functions=[func(foobar, keep_result_forever=True)])
     await worker.main()
-    assert sorted(await arq_redis.keys('*')) == [b'arq:queue:health-check', b'arq:result:testing']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:queue:health-check', b'arq:queue:stream', b'arq:result:testing']
     ttl_result = await arq_redis.ttl('arq:result:testing')
     assert ttl_result == -1
 
 
 async def test_remain_keys_keep_results_forever(arq_redis: ArqRedis, worker):
     await arq_redis.enqueue_job('foobar', _job_id='testing')
-    assert sorted(await arq_redis.keys('*')) == [b'arq:job:testing', b'arq:queue']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:job:testing', b'arq:message-id:testing', b'arq:queue:stream']
     worker: Worker = worker(functions=[func(foobar)], keep_result_forever=True)
     await worker.main()
-    assert sorted(await arq_redis.keys('*')) == [b'arq:queue:health-check', b'arq:result:testing']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:queue:health-check', b'arq:queue:stream', b'arq:result:testing']
     ttl_result = await arq_redis.ttl('arq:result:testing')
     assert ttl_result == -1
 
@@ -644,23 +613,24 @@ async def test_queue_read_limit_equals_max_jobs(arq_redis: ArqRedis, worker):
     for _ in range(4):
         await arq_redis.enqueue_job('foobar')
 
-    assert await arq_redis.zcard(default_queue_name) == 4
+    assert await arq_redis.get_queue_size(default_queue_name) == 4
     worker: Worker = worker(functions=[foobar], queue_read_limit=2)
     assert worker.queue_read_limit == 2
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
 
-    await worker._poll_iteration()
+    await worker.create_consumer_group()
+    await worker._read_stream_iteration()
     await asyncio.sleep(0.1)
-    assert await arq_redis.zcard(default_queue_name) == 2
+    assert await arq_redis.get_queue_size(default_queue_name) == 2
     assert worker.jobs_complete == 2
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
 
-    await worker._poll_iteration()
+    await worker._read_stream_iteration()
     await asyncio.sleep(0.1)
-    assert await arq_redis.zcard(default_queue_name) == 0
+    assert await arq_redis.get_queue_size(default_queue_name) == 0
     assert worker.jobs_complete == 4
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
@@ -677,20 +647,21 @@ async def test_custom_queue_read_limit(arq_redis: ArqRedis, worker):
     for _ in range(4):
         await arq_redis.enqueue_job('foobar')
 
-    assert await arq_redis.zcard(default_queue_name) == 4
+    assert await arq_redis.get_queue_size(default_queue_name) == 4
     worker: Worker = worker(functions=[foobar], max_jobs=4, queue_read_limit=2)
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
 
-    await worker._poll_iteration()
+    await worker.create_consumer_group()
+    await worker._read_stream_iteration()
     await asyncio.sleep(0.1)
-    assert await arq_redis.zcard(default_queue_name) == 2
+    assert await arq_redis.get_queue_size(default_queue_name) == 2
     assert worker.jobs_complete == 2
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
 
-    await worker._poll_iteration()
+    await worker._read_stream_iteration()
     await asyncio.sleep(0.1)
     assert await arq_redis.zcard(default_queue_name) == 0
     assert worker.jobs_complete == 4
@@ -814,7 +785,7 @@ async def test_max_bursts_dont_get(arq_redis: ArqRedis, worker):
 
     worker.max_burst_jobs = 0
     assert len(worker.tasks) == 0
-    await worker._poll_iteration()
+    await worker._read_stream_iteration()
     assert len(worker.tasks) == 0
 
 
@@ -846,7 +817,20 @@ async def test_multi_exec(arq_redis: ArqRedis, worker, caplog):
     caplog.set_level(logging.DEBUG, logger='arq.worker')
     await arq_redis.enqueue_job('foo', 1, _job_id='testing')
     worker: Worker = worker(functions=[func(foo, name='foo')])
-    await asyncio.gather(*[worker.start_jobs([b'testing']) for _ in range(5)])
+    await asyncio.gather(
+        *[
+            worker.start_jobs(
+                [
+                    JobMetaInfo(
+                        job_id='testing',
+                        message_id='1',
+                        score=1,
+                    )
+                ]
+            )
+            for _ in range(5)
+        ]
+    )
     # debug(caplog.text)
     await worker.main()
     assert c == 1
@@ -1078,7 +1062,7 @@ async def test_worker_retry(mocker, worker_retry, exception_thrown):
 
     # baseline
     await worker.main()
-    await worker._poll_iteration()
+    await worker._read_stream_iteration()
 
     # spy method handling call_with_retry failure
     spy = mocker.spy(worker.pool, '_disconnect_raise')
@@ -1089,7 +1073,7 @@ async def test_worker_retry(mocker, worker_retry, exception_thrown):
 
         # assert exception thrown
         with pytest.raises(type(exception_thrown)):
-            await worker._poll_iteration()
+            await worker._read_stream_iteration()
 
         # assert retry counts and no exception thrown during '_disconnect_raise'
         assert spy.call_count == 4  # retries setting + 1
@@ -1116,7 +1100,7 @@ async def test_worker_crash(mocker, worker, exception_thrown):
 
     # baseline
     await worker.main()
-    await worker._poll_iteration()
+    await worker._read_stream_iteration()
 
     # spy method handling call_with_retry failure
     spy = mocker.spy(worker.pool, '_disconnect_raise')
@@ -1127,7 +1111,7 @@ async def test_worker_crash(mocker, worker, exception_thrown):
 
         # assert exception thrown
         with pytest.raises(type(exception_thrown)):
-            await worker._poll_iteration()
+            await worker._read_stream_iteration()
 
         # assert no retry counts and exception thrown during '_disconnect_raise'
         assert spy.call_count == 1

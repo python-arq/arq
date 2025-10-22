@@ -3,13 +3,16 @@ import contextlib
 import inspect
 import logging
 import signal
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import partial
 from signal import Signals
 from time import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union, cast
+from uuid import uuid4
 
+from redis.asyncio.client import Pipeline
 from redis.exceptions import ResponseError, WatchError
 
 from arq.cron import CronJob
@@ -19,15 +22,19 @@ from .connections import ArqRedis, RedisSettings, create_pool, log_redis_info
 from .constants import (
     abort_job_max_age,
     abort_jobs_ss,
+    default_consumer_group,
     default_queue_name,
     expires_extra_ms,
     health_check_key_suffix,
     in_progress_key_prefix,
     job_key_prefix,
+    job_message_id_prefix,
     keep_cronjob_progress,
     result_key_prefix,
     retry_key_prefix,
+    stream_key_suffix,
 )
+from .lua import publish_delayed_job_lua, publish_job_lua
 from .utils import (
     args_to_string,
     import_string,
@@ -55,6 +62,13 @@ class Function:
     keep_result_s: Optional[float]
     keep_result_forever: Optional[bool]
     max_tries: Optional[int]
+
+
+@dataclass
+class JobMetaInfo:
+    message_id: str
+    job_id: str
+    score: int
 
 
 def func(
@@ -188,6 +202,8 @@ class Worker:
         functions: Sequence[Union[Function, 'WorkerCoroutine']] = (),
         *,
         queue_name: Optional[str] = default_queue_name,
+        consumer_group_name: str = default_consumer_group,
+        worker_id: Optional[str] = None,
         cron_jobs: Optional[Sequence[CronJob]] = None,
         redis_settings: Optional[RedisSettings] = None,
         redis_pool: Optional[ArqRedis] = None,
@@ -204,6 +220,7 @@ class Worker:
         keep_result: 'SecondsTimedelta' = 3600,
         keep_result_forever: bool = False,
         poll_delay: 'SecondsTimedelta' = 0.5,
+        stream_block: 'SecondsTimedelta' = 0.5,
         queue_read_limit: Optional[int] = None,
         max_tries: int = 5,
         health_check_interval: 'SecondsTimedelta' = 3600,
@@ -217,6 +234,8 @@ class Worker:
         expires_extra_ms: int = expires_extra_ms,
         timezone: Optional[timezone] = None,
         log_results: bool = True,
+        max_consumer_inactivity: 'SecondsTimedelta' = 86400,
+        idle_consumer_poll_interval: 'SecondsTimedelta' = 60,
     ):
         self.functions: Dict[str, Union[Function, CronJob]] = {f.name: f for f in map(func, functions)}
         if queue_name is None:
@@ -225,6 +244,8 @@ class Worker:
             else:
                 raise ValueError('If queue_name is absent, redis_pool must be present.')
         self.queue_name = queue_name
+        self.consumer_group_name = consumer_group_name
+        self.worker_id = worker_id or str(uuid4().hex)
         self.cron_jobs: List[CronJob] = []
         if cron_jobs is not None:
             if not all(isinstance(cj, CronJob) for cj in cron_jobs):
@@ -248,6 +269,9 @@ class Worker:
         self.keep_result_s = to_seconds(keep_result)
         self.keep_result_forever = keep_result_forever
         self.poll_delay_s = to_seconds(poll_delay)
+        self.stream_block_s = to_seconds(stream_block)
+        self.max_consumer_inactivity_s = to_seconds(max_consumer_inactivity)
+        self.idle_consumer_poll_interval_s = to_seconds(idle_consumer_poll_interval)
         self.queue_read_limit = queue_read_limit or max(max_jobs * 5, 100)
         self._queue_read_offset = 0
         self.max_tries = max_tries
@@ -357,19 +381,100 @@ class Worker:
         if self.on_startup:
             await self.on_startup(self.ctx)
 
-        async for _ in poll(self.poll_delay_s):
-            await self._poll_iteration()
+        await self.create_consumer_group()
+
+        done, pending = await asyncio.wait(
+            [
+                asyncio.ensure_future(self.run_delayed_queue_poller()),
+                asyncio.ensure_future(self.run_stream_reader()),
+                asyncio.ensure_future(self.run_idle_consumer_cleanup()),
+            ],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+
+        for task in pending:
+            task.cancel()
+
+        await asyncio.gather(*pending, return_exceptions=True)
+
+        for task in done:
+            task.result()
+
+    async def run_stream_reader(self) -> None:
+        while True:
+            await self._read_stream_iteration()
 
             if self.burst:
                 if 0 <= self.max_burst_jobs <= self._jobs_started():
                     await asyncio.gather(*self.tasks.values())
                     return None
-                queued_jobs = await self.pool.zcard(self.queue_name)
+                queued_jobs = await self.pool.get_queue_size(self.queue_name)
                 if queued_jobs == 0:
                     await asyncio.gather(*self.tasks.values())
                     return None
 
-    async def _poll_iteration(self) -> None:
+    async def run_delayed_queue_poller(self) -> None:
+        publish_delayed_job = self.pool.register_script(publish_delayed_job_lua)
+
+        async for _ in poll(self.poll_delay_s):
+            job_ids = await self.pool.zrange(
+                self.queue_name,
+                start=float('-inf'),
+                end=timestamp_ms(),
+                num=self.queue_read_limit,
+                offset=self._queue_read_offset,
+                withscores=True,
+                byscore=True,
+            )
+            async with self.pool.pipeline(transaction=False) as pipe:
+                for job_id, score in job_ids:
+                    expire_ms = int(score - timestamp_ms() + self.expires_extra_ms)
+                    if expire_ms <= 0:
+                        expire_ms = self.expires_extra_ms
+
+                    await publish_delayed_job(
+                        keys=[
+                            self.queue_name,
+                            self.queue_name + stream_key_suffix,
+                            job_message_id_prefix + job_id.decode(),
+                        ],
+                        args=[job_id.decode(), expire_ms],
+                        client=pipe,
+                    )
+
+                await pipe.execute()
+
+    async def run_idle_consumer_cleanup(self) -> None:
+        async for _ in poll(self.idle_consumer_poll_interval_s):
+            consumers_info = await self.pool.xinfo_consumers(
+                self.queue_name + stream_key_suffix,
+                groupname=self.consumer_group_name,
+            )
+
+            for consumer_info in consumers_info:
+                if self.worker_id == consumer_info['name'].decode():
+                    continue
+
+                idle = timedelta(milliseconds=consumer_info['idle']).seconds
+                pending = consumer_info['pending']
+
+                if pending == 0 and idle > self.max_consumer_inactivity_s:
+                    await self.pool.xgroup_delconsumer(
+                        name=self.queue_name + stream_key_suffix,
+                        groupname=self.consumer_group_name,
+                        consumername=consumer_info['name'],
+                    )
+
+    async def create_consumer_group(self) -> None:
+        with suppress(ResponseError):
+            await self.pool.xgroup_create(
+                name=self.queue_name + stream_key_suffix,
+                groupname=self.consumer_group_name,
+                id='0',
+                mkstream=True,
+            )
+
+    async def _read_stream_iteration(self) -> None:
         """
         Get ids of pending jobs from the main queue sorted-set data structure and start those jobs, remove
         any finished tasks from self.tasks.
@@ -382,12 +487,35 @@ class Worker:
             count = min(burst_jobs_remaining, count)
         if self.allow_pick_jobs:
             if self.job_counter < self.max_jobs:
-                now = timestamp_ms()
-                job_ids = await self.pool.zrangebyscore(
-                    self.queue_name, min=float('-inf'), start=self._queue_read_offset, num=count, max=now
-                )
+                stream_msgs = await self._get_idle_tasks(count)
+                msgs_count = sum([len(msgs) for _, msgs in stream_msgs])
 
-                await self.start_jobs(job_ids)
+                count -= msgs_count
+
+                if count > 0:
+                    stream_msgs.extend(
+                        await self.pool.xreadgroup(
+                            groupname=self.consumer_group_name,
+                            consumername=self.worker_id,
+                            streams={self.queue_name + stream_key_suffix: '>'},
+                            count=count,
+                            block=int(max(self.stream_block_s * 1000, 1)),
+                        )
+                    )
+
+                jobs = []
+
+                for _, msgs in stream_msgs:
+                    for msg_id, job in msgs:
+                        jobs.append(
+                            JobMetaInfo(
+                                message_id=msg_id.decode(),
+                                job_id=job[b'job_id'].decode(),
+                                score=int(job[b'score']),
+                            )
+                        )
+
+                await self.start_jobs(jobs)
 
         if self.allow_abort_jobs:
             await self._cancel_aborted_jobs()
@@ -399,6 +527,25 @@ class Worker:
                 t.result()
 
         await self.heart_beat()
+
+    async def _get_idle_tasks(self, count: int) -> list[tuple[bytes, list]]:
+        resp = await self.pool.xautoclaim(
+            self.queue_name + stream_key_suffix,
+            groupname=self.consumer_group_name,
+            consumername=self.worker_id,
+            min_idle_time=int(self.in_progress_timeout_s * 1000),
+            count=count,
+        )
+
+        if not resp:
+            return []
+
+        _, msgs, __ = resp
+        if not msgs:
+            return []
+
+        # cast to the same format as the xreadgroup response
+        return [((self.queue_name + stream_key_suffix).encode(), msgs)]
 
     async def _cancel_aborted_jobs(self) -> None:
         """
@@ -428,11 +575,14 @@ class Worker:
         self.job_counter = self.job_counter - 1
         self.sem.release()
 
-    async def start_jobs(self, job_ids: List[bytes]) -> None:
+    async def start_jobs(self, jobs: list[JobMetaInfo]) -> None:
         """
         For each job id, get the job definition, check it's not running and start it in a task
         """
-        for job_id_b in job_ids:
+        for job in jobs:
+            job_id = job.job_id
+            score = job.score
+
             await self.sem.acquire()
 
             if self.job_counter >= self.max_jobs:
@@ -441,16 +591,15 @@ class Worker:
 
             self.job_counter = self.job_counter + 1
 
-            job_id = job_id_b.decode()
             in_progress_key = in_progress_key_prefix + job_id
             async with self.pool.pipeline(transaction=True) as pipe:
                 await pipe.watch(in_progress_key)
                 ongoing_exists = await pipe.exists(in_progress_key)
-                score = await pipe.zscore(self.queue_name, job_id)
-                if ongoing_exists or not score or score > timestamp_ms():
-                    # job already started elsewhere, or already finished and removed from queue
-                    # if score > ts_now,
-                    # it means probably the job was re-enqueued with a delay in another worker
+
+                if ongoing_exists:
+                    await pipe.unwatch()
+                    await self._unclaim_job(job, pipe)
+                    await pipe.execute()
                     self.job_counter = self.job_counter - 1
                     self.sem.release()
                     logger.debug('job %s already running elsewhere', job_id)
@@ -462,15 +611,40 @@ class Worker:
                     await pipe.execute()
                 except (ResponseError, WatchError):
                     # job already started elsewhere since we got 'existing'
+                    pipe.multi()
+                    await self._unclaim_job(job, pipe)
+                    await pipe.execute()
                     self.job_counter = self.job_counter - 1
                     self.sem.release()
                     logger.debug('multi-exec error, job %s already started elsewhere', job_id)
                 else:
-                    t = self.loop.create_task(self.run_job(job_id, int(score)))
+                    t = self.loop.create_task(self.run_job(job_id, job.message_id, score))
                     t.add_done_callback(lambda _: self._release_sem_dec_counter_on_complete())
                     self.tasks[job_id] = t
 
-    async def run_job(self, job_id: str, score: int) -> None:  # noqa: C901
+    async def _unclaim_job(self, job: JobMetaInfo, pipe: Pipeline) -> None:
+        stream_key = self.queue_name + stream_key_suffix
+        job_message_id_key = job_message_id_prefix + job.job_id
+
+        pipe.xack(stream_key, self.consumer_group_name, job.message_id)
+        pipe.xdel(stream_key, job.message_id)
+        job_message_id_expire = job.score - timestamp_ms() + self.expires_extra_ms
+        if job_message_id_expire <= 0:
+            job_message_id_expire = self.expires_extra_ms
+
+        pipe.eval(
+            publish_job_lua,
+            2,
+            # keys
+            stream_key,
+            job_message_id_key,
+            # args
+            job.job_id,
+            str(job.score),
+            str(job_message_id_expire),
+        )
+
+    async def run_job(self, job_id: str, message_id: str, score: int) -> None:  # noqa: C901
         start_ms = timestamp_ms()
         async with self.pool.pipeline(transaction=True) as pipe:
             pipe.get(job_key_prefix + job_id)
@@ -504,7 +678,7 @@ class Worker:
                 queue_name=self.queue_name,
                 job_id=job_id,
             )
-            await asyncio.shield(self.finish_failed_job(job_id, result_data_))
+            await asyncio.shield(self.finish_failed_job(job_id, message_id, result_data_))
 
         if not v:
             logger.warning('job %s expired', job_id)
@@ -561,7 +735,7 @@ class Worker:
                 job_id=job_id,
                 serializer=self.job_serializer,
             )
-            return await asyncio.shield(self.finish_failed_job(job_id, result_data))
+            return await asyncio.shield(self.finish_failed_job(job_id, message_id, result_data))
 
         result = no_result
         exc_extra = None
@@ -662,6 +836,8 @@ class Worker:
         await asyncio.shield(
             self.finish_job(
                 job_id,
+                message_id,
+                score,
                 finish,
                 result_data,
                 result_timeout_s,
@@ -677,6 +853,8 @@ class Worker:
     async def finish_job(
         self,
         job_id: str,
+        message_id: str,
+        score: int,
         finish: bool,
         result_data: Optional[bytes],
         result_timeout_s: Optional[float],
@@ -687,33 +865,62 @@ class Worker:
         async with self.pool.pipeline(transaction=True) as tr:
             delete_keys = []
             in_progress_key = in_progress_key_prefix + job_id
+            stream_key = self.queue_name + stream_key_suffix
+            job_message_id_key = job_message_id_prefix + job_id
             if keep_in_progress is None:
                 delete_keys += [in_progress_key]
             else:
                 tr.pexpire(in_progress_key, to_ms(keep_in_progress))
 
+            tr.xack(
+                stream_key,
+                self.consumer_group_name,
+                message_id,
+            )
+            tr.xdel(stream_key, message_id)
+
             if finish:
                 if result_data:
                     expire = None if keep_result_forever else result_timeout_s
                     tr.set(result_key_prefix + job_id, result_data, px=to_ms(expire))
-                delete_keys += [retry_key_prefix + job_id, job_key_prefix + job_id]
+                delete_keys += [retry_key_prefix + job_id, job_key_prefix + job_id, job_message_id_key]
                 tr.zrem(abort_jobs_ss, job_id)
-                tr.zrem(self.queue_name, job_id)
             elif incr_score:
-                tr.zincrby(self.queue_name, incr_score, job_id)
+                delete_keys += [job_message_id_key]
+                tr.zadd(self.queue_name, {job_id: score + incr_score})
+            else:
+                job_message_id_expire = score - timestamp_ms() + self.expires_extra_ms
+                tr.eval(
+                    publish_job_lua,
+                    2,
+                    # keys
+                    stream_key,
+                    job_message_id_key,
+                    # args
+                    job_id,
+                    str(score),
+                    str(job_message_id_expire),
+                )
             if delete_keys:
                 tr.delete(*delete_keys)
             await tr.execute()
 
-    async def finish_failed_job(self, job_id: str, result_data: Optional[bytes]) -> None:
+    async def finish_failed_job(self, job_id: str, message_id: str, result_data: Optional[bytes]) -> None:
+        stream_key = self.queue_name + stream_key_suffix
         async with self.pool.pipeline(transaction=True) as tr:
             tr.delete(
                 retry_key_prefix + job_id,
                 in_progress_key_prefix + job_id,
                 job_key_prefix + job_id,
+                job_message_id_prefix + job_id,
             )
             tr.zrem(abort_jobs_ss, job_id)
-            tr.zrem(self.queue_name, job_id)
+            tr.xack(
+                stream_key,
+                self.consumer_group_name,
+                message_id,
+            )
+            tr.xdel(stream_key, message_id)
             # result_data would only be None if serializing the result fails
             keep_result = self.keep_result_forever or self.keep_result_s > 0
             if result_data is not None and keep_result:  # pragma: no branch

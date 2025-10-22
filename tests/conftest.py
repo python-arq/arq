@@ -94,10 +94,24 @@ async def arq_redis_retry(test_redis_host: str, test_redis_port: int):
 async def worker(arq_redis):
     worker_: Worker = None
 
-    def create(functions=[], burst=True, poll_delay=0, max_jobs=10, arq_redis=arq_redis, **kwargs):
+    def create(
+        functions=[],
+        burst=True,
+        poll_delay=0,
+        stream_block=0,
+        max_jobs=10,
+        arq_redis=arq_redis,
+        **kwargs,
+    ):
         nonlocal worker_
         worker_ = Worker(
-            functions=functions, redis_pool=arq_redis, burst=burst, poll_delay=poll_delay, max_jobs=max_jobs, **kwargs
+            functions=functions,
+            redis_pool=arq_redis,
+            burst=burst,
+            poll_delay=poll_delay,
+            max_jobs=max_jobs,
+            stream_block=stream_block,
+            **kwargs,
         )
         return worker_
 
