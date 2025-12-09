@@ -45,6 +45,7 @@ class RedisSettings:
     conn_retries: int = 5
     conn_retry_delay: int = 1
     max_connections: Optional[int] = None
+    protocol: int = 2
 
     sentinel: bool = False
     sentinel_master: str = 'mymaster'
@@ -266,6 +267,7 @@ async def create_pool(
             retry_on_timeout=settings.retry_on_timeout,
             retry_on_error=settings.retry_on_error,
             max_connections=settings.max_connections,
+            protocol=settings.protocol,
         )
 
     while True:
