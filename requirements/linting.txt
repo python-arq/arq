@@ -16,7 +16,7 @@ mypy-extensions==1.0.0
     # via mypy
 pycparser==2.22
     # via cffi
-ruff==0.3.4
+ruff==0.14.14
     # via -r requirements/linting.in
 tomli==2.4.0
     # via mypy
