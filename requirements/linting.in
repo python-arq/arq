@@ -1,4 +1,0 @@
-ruff
-mypy
-types-pytz
-types_redis

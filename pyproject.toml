@@ -36,13 +36,15 @@ classifiers = [
     'Topic :: System :: Monitoring',
     'Topic :: System :: Systems Administration',
 ]
-requires-python = '>=3.8'
+requires-python = '>=3.9'
 dependencies = [
     'redis[hiredis]>=4.2.0,<6',
     'click>=8.0',
 ]
-optional-dependencies = {watch = ['watchfiles>=0.16'] }
 dynamic = ['version']
+
+[project.optional-dependencies]
+watch = ['watchfiles>=0.16']
 
 [project.scripts]
 arq = 'arq.cli:cli'
@@ -53,6 +55,37 @@ Documentation = 'https://arq-docs.helpmanual.io'
 Funding = 'https://github.com/sponsors/samuelcolvin'
 Source = 'https://github.com/samuelcolvin/arq'
 Changelog = 'https://github.com/samuelcolvin/arq/releases'
+
+[dependency-groups]
+testing = [
+    'coverage[toml]',
+    'dirty-equals',
+    'msgpack',
+    'pydantic',
+    'pytest',
+    'pytest-asyncio',
+    'pytest-mock',
+    'pytest-pretty',
+    'pytest-timeout',
+    'pytz',
+    'testcontainers',
+]
+
+linting = [
+    'ruff',
+    'mypy',
+    'types-pytz',
+    'types-redis',
+]
+
+docs = [
+    'sphinx>=5,<6',
+]
+
+
+[tool.uv]
+default-groups = ['testing']
+required-version = '>=0.8.4'
 
 [tool.pytest.ini_options]
 testpaths = 'tests'

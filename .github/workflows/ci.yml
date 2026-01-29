@@ -13,16 +13,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
-    - name: set up python
-      uses: actions/setup-python@v5
+    - uses: astral-sh/setup-uv@v7
       with:
-        python-version: '3.11'
+        python-version: '3.13'
 
-    - run: pip install -r requirements/linting.txt -r requirements/pyproject.txt pre-commit
+    - run: |
+        uv sync --group linting
+        uv pip install pre-commit
 
-    - run: pre-commit run -a --verbose
+    - run: uv run pre-commit run -a --verbose
       env:
         SKIP: no-commit-to-branch
 
@@ -30,20 +31,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
-    - name: set up python
-      uses: actions/setup-python@v5
+    - uses: astral-sh/setup-uv@v7
       with:
-        python-version: '3.11'
+        python-version: '3.13'
 
-    - run: pip install -r requirements/docs.txt -r requirements/pyproject.txt
-    - run: pip install .
+    - run: uv sync --group docs
 
     - run: make docs
 
     - name: Store docs site
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: docs
         path: docs/_build/
@@ -72,20 +71,19 @@ jobs:
     runs-on: ${{ matrix.os }}-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
-    - name: set up python
-      uses: actions/setup-python@v5
+    - uses: astral-sh/setup-uv@v7
       with:
         python-version: ${{ matrix.python }}
 
-    - run: pip install -r requirements/testing.txt -r requirements/pyproject.txt
+    - run: uv sync --group testing
 
     - run: make test
 
     - run: coverage xml
 
-    - uses: codecov/codecov-action@v4
+    - uses: codecov/codecov-action@v5
       with:
         file: ./coverage.xml
         env_vars: PYTHON,OS
@@ -113,25 +111,25 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: get docs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: docs
           path: docs/_build/
 
       - name: set up python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
+          python-version: '3.13'
 
       - name: install
         run: pip install -U build
 
       - name: check version
         id: check-version
-        uses: samuelcolvin/check-python-version@v3.2
+        uses: samuelcolvin/check-python-version@v5
         with:
           version_file_path: 'arq/version.py'
 

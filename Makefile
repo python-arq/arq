@@ -1,40 +1,29 @@
 .DEFAULT_GOAL := all
 sources = arq tests
 
+.PHONY: .uv  ## Check that uv is installed
+.uv:
+	@uv -V || echo 'Please install uv: https://docs.astral.sh/uv/getting-started/installation/'
+
 .PHONY: install
 install:
-	pip install -U pip pre-commit pip-tools
-	pip install -r requirements/all.txt
-	pip install -e .[watch]
-	pre-commit install
-
-.PHONY: refresh-lockfiles
-refresh-lockfiles:
-	find requirements/ -name '*.txt' ! -name 'all.txt' -type f -delete
-	make update-lockfiles
-
-.PHONY: update-lockfiles
-update-lockfiles:
-	@echo "Updating requirements/*.txt files using pip-compile"
-	pip-compile -q --strip-extras -o requirements/linting.txt requirements/linting.in
-	pip-compile -q --strip-extras -o requirements/testing.txt requirements/testing.in
-	pip-compile -q --strip-extras -o requirements/docs.txt requirements/docs.in
-	pip-compile -q --strip-extras -o requirements/pyproject.txt pyproject.toml --all-extras
-	pip install --dry-run -r requirements/all.txt
+	uv sync --frozen --all-groups --all-packages --all-extras
+	uv pip install pre-commit
+	uv run pre-commit install
 
 .PHONY: format
 format:
-	ruff check --fix $(sources)
-	ruff format $(sources)
+	uv run ruff check --fix $(sources)
+	uv run ruff format $(sources)
 
 .PHONY: lint
 lint:
-	ruff check $(sources)
-	ruff format --check $(sources)
+	uv run ruff check $(sources)
+	uv run ruff format --check $(sources)
 
 .PHONY: test
 test:
-	coverage run -m pytest
+	uv run coverage run -m pytest
 
 .PHONY: testcov
 testcov: test
@@ -43,7 +32,7 @@ testcov: test
 
 .PHONY: mypy
 mypy:
-	mypy arq
+	uv run mypy arq
 
 .PHONY: all
 all: lint mypy testcov
