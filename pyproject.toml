@@ -68,6 +68,7 @@ testing = [
     'pytest-pretty',
     'pytest-timeout',
     'pytz',
+    'tzdata',
     'testcontainers',
 ]
 
