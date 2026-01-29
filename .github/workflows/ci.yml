@@ -20,7 +20,7 @@ jobs:
         python-version: '3.13'
 
     - run: |
-        uv sync --group linting
+        uv sync --group linting --extra watch
         uv pip install pre-commit
 
     - run: uv run pre-commit run -a --verbose
