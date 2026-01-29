@@ -421,7 +421,7 @@ async def test_job_old(arq_redis: ArqRedis, worker, caplog):
     assert worker.jobs_retried == 0
 
     log = re.sub(r'(\d+).\d\ds', r'\1.XXs', '\n'.join(r.message for r in caplog.records))
-    assert log.endswith('  0.XXs → testing:foobar() delayed=2.XXs\n' '  0.XXs ← testing:foobar ● 42')
+    assert log.endswith('  0.XXs → testing:foobar() delayed=2.XXs\n  0.XXs ← testing:foobar ● 42')
 
 
 async def test_retry_repr():

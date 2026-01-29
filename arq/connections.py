@@ -312,8 +312,5 @@ async def log_redis_info(redis: 'Redis[bytes]', log_func: Callable[[str], Any]) 
     clients_connected = info_clients.get('connected_clients', '?')
 
     log_func(
-        f'redis_version={redis_version} '
-        f'mem_usage={mem_usage} '
-        f'clients_connected={clients_connected} '
-        f'db_keys={key_count}'
+        f'redis_version={redis_version} mem_usage={mem_usage} clients_connected={clients_connected} db_keys={key_count}'
     )
