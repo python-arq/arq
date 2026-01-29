@@ -2,7 +2,7 @@ import asyncio
 import functools
 import os
 import sys
-from typing import Generator
+from collections.abc import Generator
 
 import msgpack
 import pytest
