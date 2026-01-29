@@ -85,7 +85,7 @@ jobs:
 
     - run: make test
 
-    - run: coverage xml
+    - run: uv run coverage xml
 
     - uses: codecov/codecov-action@v5
       with:
