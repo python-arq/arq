@@ -80,7 +80,7 @@ linting = [
 ]
 
 docs = [
-    'sphinx>=5,<6',
+    'sphinx',
 ]
 
 
