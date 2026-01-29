@@ -81,7 +81,7 @@ jobs:
       with:
         python-version: ${{ matrix.python }}
 
-    - run: uv sync --group testing
+    - run: uv sync --group testing --extra watch
 
     - run: make test
 
