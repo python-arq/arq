@@ -50,11 +50,11 @@ watch = ['watchfiles>=0.16']
 arq = 'arq.cli:cli'
 
 [project.urls]
-Homepage = 'https://github.com/samuelcolvin/arq'
+Homepage = 'https://github.com/python-arq/arq'
 Documentation = 'https://arq-docs.helpmanual.io'
 Funding = 'https://github.com/sponsors/samuelcolvin'
-Source = 'https://github.com/samuelcolvin/arq'
-Changelog = 'https://github.com/samuelcolvin/arq/releases'
+Source = 'https://github.com/python-arq/arq'
+Changelog = 'https://github.com/python-arq/arq/releases'
 
 [dependency-groups]
 testing = [
