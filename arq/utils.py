@@ -1,22 +1,25 @@
 import asyncio
 import logging
 import os
+from collections.abc import AsyncGenerator, Sequence
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from time import time
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, Optional, Sequence, overload
+from typing import TYPE_CHECKING, Any, Optional, overload
 
 from .constants import timezone_env_vars
-
-try:
-    import pytz
-except ImportError:  # pragma: no cover
-    pytz = None  # type: ignore
 
 logger = logging.getLogger('arq.utils')
 
 if TYPE_CHECKING:
+    import pytz
+
     from .typing import SecondsTimedelta
+else:
+    try:
+        import pytz
+    except ImportError:  # pragma: no cover
+        pytz = None  # type: ignore
 
 
 def as_int(f: float) -> int:
@@ -121,7 +124,7 @@ def truncate(s: str, length: int = DEFAULT_CURTAIL) -> str:
     return s
 
 
-def args_to_string(args: Sequence[Any], kwargs: Dict[str, Any]) -> str:
+def args_to_string(args: Sequence[Any], kwargs: dict[str, Any]) -> str:
     arguments = ''
     if args:
         arguments = ', '.join(map(repr, args))

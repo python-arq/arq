@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from operator import attrgetter
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union, cast
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
@@ -28,7 +28,7 @@ class RedisSettings:
     Used by :func:`arq.connections.create_pool` and :class:`arq.worker.Worker`.
     """
 
-    host: Union[str, List[Tuple[str, int]]] = 'localhost'
+    host: Union[str, list[tuple[str, int]]] = 'localhost'
     port: int = 6379
     unix_socket_path: Optional[str] = None
     database: int = 0
@@ -50,7 +50,7 @@ class RedisSettings:
     sentinel_master: str = 'mymaster'
 
     retry_on_timeout: bool = False
-    retry_on_error: Optional[List[Exception]] = None
+    retry_on_error: Optional[list[Exception]] = None
     retry: Optional[Retry] = None
 
     @classmethod
@@ -189,7 +189,7 @@ class ArqRedis(BaseRedis):
         r.job_id = job_id
         return r
 
-    async def all_job_results(self) -> List[JobResult]:
+    async def all_job_results(self) -> list[JobResult]:
         """
         Get results for all jobs in redis.
         """
@@ -207,7 +207,7 @@ class ArqRedis(BaseRedis):
         jd.job_id = job_id.decode()
         return jd
 
-    async def queued_jobs(self, *, queue_name: Optional[str] = None) -> List[JobDef]:
+    async def queued_jobs(self, *, queue_name: Optional[str] = None) -> list[JobDef]:
         """
         Get information about queued, mostly useful when testing.
         """
