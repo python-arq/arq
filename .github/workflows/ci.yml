@@ -8,6 +8,10 @@ on:
       - '**'
   pull_request: {}
 
+env:
+  COLUMNS: 150
+  FORCE_COLOR: 1
+
 jobs:
   lint:
     runs-on: ubuntu-latest
