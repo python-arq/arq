@@ -167,29 +167,29 @@ class ArqRedis(BaseRedis):
             job_exists = await pipe.exists(job_key)
             result_exists = await pipe.exists(result_key_prefix + job_id)
             in_progress = await pipe.exists(in_progress_key_prefix + job_id) if _debounce else False
+            can_debounce = _debounce and job_exists and not result_exists and not in_progress
 
-            if (job_exists or result_exists) and not (
-                _debounce and job_exists and not result_exists and not in_progress
-            ):
+            if (job_exists or result_exists) and not can_debounce:
                 await pipe.reset()
                 return None
 
-            if _debounce and job_exists:
+            now_ms = timestamp_ms()
+            if can_debounce:
                 existing_job_data = await pipe.get(job_key)
                 _, _, _, _, enqueue_time_ms = deserialize_job_raw(existing_job_data, deserializer=self.job_deserializer)
-                if debounce_max_ms is not None and timestamp_ms() - enqueue_time_ms >= debounce_max_ms:
+                if debounce_max_ms is not None and now_ms - enqueue_time_ms >= debounce_max_ms:
                     await pipe.reset()
                     return None
             else:
-                enqueue_time_ms = timestamp_ms()
+                enqueue_time_ms = now_ms
             if _defer_until is not None:
                 score = to_unix_ms(_defer_until)
             elif defer_by_ms:
-                score = enqueue_time_ms + defer_by_ms
+                score = now_ms + defer_by_ms
             else:
-                score = enqueue_time_ms
+                score = now_ms
 
-            expires_ms = expires_ms or score - enqueue_time_ms + self.expires_extra_ms
+            expires_ms = expires_ms or score - now_ms + self.expires_extra_ms
 
             job = serialize_job(function, args, kwargs, _job_try, enqueue_time_ms, serializer=self.job_serializer)
             pipe.multi()

@@ -295,10 +295,12 @@ async def test_debounce_updates_defer_time(arq_redis: ArqRedis):
     assert isinstance(j1, Job)
     score1 = await arq_redis.zscore(default_queue_name, 'debounce_id')
 
-    # when: we enqueue the same job with debounce and a new defer
-    j2 = await arq_redis.enqueue_job('foobar', _job_id='debounce_id', _debounce=True, _defer_by=10)
+    await asyncio.sleep(0.05)
 
-    # then: the job is returned (not None) and the score is updated
+    # when: we enqueue the same job with debounce and the same defer
+    j2 = await arq_redis.enqueue_job('foobar', _job_id='debounce_id', _debounce=True, _defer_by=5)
+
+    # then: the job is returned (not None) and the score is updated (deferred from now)
     assert isinstance(j2, Job)
     score2 = await arq_redis.zscore(default_queue_name, 'debounce_id')
     assert score2 > score1
