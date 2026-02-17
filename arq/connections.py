@@ -126,6 +126,8 @@ class ArqRedis(BaseRedis):
         _defer_by: Union[None, int, float, timedelta] = None,
         _expires: Union[None, int, float, timedelta] = None,
         _job_try: Optional[int] = None,
+        _debounce: bool = False,
+        _debounce_max: Union[None, int, float, timedelta] = None,
         **kwargs: Any,
     ) -> Optional[Job]:
         """
@@ -140,9 +142,15 @@ class ArqRedis(BaseRedis):
         :param _expires: do not start or retry a job after this duration;
             defaults to 24 hours plus deferring time, if any
         :param _job_try: useful when re-enqueueing jobs within a job
+        :param _debounce: if True and a queued job with the same ID exists, update its defer time
+            instead of returning None
+        :param _debounce_max: maximum total time from the original enqueue time before debouncing
+            stops and the job is allowed to run
         :param kwargs: any keyword arguments to pass to the function
         :return: :class:`arq.jobs.Job` instance or ``None`` if a job with this ID already exists
         """
+        if _debounce and not _job_id:
+            raise RuntimeError("'_debounce' requires '_job_id' to be set")
         if _queue_name is None:
             _queue_name = self.default_queue_name
         job_id = _job_id or uuid4().hex

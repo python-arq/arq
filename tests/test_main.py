@@ -283,6 +283,12 @@ async def test_get_jobs(arq_redis: ArqRedis):
     assert isinstance(jobs[2], JobDef)
 
 
+async def test_debounce_requires_job_id(arq_redis: ArqRedis):
+    # when
+    with pytest.raises(RuntimeError, match="'_debounce' requires '_job_id'"):
+        await arq_redis.enqueue_job('foobar', _debounce=True)
+
+
 async def test_enqueue_multiple(arq_redis: ArqRedis, caplog):
     caplog.set_level(logging.DEBUG)
     results = await asyncio.gather(*[arq_redis.enqueue_job('foobar', i, _job_id='testing') for i in range(10)])
