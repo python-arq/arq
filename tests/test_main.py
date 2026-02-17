@@ -321,6 +321,19 @@ async def test_debounce_preserves_enqueue_time(arq_redis: ArqRedis):
     assert info2.enqueue_time == info1.enqueue_time
 
 
+async def test_debounce_max_stops_debouncing(arq_redis: ArqRedis):
+    # given: a job enqueued with a very short debounce_max
+    j1 = await arq_redis.enqueue_job('foobar', _job_id='debounce_id', _defer_by=5)
+    assert isinstance(j1, Job)
+
+    # when: we wait longer than debounce_max and try to debounce
+    await asyncio.sleep(0.1)
+    j2 = await arq_redis.enqueue_job('foobar', _job_id='debounce_id', _debounce=True, _defer_by=10, _debounce_max=0.05)
+
+    # then: debounce is refused, returns None (let existing job run)
+    assert j2 is None
+
+
 async def test_enqueue_multiple(arq_redis: ArqRedis, caplog):
     caplog.set_level(logging.DEBUG)
     results = await asyncio.gather(*[arq_redis.enqueue_job('foobar', i, _job_id='testing') for i in range(10)])

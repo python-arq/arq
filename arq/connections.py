@@ -160,6 +160,7 @@ class ArqRedis(BaseRedis):
 
         defer_by_ms = to_ms(_defer_by)
         expires_ms = to_ms(_expires)
+        debounce_max_ms = to_ms(_debounce_max)
 
         async with self.pipeline(transaction=True) as pipe:
             await pipe.watch(job_key)
@@ -173,6 +174,9 @@ class ArqRedis(BaseRedis):
             if _debounce and job_exists:
                 existing_job_data = await pipe.get(job_key)
                 _, _, _, _, enqueue_time_ms = deserialize_job_raw(existing_job_data, deserializer=self.job_deserializer)
+                if debounce_max_ms is not None and timestamp_ms() - enqueue_time_ms >= debounce_max_ms:
+                    await pipe.reset()
+                    return None
             else:
                 enqueue_time_ms = timestamp_ms()
             if _defer_until is not None:
