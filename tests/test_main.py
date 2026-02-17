@@ -334,6 +334,23 @@ async def test_debounce_max_stops_debouncing(arq_redis: ArqRedis):
     assert j2 is None
 
 
+async def test_debounce_does_not_touch_in_progress_job(arq_redis: ArqRedis):
+    # given: a job that is in progress (has in_progress key)
+    from arq.constants import in_progress_key_prefix
+
+    await arq_redis.enqueue_job('foobar', _job_id='debounce_id', _defer_by=5)
+    score_before = await arq_redis.zscore(default_queue_name, 'debounce_id')
+    await arq_redis.set(in_progress_key_prefix + 'debounce_id', b'1')
+
+    # when: we try to debounce
+    j2 = await arq_redis.enqueue_job('foobar', _job_id='debounce_id', _debounce=True, _defer_by=10)
+
+    # then: returns None, job score is unchanged
+    assert j2 is None
+    score_after = await arq_redis.zscore(default_queue_name, 'debounce_id')
+    assert score_after == score_before
+
+
 async def test_enqueue_multiple(arq_redis: ArqRedis, caplog):
     caplog.set_level(logging.DEBUG)
     results = await asyncio.gather(*[arq_redis.enqueue_job('foobar', i, _job_id='testing') for i in range(10)])

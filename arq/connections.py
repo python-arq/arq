@@ -13,7 +13,7 @@ from redis.asyncio.retry import Retry
 from redis.asyncio.sentinel import Sentinel
 from redis.exceptions import RedisError, WatchError
 
-from .constants import default_queue_name, expires_extra_ms, job_key_prefix, result_key_prefix
+from .constants import default_queue_name, expires_extra_ms, in_progress_key_prefix, job_key_prefix, result_key_prefix
 from .jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, deserialize_job_raw, serialize_job
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
@@ -166,8 +166,11 @@ class ArqRedis(BaseRedis):
             await pipe.watch(job_key)
             job_exists = await pipe.exists(job_key)
             result_exists = await pipe.exists(result_key_prefix + job_id)
+            in_progress = await pipe.exists(in_progress_key_prefix + job_id) if _debounce else False
 
-            if (job_exists or result_exists) and not (_debounce and job_exists and not result_exists):
+            if (job_exists or result_exists) and not (
+                _debounce and job_exists and not result_exists and not in_progress
+            ):
                 await pipe.reset()
                 return None
 
