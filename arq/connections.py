@@ -163,7 +163,10 @@ class ArqRedis(BaseRedis):
 
         async with self.pipeline(transaction=True) as pipe:
             await pipe.watch(job_key)
-            if await pipe.exists(job_key, result_key_prefix + job_id):
+            job_exists = await pipe.exists(job_key)
+            result_exists = await pipe.exists(result_key_prefix + job_id)
+
+            if (job_exists or result_exists) and not (_debounce and job_exists and not result_exists):
                 await pipe.reset()
                 return None
 
