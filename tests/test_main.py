@@ -304,6 +304,23 @@ async def test_debounce_updates_defer_time(arq_redis: ArqRedis):
     assert score2 > score1
 
 
+async def test_debounce_preserves_enqueue_time(arq_redis: ArqRedis):
+    # given: a job enqueued
+    j1 = await arq_redis.enqueue_job('foobar', _job_id='debounce_id', _defer_by=5)
+    assert isinstance(j1, Job)
+    info1 = await j1.info()
+
+    await asyncio.sleep(0.05)
+
+    # when: debounced
+    j2 = await arq_redis.enqueue_job('foobar', _job_id='debounce_id', _debounce=True, _defer_by=10)
+    assert isinstance(j2, Job)
+    info2 = await j2.info()
+
+    # then: enqueue_time is preserved from the original job
+    assert info2.enqueue_time == info1.enqueue_time
+
+
 async def test_enqueue_multiple(arq_redis: ArqRedis, caplog):
     caplog.set_level(logging.DEBUG)
     results = await asyncio.gather(*[arq_redis.enqueue_job('foobar', i, _job_id='testing') for i in range(10)])

@@ -14,7 +14,7 @@ from redis.asyncio.sentinel import Sentinel
 from redis.exceptions import RedisError, WatchError
 
 from .constants import default_queue_name, expires_extra_ms, job_key_prefix, result_key_prefix
-from .jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
+from .jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, deserialize_job_raw, serialize_job
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
 logger = logging.getLogger('arq.connections')
@@ -170,7 +170,11 @@ class ArqRedis(BaseRedis):
                 await pipe.reset()
                 return None
 
-            enqueue_time_ms = timestamp_ms()
+            if _debounce and job_exists:
+                existing_job_data = await pipe.get(job_key)
+                _, _, _, _, enqueue_time_ms = deserialize_job_raw(existing_job_data, deserializer=self.job_deserializer)
+            else:
+                enqueue_time_ms = timestamp_ms()
             if _defer_until is not None:
                 score = to_unix_ms(_defer_until)
             elif defer_by_ms:
