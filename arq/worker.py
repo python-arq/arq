@@ -601,7 +601,7 @@ class Worker:
             else:
                 result_str = '' if result is None or not self.log_results else truncate(repr(result))
             finally:
-                del self.job_tasks[job_id]
+                self.job_tasks.pop(job_id, None)
 
         except (Exception, asyncio.CancelledError) as e:
             finished_ms = timestamp_ms()
