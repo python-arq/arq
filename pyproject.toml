@@ -29,6 +29,7 @@ classifiers = [
     'Programming Language :: Python :: 3.11',
     'Programming Language :: Python :: 3.12',
     'Programming Language :: Python :: 3.13',
+    'Programming Language :: Python :: 3.14',
     'Topic :: Internet',
     'Topic :: Software Development :: Libraries :: Python Modules',
     'Topic :: System :: Clustering',
@@ -90,7 +91,13 @@ required-version = '>=0.8.4'
 
 [tool.pytest.ini_options]
 testpaths = 'tests'
-filterwarnings = ['error']
+filterwarnings = [
+    'error',
+    # Emitted by pytest-asyncio, necessary until we update it:
+   '''ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning''',
+   '''ignore:'asyncio.get_event_loop_policy' is deprecated:DeprecationWarning''',
+   '''ignore:'asyncio.set_event_loop_policy' is deprecated:DeprecationWarning''',
+]
 asyncio_mode = 'auto'
 timeout = 10
 

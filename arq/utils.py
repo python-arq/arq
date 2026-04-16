@@ -99,7 +99,7 @@ def to_seconds(td: Optional['SecondsTimedelta']) -> Optional[float]:
 
 
 async def poll(step: float = 0.5) -> AsyncGenerator[float, None]:
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     start = loop.time()
     while True:
         before = loop.time()

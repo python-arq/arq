@@ -1,5 +1,5 @@
-import asyncio
 import dataclasses
+import inspect
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional, Union
@@ -175,7 +175,7 @@ def cron(
     else:
         coroutine_ = coroutine
 
-    if not asyncio.iscoroutinefunction(coroutine_):
+    if not inspect.iscoroutinefunction(coroutine_):
         raise RuntimeError(f'{coroutine_} is not a coroutine function')
     timeout = to_seconds(timeout)
     keep_result = to_seconds(keep_result)

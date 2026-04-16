@@ -86,7 +86,7 @@ def func(
     else:
         coroutine_ = coroutine
 
-    if not asyncio.iscoroutinefunction(coroutine_):
+    if not inspect.iscoroutinefunction(coroutine_):
         raise RuntimeError(f'{coroutine_} is not a coroutine function')
     timeout = to_seconds(timeout)
     keep_result = to_seconds(keep_result)
@@ -267,7 +267,11 @@ class Worker:
         # self.job_tasks holds references the actual jobs running
         self.job_tasks: dict[str, asyncio.Task[Any]] = {}
         self.main_task: Optional[asyncio.Task[None]] = None
-        self.loop = asyncio.get_event_loop()
+        try:
+            self.loop = asyncio.get_event_loop()
+        except RuntimeError:
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
         self.ctx = ctx or {}
         max_timeout = max(f.timeout_s or self.job_timeout_s for f in self.functions.values())
         self.in_progress_timeout_s = (max_timeout or 0) + 10
