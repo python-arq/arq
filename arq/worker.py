@@ -622,7 +622,7 @@ class Worker:
                 finish = True
                 self.aborting_tasks.remove(job_id)
                 self.jobs_failed += 1
-            elif self.retry_jobs and isinstance(e, (asyncio.CancelledError, RetryJob)):
+            elif self.retry_jobs and isinstance(e, (asyncio.CancelledError, asyncio.TimeoutError, RetryJob)):
                 logger.info('%6.2fs ↻ %s cancelled, will be run again', t, ref)
                 self.jobs_retried += 1
             else:
