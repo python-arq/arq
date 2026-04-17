@@ -886,8 +886,12 @@ class Worker:
 
 def get_kwargs(settings_cls: 'WorkerSettingsType') -> dict[str, NameError]:
     worker_args = set(inspect.signature(Worker).parameters.keys())
-    d = settings_cls if isinstance(settings_cls, dict) else settings_cls.__dict__
-    return {k: v for k, v in d.items() if k in worker_args}
+    if isinstance(settings_cls, dict):
+        return {k: v for k, v in settings_cls.items() if k in worker_args}
+    else:
+        return {
+            k: getattr(settings_cls, k) for k in dir(settings_cls) if k in worker_args
+        }
 
 
 def create_worker(settings_cls: 'WorkerSettingsType', **kwargs: Any) -> Worker:
