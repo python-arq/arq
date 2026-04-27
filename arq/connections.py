@@ -13,7 +13,18 @@ from redis.asyncio.retry import Retry
 from redis.asyncio.sentinel import Sentinel
 from redis.exceptions import RedisError, WatchError
 
-from .constants import default_queue_name, expires_extra_ms, job_key_prefix, result_key_prefix
+from .constants import (
+    DEFAULT_PRIORITY,
+    MAX_PRIORITY,
+    MIN_PRIORITY,
+    compute_ready_score,
+    default_queue_name,
+    deferred_queue_key,
+    expires_extra_ms,
+    job_key_prefix,
+    ready_queue_key,
+    result_key_prefix,
+)
 from .jobs import Deserializer, Job, JobDef, JobResult, Serializer, deserialize_job, serialize_job
 from .utils import timestamp_ms, to_ms, to_unix_ms
 
@@ -126,6 +137,7 @@ class ArqRedis(BaseRedis):
         _defer_by: Union[None, int, float, timedelta] = None,
         _expires: Union[None, int, float, timedelta] = None,
         _job_try: Optional[int] = None,
+        _priority: int = DEFAULT_PRIORITY,
         **kwargs: Any,
     ) -> Optional[Job]:
         """
@@ -140,9 +152,13 @@ class ArqRedis(BaseRedis):
         :param _expires: do not start or retry a job after this duration;
             defaults to 24 hours plus deferring time, if any
         :param _job_try: useful when re-enqueueing jobs within a job
+        :param _priority: integer priority in the range 1..10 (1 = highest, 10 = lowest);
+            defaults to 5. Within the same priority, jobs run FIFO by enqueue time.
         :param kwargs: any keyword arguments to pass to the function
         :return: :class:`arq.jobs.Job` instance or ``None`` if a job with this ID already exists
         """
+        if not (MIN_PRIORITY <= _priority <= MAX_PRIORITY):
+            raise ValueError(f'_priority must be between {MIN_PRIORITY} and {MAX_PRIORITY}, got {_priority}')
         if _queue_name is None:
             _queue_name = self.default_queue_name
         job_id = _job_id or uuid4().hex
@@ -161,24 +177,79 @@ class ArqRedis(BaseRedis):
 
             enqueue_time_ms = timestamp_ms()
             if _defer_until is not None:
-                score = to_unix_ms(_defer_until)
+                run_at_ms = to_unix_ms(_defer_until)
+                deferred = True
             elif defer_by_ms:
-                score = enqueue_time_ms + defer_by_ms
+                run_at_ms = enqueue_time_ms + defer_by_ms
+                deferred = True
             else:
-                score = enqueue_time_ms
+                run_at_ms = enqueue_time_ms
+                deferred = False
 
-            expires_ms = expires_ms or score - enqueue_time_ms + self.expires_extra_ms
+            expires_ms = expires_ms or run_at_ms - enqueue_time_ms + self.expires_extra_ms
 
-            job = serialize_job(function, args, kwargs, _job_try, enqueue_time_ms, serializer=self.job_serializer)
+            job = serialize_job(
+                function,
+                args,
+                kwargs,
+                _job_try,
+                enqueue_time_ms,
+                priority=_priority,
+                serializer=self.job_serializer,
+            )
             pipe.multi()
             pipe.psetex(job_key, expires_ms, job)
-            pipe.zadd(_queue_name, {job_id: score})
+            if deferred:
+                pipe.zadd(deferred_queue_key(_queue_name), {job_id: run_at_ms})
+            else:
+                pipe.zadd(
+                    ready_queue_key(_queue_name),
+                    {job_id: compute_ready_score(_priority, enqueue_time_ms)},
+                )
             try:
                 await pipe.execute()
             except WatchError:
                 # job got enqueued since we checked 'job_exists'
                 return None
         return Job(job_id, redis=self, _queue_name=_queue_name, _deserializer=self.job_deserializer)
+
+    async def queue_size(self, queue_name: Optional[str] = None) -> int:
+        """
+        Total number of jobs in this queue across both the ready and deferred sub-zsets.
+        """
+        if queue_name is None:
+            queue_name = self.default_queue_name
+        async with self.pipeline(transaction=False) as pipe:
+            pipe.zcard(ready_queue_key(queue_name))
+            pipe.zcard(deferred_queue_key(queue_name))
+            ready, deferred = await pipe.execute()
+        return int(ready) + int(deferred)
+
+    async def job_queue_score(
+        self, queue_name: str, job_id: str
+    ) -> tuple[Optional[int], bool]:
+        """
+        Look up a job's score in the queue. Returns ``(score, is_deferred)``;
+        ``score`` is ``None`` when the job is in neither sub-zset.
+        """
+        async with self.pipeline(transaction=False) as pipe:
+            pipe.zscore(ready_queue_key(queue_name), job_id)
+            pipe.zscore(deferred_queue_key(queue_name), job_id)
+            ready_score, deferred_score = await pipe.execute()
+        if ready_score is not None:
+            return int(ready_score), False
+        if deferred_score is not None:
+            return int(deferred_score), True
+        return None, False
+
+    @staticmethod
+    def zrem_from_queue(pipe: Any, queue_name: str, job_id: str) -> None:
+        """
+        Stage ``ZREM`` against both sub-zsets on an existing pipeline.
+        Idempotent — safe even if the job only lives in one of them.
+        """
+        pipe.zrem(ready_queue_key(queue_name), job_id)
+        pipe.zrem(deferred_queue_key(queue_name), job_id)
 
     async def _get_job_result(self, key: bytes) -> JobResult:
         job_id = key[len(result_key_prefix) :].decode()
@@ -209,11 +280,16 @@ class ArqRedis(BaseRedis):
 
     async def queued_jobs(self, *, queue_name: Optional[str] = None) -> list[JobDef]:
         """
-        Get information about queued, mostly useful when testing.
+        Get information about queued jobs across both the ready and deferred sub-zsets.
+        Mostly useful when testing.
         """
         if queue_name is None:
             queue_name = self.default_queue_name
-        jobs = await self.zrange(queue_name, withscores=True, start=0, end=-1)
+        async with self.pipeline(transaction=False) as pipe:
+            pipe.zrange(ready_queue_key(queue_name), withscores=True, start=0, end=-1)
+            pipe.zrange(deferred_queue_key(queue_name), withscores=True, start=0, end=-1)
+            ready, deferred = await pipe.execute()
+        jobs = list(ready) + list(deferred)
         return await asyncio.gather(*[self._get_job_def(job_id, int(score)) for job_id, score in jobs])
 
 
