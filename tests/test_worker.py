@@ -12,7 +12,14 @@ import pytest
 import redis.exceptions
 
 from arq.connections import ArqRedis, RedisSettings
-from arq.constants import abort_jobs_ss, default_queue_name, expires_extra_ms, health_check_key_suffix, job_key_prefix
+from arq.constants import (
+    abort_jobs_ss,
+    default_queue_name,
+    expires_extra_ms,
+    health_check_key_suffix,
+    job_key_prefix,
+    ready_queue_key,
+)
 from arq.jobs import Job, JobStatus
 from arq.worker import (
     FailedJobs,
@@ -517,7 +524,7 @@ async def test_log_health_check(arq_redis: ArqRedis, worker, caplog):
 async def test_remain_keys(test_redis_settings: RedisSettings, arq_redis: ArqRedis, worker, create_pool):
     redis2 = await create_pool(test_redis_settings)
     await arq_redis.enqueue_job('foobar', _job_id='testing')
-    assert sorted(await redis2.keys('*')) == [b'arq:job:testing', b'arq:queue']
+    assert sorted(await redis2.keys('*')) == [b'arq:job:testing', b'arq:queue:ready']
     worker: Worker = worker(functions=[foobar])
     await worker.main()
     assert sorted(await redis2.keys('*')) == [b'arq:queue:health-check', b'arq:result:testing']
@@ -527,7 +534,7 @@ async def test_remain_keys(test_redis_settings: RedisSettings, arq_redis: ArqRed
 
 async def test_remain_keys_no_results(arq_redis: ArqRedis, worker):
     await arq_redis.enqueue_job('foobar', _job_id='testing')
-    assert sorted(await arq_redis.keys('*')) == [b'arq:job:testing', b'arq:queue']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:job:testing', b'arq:queue:ready']
     worker: Worker = worker(functions=[func(foobar, keep_result=0)])
     await worker.main()
     assert sorted(await arq_redis.keys('*')) == [b'arq:queue:health-check']
@@ -535,7 +542,7 @@ async def test_remain_keys_no_results(arq_redis: ArqRedis, worker):
 
 async def test_remain_keys_keep_results_forever_in_function(arq_redis: ArqRedis, worker):
     await arq_redis.enqueue_job('foobar', _job_id='testing')
-    assert sorted(await arq_redis.keys('*')) == [b'arq:job:testing', b'arq:queue']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:job:testing', b'arq:queue:ready']
     worker: Worker = worker(functions=[func(foobar, keep_result_forever=True)])
     await worker.main()
     assert sorted(await arq_redis.keys('*')) == [b'arq:queue:health-check', b'arq:result:testing']
@@ -545,7 +552,7 @@ async def test_remain_keys_keep_results_forever_in_function(arq_redis: ArqRedis,
 
 async def test_remain_keys_keep_results_forever(arq_redis: ArqRedis, worker):
     await arq_redis.enqueue_job('foobar', _job_id='testing')
-    assert sorted(await arq_redis.keys('*')) == [b'arq:job:testing', b'arq:queue']
+    assert sorted(await arq_redis.keys('*')) == [b'arq:job:testing', b'arq:queue:ready']
     worker: Worker = worker(functions=[func(foobar)], keep_result_forever=True)
     await worker.main()
     assert sorted(await arq_redis.keys('*')) == [b'arq:queue:health-check', b'arq:result:testing']
@@ -612,7 +619,10 @@ async def test_error_success(arq_redis: ArqRedis, worker):
 async def test_many_jobs_expire(arq_redis: ArqRedis, worker, caplog):
     caplog.set_level(logging.INFO)
     await arq_redis.enqueue_job('foobar')
-    await asyncio.gather(*[arq_redis.zadd(default_queue_name, {f'testing-{i}': 1}) for i in range(100)])
+    # seed 100 dangling entries in the ready zset (no matching job blob) -> they hit the "expired" path.
+    await asyncio.gather(
+        *[arq_redis.zadd(ready_queue_key(default_queue_name), {f'testing-{i}': 1}) for i in range(100)]
+    )
     worker: Worker = worker(functions=[foobar])
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 0
@@ -644,7 +654,7 @@ async def test_queue_read_limit_equals_max_jobs(arq_redis: ArqRedis, worker):
     for _ in range(4):
         await arq_redis.enqueue_job('foobar')
 
-    assert await arq_redis.zcard(default_queue_name) == 4
+    assert await arq_redis.queue_size(default_queue_name) == 4
     worker: Worker = worker(functions=[foobar], queue_read_limit=2)
     assert worker.queue_read_limit == 2
     assert worker.jobs_complete == 0
@@ -653,14 +663,14 @@ async def test_queue_read_limit_equals_max_jobs(arq_redis: ArqRedis, worker):
 
     await worker._poll_iteration()
     await asyncio.sleep(0.1)
-    assert await arq_redis.zcard(default_queue_name) == 2
+    assert await arq_redis.queue_size(default_queue_name) == 2
     assert worker.jobs_complete == 2
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
 
     await worker._poll_iteration()
     await asyncio.sleep(0.1)
-    assert await arq_redis.zcard(default_queue_name) == 0
+    assert await arq_redis.queue_size(default_queue_name) == 0
     assert worker.jobs_complete == 4
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
@@ -677,7 +687,7 @@ async def test_custom_queue_read_limit(arq_redis: ArqRedis, worker):
     for _ in range(4):
         await arq_redis.enqueue_job('foobar')
 
-    assert await arq_redis.zcard(default_queue_name) == 4
+    assert await arq_redis.queue_size(default_queue_name) == 4
     worker: Worker = worker(functions=[foobar], max_jobs=4, queue_read_limit=2)
     assert worker.jobs_complete == 0
     assert worker.jobs_failed == 0
@@ -685,14 +695,14 @@ async def test_custom_queue_read_limit(arq_redis: ArqRedis, worker):
 
     await worker._poll_iteration()
     await asyncio.sleep(0.1)
-    assert await arq_redis.zcard(default_queue_name) == 2
+    assert await arq_redis.queue_size(default_queue_name) == 2
     assert worker.jobs_complete == 2
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0
 
     await worker._poll_iteration()
     await asyncio.sleep(0.1)
-    assert await arq_redis.zcard(default_queue_name) == 0
+    assert await arq_redis.queue_size(default_queue_name) == 0
     assert worker.jobs_complete == 4
     assert worker.jobs_failed == 0
     assert worker.jobs_retried == 0

@@ -12,7 +12,7 @@ import pytest
 from dirty_equals import IsInt, IsNow
 
 from arq.connections import ArqRedis, RedisSettings
-from arq.constants import default_queue_name
+from arq.constants import DEFAULT_PRIORITY, PRIORITY_FACTOR, default_queue_name, deferred_queue_key
 from arq.jobs import Job, JobDef, SerializationError
 from arq.utils import timestamp_ms
 from arq.worker import Retry, Worker, func
@@ -139,7 +139,8 @@ async def test_job_info(arq_redis: ArqRedis):
     assert info.function == 'foobar'
     assert info.args == (123,)
     assert info.kwargs == {'a': 456}
-    assert abs(t_before * 1000 - info.score) < 1000
+    # ready zset score is PRIORITY_FACTOR*priority + ts_ms; strip the priority bucket to recover ts.
+    assert abs(t_before * 1000 - (info.score - PRIORITY_FACTOR * DEFAULT_PRIORITY)) < 1000
 
 
 async def test_repeat_job(arq_redis: ArqRedis):
@@ -152,14 +153,14 @@ async def test_repeat_job(arq_redis: ArqRedis):
 async def test_defer_until(arq_redis: ArqRedis):
     j1 = await arq_redis.enqueue_job('foobar', _job_id='job_id', _defer_until=datetime(2032, 1, 1, tzinfo=timezone.utc))
     assert isinstance(j1, Job)
-    score = await arq_redis.zscore(default_queue_name, 'job_id')
+    score = await arq_redis.zscore(deferred_queue_key(default_queue_name), 'job_id')
     assert score == 1_956_528_000_000
 
 
 async def test_defer_by(arq_redis: ArqRedis):
     j1 = await arq_redis.enqueue_job('foobar', _job_id='job_id', _defer_by=20)
     assert isinstance(j1, Job)
-    score = await arq_redis.zscore(default_queue_name, 'job_id')
+    score = await arq_redis.zscore(deferred_queue_key(default_queue_name), 'job_id')
     ts = timestamp_ms()
     assert score > ts + 19000
     assert ts + 21000 > score
@@ -257,6 +258,7 @@ async def test_get_jobs(arq_redis: ArqRedis):
             'enqueue_time': IsNow(tz='UTC'),
             'score': IsInt(),
             'job_id': '1',
+            'priority': DEFAULT_PRIORITY,
         },
         {
             'function': 'second',
@@ -266,6 +268,7 @@ async def test_get_jobs(arq_redis: ArqRedis):
             'enqueue_time': IsNow(tz='UTC'),
             'score': IsInt(),
             'job_id': '2',
+            'priority': DEFAULT_PRIORITY,
         },
         {
             'function': 'third',
@@ -275,6 +278,7 @@ async def test_get_jobs(arq_redis: ArqRedis):
             'enqueue_time': IsNow(tz='UTC'),
             'score': IsInt(),
             'job_id': '3',
+            'priority': DEFAULT_PRIORITY,
         },
     ]
     assert jobs[0].score < jobs[1].score < jobs[2].score

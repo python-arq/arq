@@ -14,18 +14,32 @@ from typing import TYPE_CHECKING, Any, Callable, Optional, Union, cast
 from redis.exceptions import ResponseError, WatchError
 
 from arq.cron import CronJob
-from arq.jobs import Deserializer, JobResult, SerializationError, Serializer, deserialize_job_raw, serialize_result
+from arq.jobs import (
+    DeserializationError,
+    Deserializer,
+    JobResult,
+    SerializationError,
+    Serializer,
+    deserialize_job,
+    deserialize_job_raw,
+    serialize_result,
+)
 
 from .connections import ArqRedis, RedisSettings, create_pool, log_redis_info
 from .constants import (
+    DEFAULT_PRIORITY,
+    PRIORITY_FACTOR,
     abort_job_max_age,
     abort_jobs_ss,
+    compute_ready_score,
     default_queue_name,
+    deferred_queue_key,
     expires_extra_ms,
     health_check_key_suffix,
     in_progress_key_prefix,
     job_key_prefix,
     keep_cronjob_progress,
+    ready_queue_key,
     result_key_prefix,
     retry_key_prefix,
 )
@@ -369,15 +383,16 @@ class Worker:
                 if 0 <= self.max_burst_jobs <= self._jobs_started():
                     await asyncio.gather(*self.tasks.values())
                     return None
-                queued_jobs = await self.pool.zcard(self.queue_name)
+                queued_jobs = await self.pool.queue_size(self.queue_name)
                 if queued_jobs == 0:
                     await asyncio.gather(*self.tasks.values())
                     return None
 
     async def _poll_iteration(self) -> None:
         """
-        Get ids of pending jobs from the main queue sorted-set data structure and start those jobs, remove
-        any finished tasks from self.tasks.
+        Promote any due-deferred jobs into the ready zset, then get ids of pending jobs from the
+        ready sorted-set (sorted by priority then enqueue time) and start them. Also remove any
+        finished tasks from self.tasks.
         """
         count = self.queue_read_limit
         if self.burst and self.max_burst_jobs >= 0:
@@ -387,9 +402,15 @@ class Worker:
             count = min(burst_jobs_remaining, count)
         if self.allow_pick_jobs:
             if self.job_counter < self.max_jobs:
-                now = timestamp_ms()
+                await self._promote_deferred_jobs()
+                # ready zset is already time-filtered (deferred jobs live in a separate zset),
+                # so we read the lowest-score head with no upper bound on score.
                 job_ids = await self.pool.zrangebyscore(
-                    self.queue_name, min=float('-inf'), start=self._queue_read_offset, num=count, max=now
+                    ready_queue_key(self.queue_name),
+                    min=float('-inf'),
+                    max=float('+inf'),
+                    start=self._queue_read_offset,
+                    num=count,
                 )
 
                 await self.start_jobs(job_ids)
@@ -404,6 +425,37 @@ class Worker:
                 t.result()
 
         await self.heart_beat()
+
+    async def _promote_deferred_jobs(self) -> None:
+        """
+        Move every deferred job whose run-at time has passed into the ready zset, scored by
+        priority (read from the job blob) with the original run-at time as the FIFO tiebreak.
+        Idempotent across competing workers thanks to ZADD/ZREM semantics.
+        """
+        deferred_key = deferred_queue_key(self.queue_name)
+        ready_key = ready_queue_key(self.queue_name)
+        now = timestamp_ms()
+
+        due = await self.pool.zrangebyscore(deferred_key, min=float('-inf'), max=now, withscores=True)
+        if not due:
+            return
+
+        async with self.pool.pipeline(transaction=False) as pipe:
+            for job_id_b, _ in due:
+                pipe.get(job_key_prefix + job_id_b.decode())
+            blobs = await pipe.execute()
+
+        async with self.pool.pipeline(transaction=True) as pipe:
+            for (job_id_b, defer_ms), blob in zip(due, blobs):
+                if blob:
+                    try:
+                        priority = deserialize_job(blob, deserializer=self.job_deserializer).priority
+                    except DeserializationError:
+                        priority = DEFAULT_PRIORITY
+                    pipe.zadd(ready_key, {job_id_b: compute_ready_score(priority, int(defer_ms))})
+                # if the job blob expired we still want to drop the dangling deferred entry
+                pipe.zrem(deferred_key, job_id_b)
+            await pipe.execute()
 
     async def _cancel_aborted_jobs(self) -> None:
         """
@@ -451,11 +503,10 @@ class Worker:
             async with self.pool.pipeline(transaction=True) as pipe:
                 await pipe.watch(in_progress_key)
                 ongoing_exists = await pipe.exists(in_progress_key)
-                score = await pipe.zscore(self.queue_name, job_id)
-                if ongoing_exists or not score or score > timestamp_ms():
-                    # job already started elsewhere, or already finished and removed from queue
-                    # if score > ts_now,
-                    # it means probably the job was re-enqueued with a delay in another worker
+                score = await pipe.zscore(ready_queue_key(self.queue_name), job_id)
+                if ongoing_exists or not score:
+                    # job already started elsewhere, or already finished and removed from the
+                    # ready zset (e.g. re-deferred for retry by another worker)
                     self.job_counter = self.job_counter - 1
                     self.sem.release()
                     logger.debug('job %s already running elsewhere', job_id)
@@ -489,6 +540,7 @@ class Worker:
                 abort_job = False
 
         function_name, enqueue_time_ms = '<unknown>', 0
+        priority = DEFAULT_PRIORITY
         args: tuple[Any, ...] = ()
         kwargs: dict[Any, Any] = {}
 
@@ -505,6 +557,7 @@ class Worker:
                 start_ms=start_ms,
                 finished_ms=timestamp_ms(),
                 ref=f'{job_id}:{function_name}',
+                priority=priority,
                 serializer=self.job_serializer,
                 queue_name=self.queue_name,
                 job_id=job_id,
@@ -516,7 +569,7 @@ class Worker:
             return await job_failed(JobExecutionFailed('job expired'))
 
         try:
-            function_name, args, kwargs, enqueue_job_try, enqueue_time_ms = deserialize_job_raw(
+            function_name, args, kwargs, enqueue_job_try, enqueue_time_ms, priority = deserialize_job_raw(
                 v, deserializer=self.job_deserializer
             )
         except SerializationError as e:
@@ -564,6 +617,7 @@ class Worker:
                 ref,
                 self.queue_name,
                 job_id=job_id,
+                priority=priority,
                 serializer=self.job_serializer,
             )
             return await asyncio.shield(self.finish_failed_job(job_id, result_data))
@@ -589,8 +643,11 @@ class Worker:
         try:
             s = args_to_string(args, kwargs)
             extra = f' try={job_try}' if job_try > 1 else ''
-            if (start_ms - score) > 1200:
-                extra += f' delayed={(start_ms - score) / 1000:0.2f}s'
+            # `score` is the ready-zset score (PRIORITY_FACTOR*priority + run_at_ms);
+            # subtracting the priority bucket recovers the actual intended run time.
+            run_at_ms = score - PRIORITY_FACTOR * priority
+            if (start_ms - run_at_ms) > 1200:
+                extra += f' delayed={(start_ms - run_at_ms) / 1000:0.2f}s'
             logger.info('%6.2fs → %s(%s)%s', (start_ms - enqueue_time_ms) / 1000, ref, s, extra)
             self.job_tasks[job_id] = task = self.loop.create_task(function.coroutine(ctx, *args, **kwargs))
 
@@ -611,10 +668,11 @@ class Worker:
             finished_ms = timestamp_ms()
             t = (finished_ms - start_ms) / 1000
             if self.retry_jobs and isinstance(e, Retry):
+                # incr_score is interpreted as "defer-from-now in ms" by finish_job; the old
+                # zincrby-based math is no longer needed now that retry-with-defer rewrites
+                # the score absolutely against the deferred sub-zset.
                 incr_score = e.defer_score
                 logger.info('%6.2fs ↻ %s retrying job in %0.2fs', t, ref, (e.defer_score or 0) / 1000)
-                if e.defer_score:
-                    incr_score = e.defer_score + (timestamp_ms() - score)
                 self.jobs_retried += 1
             elif job_id in self.aborting_tasks and isinstance(e, asyncio.CancelledError):
                 logger.info('%6.2fs ⊘ %s aborted', t, ref)
@@ -658,6 +716,7 @@ class Worker:
                 ref,
                 self.queue_name,
                 job_id=job_id,
+                priority=priority,
                 serializer=self.job_serializer,
             )
 
@@ -703,9 +762,12 @@ class Worker:
                     tr.set(result_key_prefix + job_id, result_data, px=to_ms(expire))
                 delete_keys += [retry_key_prefix + job_id, job_key_prefix + job_id]
                 tr.zrem(abort_jobs_ss, job_id)
-                tr.zrem(self.queue_name, job_id)
+                ArqRedis.zrem_from_queue(tr, self.queue_name, job_id)
             elif incr_score:
-                tr.zincrby(self.queue_name, incr_score, job_id)
+                # retry-with-defer: move out of ready into deferred at run-at = now + incr_score ms
+                new_run_at_ms = timestamp_ms() + incr_score
+                tr.zrem(ready_queue_key(self.queue_name), job_id)
+                tr.zadd(deferred_queue_key(self.queue_name), {job_id: new_run_at_ms})
             if delete_keys:
                 tr.delete(*delete_keys)
             await tr.execute()
@@ -718,7 +780,7 @@ class Worker:
                 job_key_prefix + job_id,
             )
             tr.zrem(abort_jobs_ss, job_id)
-            tr.zrem(self.queue_name, job_id)
+            ArqRedis.zrem_from_queue(tr, self.queue_name, job_id)
             # result_data would only be None if serializing the result fails
             keep_result = self.keep_result_forever or self.keep_result_s > 0
             if result_data is not None and keep_result:  # pragma: no branch
@@ -776,10 +838,15 @@ class Worker:
             return
         self._last_health_check = now_ts
         pending_tasks = sum(not t.done() for t in self.tasks.values())
-        queued = await self.pool.zcard(self.queue_name)
+        async with self.pool.pipeline(transaction=False) as pipe:
+            pipe.zcard(ready_queue_key(self.queue_name))
+            pipe.zcard(deferred_queue_key(self.queue_name))
+            ready, deferred = await pipe.execute()
+        queued = int(ready) + int(deferred)
         info = (
             f'{datetime.now():%b-%d %H:%M:%S} j_complete={self.jobs_complete} j_failed={self.jobs_failed} '
-            f'j_retried={self.jobs_retried} j_ongoing={pending_tasks} queued={queued}'
+            f'j_retried={self.jobs_retried} j_ongoing={pending_tasks} queued={queued} '
+            f'ready={ready} deferred={deferred}'
         )
         await self.pool.psetex(  # type: ignore[no-untyped-call]
             self.health_check_key, int((self.health_check_interval + 1) * 1000), info.encode()

@@ -6,7 +6,13 @@ from dirty_equals import IsNow, IsStr
 
 from arq import Worker, func
 from arq.connections import ArqRedis, RedisSettings, create_pool
-from arq.constants import default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
+from arq.constants import (
+    DEFAULT_PRIORITY,
+    default_queue_name,
+    in_progress_key_prefix,
+    job_key_prefix,
+    result_key_prefix,
+)
 from arq.jobs import (
     DeserializationError,
     Job,
@@ -204,7 +210,24 @@ async def test_deserialize_info(arq_redis: ArqRedis):
 
 
 async def test_deserialize_job_raw():
-    assert deserialize_job_raw(pickle.dumps({'f': 1, 'a': 2, 'k': 3, 't': 4, 'et': 5})) == (1, 2, 3, 4, 5)
+    # legacy blob (no 'priority' key) -> default priority
+    assert deserialize_job_raw(pickle.dumps({'f': 1, 'a': 2, 'k': 3, 't': 4, 'et': 5})) == (
+        1,
+        2,
+        3,
+        4,
+        5,
+        DEFAULT_PRIORITY,
+    )
+    # new blob carrying explicit priority round-trips
+    assert deserialize_job_raw(pickle.dumps({'f': 1, 'a': 2, 'k': 3, 't': 4, 'et': 5, 'priority': 7})) == (
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+    )
     with pytest.raises(DeserializationError, match='unable to deserialize job'):
         deserialize_job_raw(b'123')
 
