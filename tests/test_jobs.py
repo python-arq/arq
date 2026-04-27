@@ -6,7 +6,13 @@ from dirty_equals import IsNow, IsStr
 
 from arq import Worker, func
 from arq.connections import ArqRedis, RedisSettings, create_pool
-from arq.constants import DEFAULT_PRIORITY, default_queue_name, in_progress_key_prefix, job_key_prefix, result_key_prefix
+from arq.constants import (
+    DEFAULT_PRIORITY,
+    default_queue_name,
+    in_progress_key_prefix,
+    job_key_prefix,
+    result_key_prefix,
+)
 from arq.jobs import (
     DeserializationError,
     Job,

@@ -225,9 +225,7 @@ class ArqRedis(BaseRedis):
             ready, deferred = await pipe.execute()
         return int(ready) + int(deferred)
 
-    async def job_queue_score(
-        self, queue_name: str, job_id: str
-    ) -> tuple[Optional[int], bool]:
+    async def job_queue_score(self, queue_name: str, job_id: str) -> tuple[Optional[int], bool]:
         """
         Look up a job's score in the queue. Returns ``(score, is_deferred)``;
         ``score`` is ``None`` when the job is in neither sub-zset.
