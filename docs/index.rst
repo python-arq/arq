@@ -151,6 +151,14 @@ You can access job information, status and job results using the :class:`arq.job
 
 .. literalinclude:: examples/job_results.py
 
+You can also access a job later if you already know its id by constructing a
+:class:`arq.jobs.Job` directly. You need to pass the ``job_id`` together with a
+redis instance (typically the same pool returned by :func:`arq.connections.create_pool`).
+If no job with that id exists, :func:`arq.jobs.Job.status` returns
+:attr:`arq.jobs.JobStatus.not_found`.
+
+.. literalinclude:: examples/job_by_id.py
+
 Retrying jobs and cancellation
 ..............................
 
