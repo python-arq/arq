@@ -2,6 +2,7 @@ import asyncio
 import logging.config
 import os
 import sys
+from multiprocessing import Process
 from signal import Signals
 from typing import TYPE_CHECKING, cast
 
@@ -20,6 +21,7 @@ health_check_help = 'Health Check: run a health check and exit.'
 watch_help = 'Watch a directory and reload the worker upon changes.'
 verbose_help = 'Enable verbose output.'
 logdict_help = "Import path for a dictionary in logdict form, to configure Arq's own logging."
+workers_help = 'Number of worker processes to spawn'
 
 
 @click.command('arq')
@@ -28,9 +30,12 @@ logdict_help = "Import path for a dictionary in logdict form, to configure Arq's
 @click.option('--burst/--no-burst', default=None, help=burst_help)
 @click.option('--check', is_flag=True, help=health_check_help)
 @click.option('--watch', type=click.Path(exists=True, dir_okay=True, file_okay=False), help=watch_help)
+@click.option('-w', '--workers', type=int, default=1, help=workers_help)
 @click.option('-v', '--verbose', is_flag=True, help=verbose_help)
 @click.option('--custom-log-dict', type=str, help=logdict_help)
-def cli(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: bool, custom_log_dict: str) -> None:
+def cli(
+    *, worker_settings: str, burst: bool, check: bool, watch: str, workers: int, verbose: bool, custom_log_dict: str
+) -> None:
     """
     Job queues in python with asyncio and redis.
 
@@ -49,8 +54,15 @@ def cli(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: 
     else:
         kwargs = {} if burst is None else {'burst': burst}
         if watch:
-            asyncio.run(watch_reload(watch, worker_settings_))
+            coroutine = watch_reload(watch, worker_settings_)
+            if workers > 1:
+                for _ in range(workers - 1):
+                    Process(target=asyncio.run, args=(coroutine,)).start()
+            asyncio.run(coroutine)
         else:
+            if workers > 1:
+                for _ in range(workers - 1):
+                    Process(target=run_worker, args=(worker_settings_,), kwargs=kwargs).start()
             run_worker(worker_settings_, **kwargs)
 
 

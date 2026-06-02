@@ -39,7 +39,7 @@ classifiers = [
 ]
 requires-python = '>=3.9'
 dependencies = [
-    'redis[hiredis]>=4.2.0,<6',
+    'redis[hiredis]>=4.2.0',
     'click>=8.0',
 ]
 dynamic = ['version']

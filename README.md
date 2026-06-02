@@ -1,3 +1,5 @@
+This is a fork that slightly modifies arq to allow for spawning multiple workers easily via CLI for the purposes of benchmarking.
+
 # arq
 
 [![CI](https://img.shields.io/github/actions/workflow/status/samuelcolvin/arq/ci.yml?branch=main&logo=github&label=CI)](https://github.com/samuelcolvin/arq/actions?query=event%3Apush+branch%3Amain+workflow%3ACI)

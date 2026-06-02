@@ -51,7 +51,14 @@ def test_run_watch(mocker, cancel_remaining_task):
     runner = CliRunner()
     result = runner.invoke(cli, ['tests.test_cli.WorkerSettings', '--watch', 'tests'])
     assert result.exit_code == 0
-    assert '1 files changes, reloading arq worker...'
+    assert 'files changed, reloading arq worker...' in result.output
+
+
+def test_multiple_workers(mocker, loop):
+    mocker.patch('asyncio.get_event_loop', lambda: loop)
+    runner = CliRunner()
+    result = runner.invoke(cli, ['tests.test_cli.WorkerSettings', '--workers', '4'])
+    assert 'clients_connected=4' in result.output
 
 
 custom_log_dict = {
