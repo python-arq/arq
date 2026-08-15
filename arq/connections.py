@@ -96,7 +96,8 @@ class ArqRedis(BaseRedis):
     :param default_queue_name: the default queue name to use, defaults to ``arq.queue``.
     :param expires_extra_ms: the default length of time from when a job is expected to start
      after which the job expires, defaults to 1 day in ms.
-    :param kwargs: keyword arguments directly passed to ``redis.asyncio.Redis``.
+    :param kwargs: keyword arguments directly passed to ``redis.asyncio.Redis``. Note that
+     ``decode_responses=True`` is not supported since arq stores job data as raw bytes.
     """
 
     def __init__(
@@ -115,6 +116,13 @@ class ArqRedis(BaseRedis):
             kwargs['connection_pool'] = pool_or_conn
         self.expires_extra_ms = expires_extra_ms
         super().__init__(**kwargs)
+        if self.connection_pool.connection_kwargs.get('decode_responses'):
+            raise RuntimeError(
+                'arq does not support decode_responses=True: job data is stored and '
+                'deserialized as raw bytes (via pickle/msgpack), so decoded string '
+                'responses will corrupt job execution rather than fail clearly. Remove '
+                "'decode_responses' from your redis connection settings."
+            )
 
     async def enqueue_job(
         self,
