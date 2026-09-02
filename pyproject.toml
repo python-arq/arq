@@ -100,6 +100,9 @@ filterwarnings = [
 ]
 asyncio_mode = 'auto'
 timeout = 10
+# Exclude fixture setup/teardown so session-scoped redis_container can pull the
+# Docker image on a cold cache without being killed by the 10s per-test timeout.
+timeout_func_only = true
 
 [tool.coverage.run]
 source = ['arq']
