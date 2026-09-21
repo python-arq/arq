@@ -533,6 +533,43 @@ async def test_remain_keys_no_results(arq_redis: ArqRedis, worker):
     assert sorted(await arq_redis.keys('*')) == [b'arq:queue:health-check']
 
 
+async def test_remain_keys_no_results_after_max_retries(arq_redis: ArqRedis, worker):
+    async def retry(ctx):
+        raise Retry()
+
+    await arq_redis.enqueue_job('retry', _job_id='testing')
+    worker: Worker = worker(functions=[func(retry, name='retry', keep_result=0)], max_tries=2)
+    await worker.main()
+    assert worker.jobs_failed == 1
+    assert sorted(await arq_redis.keys('*')) == [b'arq:queue:health-check']
+    # the whole point of keep_result=0: the job id is free to be enqueued again
+    assert await arq_redis.enqueue_job('retry', _job_id='testing') is not None
+
+
+async def test_remain_keys_keep_results_forever_after_max_retries(arq_redis: ArqRedis, worker):
+    async def retry(ctx):
+        raise Retry()
+
+    await arq_redis.enqueue_job('retry', _job_id='testing')
+    worker: Worker = worker(functions=[func(retry, name='retry')], keep_result_forever=True, max_tries=2)
+    await worker.main()  # used to raise ResponseError: SET ... PX 0
+    assert worker.jobs_failed == 1
+    assert sorted(await arq_redis.keys('*')) == [b'arq:queue:health-check', b'arq:result:testing']
+    assert await arq_redis.ttl('arq:result:testing') == -1
+
+
+async def test_remain_keys_keep_results_forever_in_function_after_max_retries(arq_redis: ArqRedis, worker):
+    async def retry(ctx):
+        raise Retry()
+
+    await arq_redis.enqueue_job('retry', _job_id='testing')
+    worker: Worker = worker(functions=[func(retry, name='retry', keep_result_forever=True)], keep_result=0, max_tries=2)
+    await worker.main()
+    assert worker.jobs_failed == 1
+    assert sorted(await arq_redis.keys('*')) == [b'arq:queue:health-check', b'arq:result:testing']
+    assert await arq_redis.ttl('arq:result:testing') == -1
+
+
 async def test_remain_keys_keep_results_forever_in_function(arq_redis: ArqRedis, worker):
     await arq_redis.enqueue_job('foobar', _job_id='testing')
     assert sorted(await arq_redis.keys('*')) == [b'arq:job:testing', b'arq:queue']
