@@ -566,7 +566,7 @@ class Worker:
                 job_id=job_id,
                 serializer=self.job_serializer,
             )
-            return await asyncio.shield(self.finish_failed_job(job_id, result_data))
+            return await asyncio.shield(self.finish_failed_job(job_id, result_data, function))
 
         result = no_result
         exc_extra = None
@@ -710,7 +710,22 @@ class Worker:
                 tr.delete(*delete_keys)
             await tr.execute()
 
-    async def finish_failed_job(self, job_id: str, result_data: Optional[bytes]) -> None:
+    async def finish_failed_job(
+        self,
+        job_id: str,
+        result_data: Optional[bytes],
+        function: Union[Function, CronJob, None] = None,
+    ) -> None:
+        # honour the function's own keep_result / keep_result_forever the way finish_job
+        # does; fall back to the worker defaults when the function is unknown (job expired,
+        # deserialization failed, function not found)
+        keep_result_forever = self.keep_result_forever
+        keep_result_s = self.keep_result_s
+        if function is not None:
+            if function.keep_result_forever is not None:
+                keep_result_forever = function.keep_result_forever
+            if function.keep_result_s is not None:
+                keep_result_s = function.keep_result_s
         async with self.pool.pipeline(transaction=True) as tr:
             tr.delete(
                 retry_key_prefix + job_id,
@@ -720,9 +735,11 @@ class Worker:
             tr.zrem(abort_jobs_ss, job_id)
             tr.zrem(self.queue_name, job_id)
             # result_data would only be None if serializing the result fails
-            keep_result = self.keep_result_forever or self.keep_result_s > 0
-            if result_data is not None and keep_result:  # pragma: no branch
-                expire = 0 if self.keep_result_forever else self.keep_result_s
+            keep_result = keep_result_forever or keep_result_s > 0
+            if result_data is not None and keep_result:
+                # None, not 0: `SET ... PX 0` is rejected by redis ("invalid expire time"),
+                # so keep_result_forever used to fail the whole finish pipeline here
+                expire = None if keep_result_forever else keep_result_s
                 tr.set(result_key_prefix + job_id, result_data, px=to_ms(expire))
             await tr.execute()
 
