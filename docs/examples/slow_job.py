@@ -8,7 +8,10 @@ async def the_task(ctx):
 
 async def main():
     redis = await create_pool(RedisSettings())
-    await redis.enqueue_job('the_task')
+    try:
+        await redis.enqueue_job('the_task')
+    finally:
+        await redis.close()
 
 class WorkerSettings:
     functions = [the_task]

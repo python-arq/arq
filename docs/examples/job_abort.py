@@ -11,9 +11,12 @@ async def do_stuff(ctx):
 
 async def main():
     redis = await create_pool(RedisSettings())
-    job = await redis.enqueue_job('do_stuff')
-    await asyncio.sleep(1)
-    await job.abort()
+    try:
+        job = await redis.enqueue_job('do_stuff')
+        await asyncio.sleep(1)
+        await job.abort()
+    finally:
+        await redis.close()
 
 
 class WorkerSettings:
