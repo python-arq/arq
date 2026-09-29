@@ -9,15 +9,17 @@ async def the_task(ctx):
 
 async def main():
     redis = await create_pool(RedisSettings())
+    try:
+        # deferred by 10 seconds
+        await redis.enqueue_job('the_task', _defer_by=10)
 
-    # deferred by 10 seconds
-    await redis.enqueue_job('the_task', _defer_by=10)
+        # deferred by 1 minute
+        await redis.enqueue_job('the_task', _defer_by=timedelta(minutes=1))
 
-    # deferred by 1 minute
-    await redis.enqueue_job('the_task', _defer_by=timedelta(minutes=1))
-
-    # deferred until jan 28th 2032, you'll be waiting a long time for this...
-    await redis.enqueue_job('the_task', _defer_until=datetime(2032, 1, 28))
+        # deferred until jan 28th 2032, you'll be waiting a long time for this...
+        await redis.enqueue_job('the_task', _defer_until=datetime(2032, 1, 28))
+    finally:
+        await redis.close()
 
 class WorkerSettings:
     functions = [the_task]
