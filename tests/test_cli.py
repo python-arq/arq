@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from click.testing import CliRunner
 
@@ -10,14 +12,29 @@ async def foobar(ctx):
     return 42
 
 
+def _redis_settings_from_env():
+    # --watch reloads this module. The reloaded class must still target the test Redis.
+    host = os.environ.get('ARQ_TEST_REDIS_HOST')
+    port = os.environ.get('ARQ_TEST_REDIS_PORT')
+    if not host or not port:
+        return None
+    return RedisSettings(host=host, port=int(port))
+
+
 class WorkerSettings:
     burst = True
     functions = [foobar]
+    redis_settings = _redis_settings_from_env()
 
 
 @pytest.fixture(scope='module', autouse=True)
 def setup_worker_connection(test_redis_host: str, test_redis_port: int):
+    os.environ['ARQ_TEST_REDIS_HOST'] = test_redis_host
+    os.environ['ARQ_TEST_REDIS_PORT'] = str(test_redis_port)
     WorkerSettings.redis_settings = RedisSettings(host=test_redis_host, port=test_redis_port)
+    yield
+    os.environ.pop('ARQ_TEST_REDIS_HOST', None)
+    os.environ.pop('ARQ_TEST_REDIS_PORT', None)
 
 
 def test_help():

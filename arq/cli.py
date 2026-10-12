@@ -1,16 +1,17 @@
 import asyncio
+import importlib
 import logging.config
 import os
 import sys
 from signal import Signals
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import click
 
 from .logs import default_log_config
 from .utils import import_string
 from .version import VERSION
-from .worker import check_health, create_worker, run_worker
+from .worker import Worker, check_health, create_worker, run_worker
 
 if TYPE_CHECKING:
     from .typing import WorkerSettingsType
@@ -54,6 +55,48 @@ def cli(*, worker_settings: str, burst: bool, check: bool, watch: str, verbose: 
             run_worker(worker_settings_, **kwargs)
 
 
+def _reload_worker_settings(worker_settings: 'WorkerSettingsType') -> 'WorkerSettingsType':
+    """Re-import worker settings so --watch runs the edited job functions."""
+    module_name = getattr(worker_settings, '__module__', None)
+    qualname = getattr(worker_settings, '__qualname__', None)
+    if not module_name or not qualname:
+        return worker_settings
+    module = sys.modules.get(module_name)
+    if module is None:
+        return worker_settings
+    # A save in the same mtime second still has to recompile; otherwise reload
+    # keeps the bytecode from startup and --watch runs the old function.
+    cached = getattr(module, '__cached__', None)
+    if isinstance(cached, str):
+        try:
+            os.remove(cached)
+        except OSError:
+            pass
+    importlib.invalidate_caches()
+    reloaded = importlib.reload(module)
+    obj: Any = reloaded
+    for part in qualname.split('.'):
+        obj = getattr(obj, part)
+    return cast('WorkerSettingsType', obj)
+
+
+def _stop_worker_for_reload(worker: Worker) -> None:
+    """Cancel the running worker without leaving --watch.
+
+    Unix uses SIGUSR1 so ``worker_on_stop`` does not set the watch stop event.
+    Windows has no SIGUSR1; cancel the tasks directly.
+    """
+    sigusr1 = getattr(Signals, 'SIGUSR1', None)
+    if sigusr1 is not None:
+        worker.handle_sig(sigusr1)
+        return
+    for task in list(worker.tasks.values()):
+        if not task.done():
+            task.cancel()
+    if worker.main_task is not None and not worker.main_task.done():
+        worker.main_task.cancel()
+
+
 async def watch_reload(path: str, worker_settings: 'WorkerSettingsType') -> None:
     try:
         from watchfiles import awatch
@@ -64,7 +107,7 @@ async def watch_reload(path: str, worker_settings: 'WorkerSettingsType') -> None
     stop_event = asyncio.Event()
 
     def worker_on_stop(s: Signals) -> None:
-        if s != Signals.SIGUSR1:  # pragma: no cover
+        if s != getattr(Signals, 'SIGUSR1', None):  # pragma: no cover
             stop_event.set()
 
     worker = create_worker(worker_settings)
@@ -73,8 +116,11 @@ async def watch_reload(path: str, worker_settings: 'WorkerSettingsType') -> None
         loop.create_task(worker.async_run())
         async for _ in awatch(path, stop_event=stop_event):
             print('\nfiles changed, reloading arq worker...')
-            worker.handle_sig(Signals.SIGUSR1)
+            _stop_worker_for_reload(worker)
             await worker.close()
+            worker_settings = _reload_worker_settings(worker_settings)
+            worker = create_worker(worker_settings)
+            worker.on_stop = worker_on_stop
             loop.create_task(worker.async_run())
     finally:
         await worker.close()
